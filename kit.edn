@@ -1,0 +1,8 @@
+{:full-name "fairy/box"
+ :ns-name   "fairy.box"
+ :sanitized "fairy/box"
+ :name      "box"
+ :modules   {:root         "modules"
+             :repositories [{:url  "https://github.com/kit-clj/modules.git"
+                             :tag  "master"
+                             :name "kit-modules"}]}}
