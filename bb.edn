@@ -29,6 +29,6 @@
                             (catch Exception _
                               (clojure {:dir "src"} "-M:dev -m cljstyle.main fix")))}
 
-         sync (do (shell "rsync -avr --exclude target --exclude src --exclude .lsp --exclude .clj-kondo --exclude .cpcache ../fairybox admin@10.9.6.33:")
-                  (shell "rsync --delete -avr --exclude .lsp --exclude .clj-kondo --exclude .cpcache src/ admin@10.9.6.33:fairybox/src"))
+         sync (do (shell "rsync -avr --exclude .git --exclude target --exclude src --exclude .lsp --exclude .clj-kondo --exclude .cpcache ../fairybox admin@10.9.6.33:")
+                  (shell "rsync --delete -avr --exclude .git --exclude .lsp --exclude .clj-kondo --exclude .cpcache src/ admin@10.9.6.33:fairybox/src"))
          }}
