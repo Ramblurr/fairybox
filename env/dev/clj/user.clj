@@ -45,4 +45,6 @@
 
 (comment
   (go)
-  (reset))
+  (halt)
+  (reset)
+  (reset-all))

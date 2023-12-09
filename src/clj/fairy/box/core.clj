@@ -1,19 +1,20 @@
 (ns fairy.box.core
   (:require
-    [clojure.tools.logging :as log]
-    [integrant.core :as ig]
-    [fairy.box.config :as config]
-    [fairy.box.env :refer [defaults]]
+   [clojure.tools.logging :as log]
+   [integrant.core :as ig]
+   [fairy.box.config :as config]
+   [fairy.box.env :refer [defaults]]
 
-    ;; Edges       
-    [kit.edge.utils.nrepl]
-    [kit.edge.server.undertow]
-    [fairy.box.web.handler]
+   ;; Edges
+   [kit.edge.utils.nrepl]
+   [kit.edge.server.undertow]
+   [fairy.box.web.handler]
 
-    ;; Routes
-    [fairy.box.web.routes.api]
-    
-    [fairy.box.web.routes.ui])
+   ;; Routes
+   [fairy.box.web.routes.api]
+   [fairy.box.web.routes.ui]
+   [fairy.box.db]
+   )
   (:gen-class))
 
 ;; log uncaught exceptions in threads

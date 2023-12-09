@@ -1,4 +1,5 @@
-{:system/env
+{:fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
+ :system/env
  #profile {:dev :dev
            :test :test
            :prod :prod}
