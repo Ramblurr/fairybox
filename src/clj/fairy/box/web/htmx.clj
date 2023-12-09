@@ -20,5 +20,5 @@
    [:head
     [:meta {:charset "UTF-8"}]
     [:title "Htmx + Kit"]
-    [:script {:src "https://unpkg.com/htmx.org@1.2.0/dist/htmx.min.js" :defer true}]]
+    [:script {:src "/js/htmx.org@1.9.9.js" :defer true}]]
    [:body (render/walk-attrs body)]))
