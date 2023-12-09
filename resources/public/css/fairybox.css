@@ -1,0 +1,16 @@
+@import "generated.css";
+@import "vars.css";
+html {
+      font-family: "Noto Sans", monospace, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+body {
+    background: var(--zinc-900);
+    color: white;
+    height: 100%;
+}
+
+#root, .app {
+    height: 100%;
+    width: 100%;
+    position: relative;
+}

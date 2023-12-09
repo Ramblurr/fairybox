@@ -17,3 +17,6 @@ modules/
 .clj-kondo/.cache/
 .calva/output-window/
 .lsp/.cache/
+
+resources/public/css/generated.css
+resources/public/css/tailwind.css

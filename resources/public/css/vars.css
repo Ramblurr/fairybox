@@ -1,0 +1,7 @@
+:root {
+    --color-accent-secondary-fade-85: var(--red-800);
+    --color-text-header: var(--red-800);
+    --color-border-table: var(--juniper-800);
+    --color-background-table: var(--juniper-950);
+    --color-hover-background: var(--mine-shaft-800);
+}

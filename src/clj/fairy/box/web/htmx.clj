@@ -20,5 +20,7 @@
    [:head
     [:meta {:charset "UTF-8"}]
     [:title "Htmx + Kit"]
+    [:link {:rel "stylesheet" :href "/css/tailwind.css"}]
+    [:link {:rel "stylesheet" :href "/css/fairybox.css"}]
     [:script {:src "/js/htmx.org@1.9.9.js" :defer true}]]
    [:body (render/walk-attrs body)]))
