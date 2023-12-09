@@ -12,7 +12,8 @@
 
     ;; Routes
     [fairy.box.web.routes.api]
-    )
+    
+    [fairy.box.web.routes.ui])
   (:gen-class))
 
 ;; log uncaught exceptions in threads
