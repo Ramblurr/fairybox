@@ -1,4 +1,6 @@
 {:fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
+ :fairy.box.bus/bus {}
+ :fairy.box.audio/player {:bus #ig/ref :fairy.box.bus/bus}
  :system/env
  #profile {:dev :dev
            :test :test
