@@ -4,6 +4,7 @@
 
 (comment
   (def player (interop/init-player))
+  (def player nil)
   (interop/release-player! player)
 
   (def media-list

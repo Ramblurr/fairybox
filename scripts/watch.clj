@@ -10,22 +10,25 @@
   (fw/watch path handler {:recursive true}))
 
 (def watch-extensions [".clj" ".cljs" ".cljc" ".js" ".css" ".edn"])
-(def watch-paths ["src/clj" "env/dev/clj"])
+(def sync-watch-paths ["src/clj" "env/dev/clj" "src/css" "resources/"])
+(def css-watch-paths ["src/clj" "env/dev/clj"])
 
 (defn interesting? [filename]
   (some #(str/ends-with? filename %) watch-extensions))
 
-(defn watch-handler [{:keys [type path] :as event}]
-  (prn event)
-  (when (and (= :write type) (interesting? path))
-    (css/on-watch-event! path)
-    (sync/on-watch-event! path)))
+(defn watch-handler [handler]
+  (fn [{:keys [type path] :as event}]
+    (prn event)
+    (when (and (= :write type) (interesting? path))
+      (handler path))))
 
 (defn ^:export dev-watch [_]
   (async/thread
     (css/on-start!))
   (async/thread
     (sync/on-start!))
-  (doseq [path watch-paths]
-    (new-watcher watch-handler path))
+  (doseq [path css-watch-paths]
+    (new-watcher (watch-handler css/on-watch-event!) path))
+  (doseq [path sync-watch-paths]
+    (new-watcher (watch-handler sync/on-watch-event!) path))
   (deref (promise)))

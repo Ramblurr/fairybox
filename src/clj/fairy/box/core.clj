@@ -1,4 +1,6 @@
 (ns fairy.box.core
+  (:import
+   [com.diozero.util Diozero])
   (:require
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
@@ -14,16 +16,18 @@
    [fairy.box.web.routes.api]
    [fairy.box.web.routes.ui]
    [fairy.box.db]
-   )
+   [fairy.box.bus]
+   [fairy.box.audio]
+   [fairy.box.hardware])
   (:gen-class))
 
 ;; log uncaught exceptions in threads
 (Thread/setDefaultUncaughtExceptionHandler
-  (reify Thread$UncaughtExceptionHandler
-    (uncaughtException [_ thread ex]
-      (log/error {:what :uncaught-exception
-                  :exception ex
-                  :where (str "Uncaught exception on" (.getName thread))}))))
+ (reify Thread$UncaughtExceptionHandler
+   (uncaughtException [_ thread ex]
+     (log/error {:what :uncaught-exception
+                 :exception ex
+                 :where (str "Uncaught exception on" (.getName thread))}))))
 
 (defonce system (atom nil))
 
@@ -38,6 +42,7 @@
        (ig/prep)
        (ig/init)
        (reset! system))
+  (Diozero/initialiseShutdownHook)
   (.addShutdownHook (Runtime/getRuntime) (Thread. stop-app)))
 
 (defn -main [& _]

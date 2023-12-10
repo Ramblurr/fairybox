@@ -1,17 +1,17 @@
 (ns user
   "Userspace functions you can run by default in your local REPL."
   (:require
-    [clojure.pprint]
-    [clojure.spec.alpha :as s]
-    [clojure.tools.namespace.repl :as repl]
-    [criterium.core :as c]                                  ;; benchmarking
-    [expound.alpha :as expound]
-    [integrant.core :as ig]
-    [integrant.repl :refer [clear go halt prep init reset reset-all]]
-    [integrant.repl.state :as state]
-    [kit.api :as kit]
-    [lambdaisland.classpath.watch-deps :as watch-deps]      ;; hot loading for deps
-    [fairy.box.core :refer [start-app]]))
+   [clojure.pprint]
+   [clojure.spec.alpha :as s]
+   [clojure.tools.namespace.repl :as repl]
+   [criterium.core :as c]                                  ;; benchmarking
+   [expound.alpha :as expound]
+   [integrant.core :as ig]
+   [integrant.repl :refer [clear go halt prep init reset reset-all]]
+   [integrant.repl.state :as state]
+   [kit.api :as kit]
+   [lambdaisland.classpath.watch-deps :as watch-deps]      ;; hot loading for deps
+   [fairy.box.core :refer [start-app]]))
 
 ;; uncomment to enable hot loading for deps
 (watch-deps/start! {:aliases [:dev :test]})
@@ -41,9 +41,14 @@
 
 (def refresh repl/refresh)
 
-
-
 (comment
+
+  (require '[clojure.core.async :as async])
+  (async/go (async/>! (:publisher (:fairy.box.bus/bus state/system)) {:topic :buttons :value {:foo :bar}}))
+
+  (keys
+   (:fairy.box.hardware/leds state/system))
+
   (go)
   (halt)
   (reset)
