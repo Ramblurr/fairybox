@@ -3,6 +3,7 @@
    [clojure.core.async :as async])
   (:import
    [java.util.function LongConsumer]
+   [com.diozero.util SleepUtil]
    [com.diozero.api GpioPullUpDown]
    [com.diozero.util Diozero]
    [com.diozero.devices Button]))
@@ -19,8 +20,9 @@
 (defonce button-states (atom {}))
 
 (defn set-interval [callback ms]
-  (future (Thread/sleep ms)
-          (callback)))
+  (future
+    (SleepUtil/sleepMillis ms)
+    (callback)))
 
 (defn ->publish-button-event
   "Return a function that publishes button events to the given publisher."
@@ -97,10 +99,10 @@
   [button-event-chan ^Button button action]
   (.whenPressed button (reify LongConsumer
                          (accept [this value]
-                           (raw-press-handler button-event-chan  action value))))
+                           (raw-press-handler button-event-chan action value))))
   (.whenReleased button (reify LongConsumer
                           (accept [this value]
-                            (raw-release-handler button-event-chan  action value)))))
+                            (raw-release-handler button-event-chan action value)))))
 
 (defn release-raw-button-listener!
   "Remove the raw button press listeners"
@@ -117,7 +119,7 @@
     {:button button :gpio gpio :action action
      :listener (raw-button-listener! button-event-chan button action)}))
 
-(defn init-buttons [{:keys [buttons bus]}]
+(defn init-buttons! [{:keys [buttons bus]}]
   (let [;; publish-button-event (->publish-button-event (:publisher bus))
         exit-chan (async/chan)
         button-event-chan (async/chan (async/sliding-buffer 100))]

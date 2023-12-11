@@ -1,8 +1,9 @@
 (ns fairy.box.hardware
   (:require
    [clojure.core.async :as async]
-   [fairy.box.hardware.interop :as interop]
+   [fairy.box.hardware.rfid :as rfid]
    [fairy.box.hardware.buttons :as button]
+   [fairy.box.hardware.led :as led]
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
@@ -15,23 +16,23 @@
 (defn leds-handler [leds publisher {:keys [topic value] :as event}]
   (println "leds got: " value))
 
-(defn init-rfid [opts]
-  (interop/init-rfid opts))
+(defn init-rfid! [opts]
+  (rfid/init-rfid! opts))
 
-(defn init-buttons [opts]
-  (button/init-buttons opts))
+(defn init-buttons! [opts]
+  (button/init-buttons! opts))
 
-(defn init-leds [opts]
-  (interop/init-leds opts))
+(defn init-leds! [opts]
+  (led/init-leds! opts))
 
 (defn release-rfid! [rfid]
-  (interop/release-rfid! rfid))
+  (rfid/release-rfid! rfid))
 
 (defn release-buttons! [buttons]
   (button/release-buttons! buttons))
 
 (defn release-leds! [leds]
-  (interop/release-leds! leds))
+  (led/release-leds! leds))
 
 (defn system-loop [name handler topic exit-fn exit-ch subscriber {:keys [publication publisher] :as bus} init-state]
   (async/go-loop [state init-state]
@@ -66,19 +67,19 @@
   (prn "halt-system!" name exit-ch (async/put! exit-ch true)))
 
 (defmethod ig/init-key ::rfid [_ opts]
-  (init-system opts "rfid" init-rfid release-rfid! rfid-handler :rfid))
+  (init-system opts "rfid" init-rfid! release-rfid! rfid-handler :rfid))
 
 (defmethod ig/halt-key! ::rfid [_ opts]
   (halt-system! opts))
 
 (defmethod ig/init-key ::buttons [_ opts]
-  (init-system opts "buttons" init-buttons release-buttons! buttons-handler :buttons))
+  (init-system opts "buttons" init-buttons! release-buttons! buttons-handler :buttons))
 
 (defmethod ig/halt-key! ::buttons [_ opts]
   (halt-system! opts))
 
 (defmethod ig/init-key ::leds [_ opts]
-  (init-system opts "leds" init-leds release-leds! leds-handler :leds))
+  (init-system opts "leds" init-leds! release-leds! leds-handler :leds))
 
 (defmethod ig/halt-key! ::leds [_ opts]
   (halt-system! opts))

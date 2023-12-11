@@ -2,6 +2,15 @@
   (:require [clojure.core.async :as async]
             [integrant.core :as ig]))
 
+(def topics
+  "Not really used? Just for documentation"
+  #{:player-control                     ; Commands to the audio sub system
+    :player-events                      ; Events from the audio sub system
+    :buttons                            ; Events from the buttons input sub system
+    :rfid                               ; Events from the rfid input sub system
+    :leds                               ; Events to the leds output sub system
+    })
+
 (defn init-bus [opts]
   (let [publisher (async/chan)
         publication (async/pub publisher #(:topic %))]
