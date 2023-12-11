@@ -2,7 +2,7 @@
   (:require
    [fairy.box.web.middleware.exception :as exception]
    [fairy.box.web.middleware.formats :as formats]
-   [fairy.box.web.views.hello :as hello]
+   [fairy.box.web.views.home :as home]
    [integrant.core :as ig]
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]))
@@ -14,11 +14,11 @@
     :middleware
     [;; Default middleware for ui
     ;; query-params & form-params
-      parameters/parameters-middleware
+     parameters/parameters-middleware
       ;; encoding response body
-      muuntaja/format-response-middleware
+     muuntaja/format-response-middleware
       ;; exception handling
-      exception/wrap-exception]}))
+     exception/wrap-exception]}))
 
 (derive :reitit.routes/ui :reitit/routes)
 
@@ -26,4 +26,4 @@
   [_ {:keys [base-path]
       :or   {base-path ""}
       :as   opts}]
-  [base-path (route-data opts) (hello/ui-routes base-path)])
+  [base-path (route-data opts) (home/ui-routes base-path)])

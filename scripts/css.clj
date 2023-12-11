@@ -10,7 +10,9 @@
 (def css-out-dir "resources/public/css")
 (def generated-css-out (format "%s/generated.css" css-out-dir))
 
-(def aliases {:text-xs {:font-size "0.3rem" :line-height "0.7rem"}
+(def aliases {:dark "@media (prefers-color-scheme: dark)"
+              :light "@media (prefers-color-scheme: light)"
+              :text-xs {:font-size "0.3rem" :line-height "0.7rem"}
               :text-sm {:font-size "0.5rem" :line-height "0.75rem"}
               :text-base {:font-size "0.75rem" :line-height "0.75rem"}
               :text-info-panel {:font-size "0.75rem" :line-height "17px"}

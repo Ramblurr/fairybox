@@ -50,6 +50,10 @@
                  :portal.launcher/port  7001})
   (add-tap portal.api/submit))
 
+(defn reset-web []
+  (ig/halt! state/system [:handler/ring  :server/http :reitit.routes/api :router/routes :router/core :system/env])
+  (ig/init state/system [:handler/ring  :server/http :reitit.routes/api :router/routes :router/core :system/env]))
+
 (comment
 
   (require '[clojure.core.async :as async])
@@ -63,4 +67,7 @@
   (go)
   (halt)
   (reset)
-  (reset-all))
+  (reset-all)
+  (reset-web)
+  ;;
+  )

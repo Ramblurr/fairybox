@@ -51,7 +51,7 @@
                             ;; (prn "CARD PLACED" uid)
                             (async/put! publisher
                                         {:topic :rfid
-                                         :value {:uid uid :action :added :at now}})
+                                         :value {:uid uid :action :placed :at now}})
                             (-> state
                                 (assoc :uid uid)
                                 (assoc :status :present)
