@@ -7,8 +7,7 @@
 (defn init-led-led! [{:keys [gpio name active-high?]
                       :or {active-high? true}}]
   (let [led (LED. gpio
-                  active-high?
-                  false)]
+                  active-high?)]
     (Diozero/registerForShutdown (into-array LED [led]))
     (.on led)
     {:led led :gpio gpio :name name}))

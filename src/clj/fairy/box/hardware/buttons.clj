@@ -36,11 +36,12 @@
 ;; These are low level handlers that try to smooth out the the electrical noise from the raw events
 
 (defn long-press-handler [button-states publish-button-event button-id at orig-nanotime]
-  (let [{:keys [state at]} (get button-states button-id)]
+  (let [{:keys [state at] :as wtf} (get button-states button-id)]
     (if (and (= :pressed state) (= at orig-nanotime))
       (do
+        ;; (tap> {:msg "doing hold" :orig orig-nanotime :old-state state})
         (publish-button-event button-id :hold)
-        ;; (prn "HOLD" button-id (/  (- (System/nanoTime) orig-nanotime) 1000000.0) at)
+        ;; (prn "HOLD" button-id (/  (- (System/nanoTime) orig-nanotime) 1000000.0) at orig-nanotime wtf)
         (assoc button-states button-id {:state :held :at at}))
       button-states)))
 
@@ -48,6 +49,7 @@
   (let [{:keys [state]} (get button-states button-id)]
     (if (= :released state)
       (do
+        ;; (tap> {:msg "doing press" :at nanotime :old-state state})
         (set-interval (fn []
                         (async/put! button-event-chan {:event :check-hold :button-id button-id :at nanotime :orig-at nanotime})) hold-threshold)
         (assoc button-states button-id {:state :pressed :at nanotime}))
@@ -56,8 +58,10 @@
 (defn release-handler [button-states publish-button-event button-id nanotime]
   (let [{:keys [state at]} (get button-states button-id)
         delta (- nanotime at)]
-    (if (and (#{:held :pressed} state) (>= delta debounce-delay))
+    (if (#{:held :pressed} state)
       (do
+        ;; (prn "RELEASE after debounce")
+        ;; (tap> {:msg "doing release" :at nanotime :old-state state})
         (condp = state
           :held (do
                   ;; (prn "HOLD_release" button-id (/ delta 1000000.0))
@@ -68,7 +72,21 @@
         (assoc button-states button-id {:state :released :at nanotime}))
       button-states)))
 
-(defn init-button-event-handler
+(defn debounce [in ms]
+  (let [out (async/chan)]
+    (async/go-loop [last-val nil]
+      (let [val   (if (nil? last-val) (async/<! in) last-val)
+            timer (async/timeout ms)
+            [new-val ch] (async/alts! [in timer])]
+        (condp = ch
+          timer (do (when-not
+                     (async/>! out val)
+                      (async/close! in))
+                    (recur nil))
+          in (when new-val (recur new-val)))))
+    out))
+
+(defn init-button-event-handler!
   "Initializes the go loop that handles the button events from the event channel."
   [{:keys [publisher] :as bus} button-event-chan exit-chan]
   (async/go-loop []
@@ -106,11 +124,11 @@
 
 (defn release-raw-button-listener!
   "Remove the raw button press listeners"
-  [^Button button action]
+  [^Button button]
   (.whenPressed button nil)
   (.whenReleased button nil))
 
-(defn init-button [button-event-chan {:keys [gpio action pull-up-down]}]
+(defn init-button! [button-event-chan {:keys [gpio action pull-up-down]}]
   (let [button (Button. gpio (case (or pull-up-down :up)
                                :up GpioPullUpDown/PULL_UP
                                :down GpioPullUpDown/PULL_DOWN))]
@@ -122,19 +140,22 @@
 (defn init-buttons! [{:keys [buttons bus]}]
   (let [;; publish-button-event (->publish-button-event (:publisher bus))
         exit-chan (async/chan)
-        button-event-chan (async/chan (async/sliding-buffer 100))]
+        button-event-chan (async/chan (async/sliding-buffer 100))
+        debounced-event-chan (debounce button-event-chan (/ debounce-delay 1000000.0))]
     (reset! button-states {})
-    (init-button-event-handler bus button-event-chan exit-chan)
+    (init-button-event-handler! bus debounced-event-chan exit-chan)
     {:event-handler-exit-chan exit-chan
      :button-event-chan button-event-chan
+     :debounced-event-chan debounced-event-chan
      :buttons (doall
-               (map (partial init-button button-event-chan) buttons))}))
+               (map (partial init-button! button-event-chan) buttons))}))
 
-(defn release-buttons! [{:keys [buttons button-event-chan event-handler-exit-chan]}]
+(defn release-buttons! [{:keys [buttons button-event-chan event-handler-exit-chan debounced-event-chan]}]
   (async/put! event-handler-exit-chan true)
   (async/close! event-handler-exit-chan)
   (async/close! button-event-chan)
+  (async/close! debounced-event-chan)
   (doseq [{:keys [^Button button action]} buttons]
     (when button
-      (release-raw-button-listener! button action)
+      (release-raw-button-listener! button)
       (.close button))))

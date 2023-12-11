@@ -1,6 +1,7 @@
 (ns user
   "Userspace functions you can run by default in your local REPL."
   (:require
+   [portal.api :as inspect]
    [clojure.pprint]
    [clojure.spec.alpha :as s]
    [clojure.tools.namespace.repl :as repl]
@@ -18,7 +19,9 @@
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 
-(add-tap (bound-fn* clojure.pprint/pprint))
+;; (add-tap (bound-fn* clojure.pprint/pprint))
+;; (remove-tap (bound-fn* clojure.pprint/pprint))
+;;
 
 (defn dev-prep!
   []
@@ -41,6 +44,12 @@
 
 (def refresh repl/refresh)
 
+(defn portal-remote []
+  (inspect/open {:theme :portal.colors/gruvbox
+                 :portal.launcher/host "10.9.6.33"
+                 :portal.launcher/port  7001})
+  (add-tap portal.api/submit))
+
 (comment
 
   (require '[clojure.core.async :as async])
@@ -49,6 +58,8 @@
   (keys
    (:fairy.box.hardware/leds state/system))
 
+  (portal-remote)
+  (refresh)
   (go)
   (halt)
   (reset)
