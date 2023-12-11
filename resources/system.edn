@@ -12,11 +12,11 @@
                                         {:gpio 6  :action :audio/volume-down}]}
 
  :fairy.box.hardware/leds {:bus #ig/ref :fairy.box.bus/bus
-                           :leds [] #_[{:gpio 14 :name :audio/prev}
-                                       {:gpio 7  :name :audio/next}
-                                       {:gpio 12 :name :audio/play-pause}
-                                       {:gpio 13 :name :audio/volume-up}
-                                       {:gpio 15 :name :audio/volume-down}]}
+                           :leds [{:gpio 14 :led-type :led :name :audio/prev}
+                                  {:gpio 7  :led-type :led :name :audio/next}
+                                  {:gpio 12 :led-type :led :name :audio/play-pause}
+                                  {:gpio 13 :led-type :led :name :audio/volume-up}
+                                  {:gpio 15 :led-type :led :name :audio/volume-down}]}
 
  :system/env
  #profile {:dev :dev
