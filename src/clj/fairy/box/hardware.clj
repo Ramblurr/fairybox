@@ -38,7 +38,7 @@
   (async/go-loop [state init-state]
     (async/alt!
       exit-ch ([_]
-               (prn "pre goodbye " name)
+               ;; (prn "pre goodbye " name)
                (exit-fn state)
                (async/unsub publication topic subscriber)
                (async/close! exit-ch)
@@ -64,7 +64,7 @@
      :state      init-state}))
 
 (defn halt-system! [{:keys [exit-ch name]}]
-  (prn "halt-system!" name exit-ch (async/put! exit-ch true)))
+  (async/put! exit-ch true))
 
 (defmethod ig/init-key ::rfid [_ opts]
   (init-system opts "rfid" init-rfid! release-rfid! rfid-handler :rfid))
