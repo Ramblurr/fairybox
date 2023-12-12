@@ -1,5 +1,7 @@
 (ns fairy.box.web.views.home
   (:require
+   [fairy.box.db :as db]
+   [fairy.box.web.routes.utils :as util]
    [ring.adapter.undertow.websocket :as ws]
    [cheshire.core :as cheshire]
    [fairy.box.audio.browse :as browse]
@@ -74,13 +76,18 @@
 
        [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
         [:button {:type "button", :class (css :text-sm :font-semibold :leading-6 :text-gray-900)} "Cancel"]
-        [:button {:type "submit", :class (css :rounded-md :bg-indigo-600 :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-indigo-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-indigo-600])} "Link"]]]]]))
+        [:button {:type "submit", :class (css :rounded-md :bg-indigo-600 :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-indigo-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-indigo-600])}
+         "Link To Folder"]]]]]))
 
 (defcomponent ^:endpoint rfid-link [req folder-item rfid-uid]
-  (prn "GOT SOME " folder-item rfid-uid)
+  (tap> {:rfid rfid-uid :folder folder-item})
+  (when (and (seq rfid-uid) (seq folder-item))
+    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
   (rfid-link-form req))
 
 (defcomponent ^:endpoint home [req]
+  rfid-link
+  (tap> {:route-data (util/route-data req)})
   [:div {:id "home" :class (css :px-10)}
    [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}]
    [:h1 {:class (css :text-2xl)} "Settings"]

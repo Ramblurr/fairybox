@@ -69,4 +69,5 @@
  :router/core
  {:routes #ig/ref :router/routes}
  :reitit.routes/ui {:base-path "",
+                    :db-conn #ig/ref :fairy.box.db/db
                     :env #ig/ref :system/env}}
