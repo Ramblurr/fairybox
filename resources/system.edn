@@ -1,5 +1,7 @@
 {:fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
  :fairy.box.bus/bus {}
+ :fairy.box.switchboard/switchboard {:bus #ig/ref :fairy.box.bus/bus
+                                     :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.audio/player {:bus #ig/ref :fairy.box.bus/bus}
  :fairy.box.web.routes.ui/ws-events  {:bus #ig/ref :fairy.box.bus/bus
                                       :db-conn #ig/ref :fairy.box.db/db}

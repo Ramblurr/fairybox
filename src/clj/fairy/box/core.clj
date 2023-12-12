@@ -17,6 +17,7 @@
    [fairy.box.web.routes.ui]
    [fairy.box.db]
    [fairy.box.bus]
+   [fairy.box.switchboard]
    [fairy.box.audio]
    [fairy.box.hardware])
   (:gen-class))
