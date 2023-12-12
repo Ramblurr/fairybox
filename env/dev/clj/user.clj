@@ -59,8 +59,8 @@
   (require '[clojure.core.async :as async])
   (async/go (async/>! (:publisher (:fairy.box.bus/bus state/system)) {:topic :buttons :value {:foo :bar}}))
 
-  (keys
-   (:fairy.box.hardware/leds state/system))
+  (let [player (:state (:fairy.box.audio/player state/system))]
+    (-> player  (.mediaPlayer) (.audio)))
 
   (portal-remote)
   (refresh)

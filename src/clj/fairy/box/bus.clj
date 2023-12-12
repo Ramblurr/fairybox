@@ -5,18 +5,18 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(defn start-test-listener [ch]
-  (async/go-loop []
-    (when-some [event (async/<! ch)]
-      (prn "GOt some event" event)
-      (recur))))
+#_(defn start-test-listener [ch]
+    (async/go-loop []
+      (when-some [event (async/<! ch)]
+        (prn "GOt some event" event)
+        (recur))))
 
 (defn init-bus! [opts]
   (let [bus (ev/bus)
-        test-listener (async/chan)]
-    (ev/listen bus "/hardware/input/buttons" test-listener)
-    (ev/listen bus "/hardware/input/rfid" test-listener)
-    (start-test-listener test-listener)
+        #_#_test-listener (async/chan)]
+    #_(ev/listen bus "/hardware/input/buttons" test-listener)
+    #_(ev/listen bus "/hardware/input/rfid" test-listener)
+    #_(start-test-listener test-listener)
     bus))
 
 (defmethod ig/init-key ::bus [_ opts]

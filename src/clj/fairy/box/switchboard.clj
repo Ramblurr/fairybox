@@ -7,20 +7,42 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(defn rfid-scanned [{:keys [db-conn emitter]} {:keys [value] :as ev}]
+(defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
   (tap> {:rfid-scanned ev})
   (if (= (:action value) :placed)
     (when-let [folder-path (db/linked-folder @db-conn (:uid value))]
-      (async/put! emitter {:path "/player/commands/play"
-                           :value {:action :play
+      (async/put! emitter {:path "/player/commands"
+                           :value {:action :audio/play-folder
                                    :folder-path folder-path
                                    :uid (:uid value)}}))
-    (async/put! emitter {:path "/player/commands/stop"
-                         :value {:action :stop}})))
+    (async/put! emitter {:path "/player/commands"
+                         :value {:action :audio/stop}})))
 
-(def ^:private patch-ports {:rfid  {:handler rfid-scanned
+(def button-press-event {:audio/play-pause {:path "/player/commands"
+                                            :value {:action :audio/play-pause}}
+                         :audio/next {:path "/player/commands"
+                                      :value {:action :audio/next}}
+                         :audio/prev {:path "/player/commands"
+                                      :value {:action :audio/prev}}
+                         :audio/volume-up {:path  "/player/commands"
+                                           :value {:action :audio/volume-up}}
+                         :audio/volume-down {:path  "/player/commands"
+                                             :value {:action :audio/volume-down}}})
+
+(defn button-handler [{:keys [emitter]} {:keys [value] :as ev}]
+  (tap> {:button ev})
+  (let [{:keys [button-id action]} value]
+    (condp = action
+      :button/single-press (when-let [ev (button-press-event button-id)]
+                             (async/put! emitter ev))
+      nil)))
+
+(def ^:private patch-ports {:rfid  {:handler rfid-handler
                                     :name :rfid
-                                    :path "/hardware/input/rfid"}})
+                                    :path "/hardware/input/rfid"}
+                            :buttons {:handler button-handler
+                                      :name :buttons
+                                      :path "/hardware/input/buttons"}})
 
 (defn init-switchboard! [{:keys [bus] :as opts}]
   (let [channels  (m/map-keys (fn [_] (async/chan)) patch-ports)

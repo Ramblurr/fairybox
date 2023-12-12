@@ -10,11 +10,15 @@
   (try
     (tap> {:command value})
     (let [{:keys [action folder-path]} value]
-      (when (= action :play)
-        (interop/play-folder! player folder-path))
-
-      (when (= action :stop)
-        (interop/stop! player)))
+      (condp = action
+        :audio/play-folder (interop/play-folder! player folder-path)
+        :audio/stop (interop/stop! player)
+        :audio/play-pause (interop/play-pause! player)
+        :audio/next (interop/next! player)
+        :audio/prev (interop/previous! player)
+        :audio/volume-up (interop/adjust-volume! player 5)
+        :audio/volume-down (interop/adjust-volume! player -5)
+        nil))
     (catch Exception e
       (log/error e "audio command error"))))
 
@@ -35,7 +39,7 @@
         commands (async/chan)
         exit-ch (async/chan)
         init-state (interop/init-player)]
-    (ev/listen bus "/player/commands/*" commands)
+    (ev/listen bus "/player/commands" commands)
     (ev/emitize bus emitter)
     (audio-loop exit-ch emitter commands init-state)
     {:emitter emitter

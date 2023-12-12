@@ -14,9 +14,11 @@
 (defn init-player ^AudioListPlayerComponent []
   (proxy [AudioListPlayerComponent] []
     (mediaStateChanged [media newState]
-      (prn "State changed to" newState))
+      ;; (prn "State changed to" newState)
+      )
     (timeChanged [mediaPlayer newTime]
-      (prn "Time changed to" newTime))
+      ;; (prn "Time changed to" newTime)
+      )
     (finished [mediaPlayer]
       (prn "Finished playing media"))
     (error [mediaPlayer]
@@ -49,13 +51,13 @@
   @(extract-metadata-async  filename))
 
 (defn play! [^AudioListPlayerComponent player filename]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer) (.media) (.play filename nil)))
+  (-> player  (.mediaPlayer) (.media) (.play filename nil)))
 
 (defn mute! [^AudioListPlayerComponent player]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer) (.audio) (.mute)))
+  (-> player  (.mediaPlayer) (.audio) (.mute)))
 
 (defn muted? [^AudioListPlayerComponent player]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer) (.audio) (.isMute)))
+  (-> player  (.mediaPlayer) (.audio) (.isMute)))
 
 (defn set-volume!
   "Set the volume in a range of 0 to 200.
@@ -63,12 +65,17 @@
   "
   [^AudioListPlayerComponent player volume]
   (assert (<= 0 volume 200))
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.audio) (.setVolume volume)))
+  (-> player  (.mediaPlayer) (.audio) (.setVolume volume)))
 
 (defn volume
   "Get the volume in a range of 0 to 200."
   [^AudioListPlayerComponent player]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.audio) (.volume)))
+  (-> player  (.mediaPlayer) (.audio) (.volume)))
+
+(defn adjust-volume!
+  [^AudioListPlayerComponent player delta]
+  (let [volume (volume player)]
+    (set-volume! player (max 0 (min 100 (+ volume delta))))))
 
 (defn stop! [^AudioListPlayerComponent player]
   (-> player (.mediaListPlayer) (.controls) (.stop)))
@@ -81,6 +88,12 @@
 
 (defn unpause! [^AudioListPlayerComponent player]
   (-> player (.mediaListPlayer) (.controls) (.play)))
+
+(defn play-pause! [^AudioListPlayerComponent player]
+  (let [playing?  (-> player (.mediaListPlayer) (.status) (.isPlaying))]
+    (if playing?
+      (pause! player)
+      (unpause! player))))
 
 (defn next! [^AudioListPlayerComponent player]
   (-> player (.mediaListPlayer) (.controls) (.playNext)))
@@ -109,20 +122,20 @@
   "Skip forward or backward by a period of time.
    To skip backwards specify a negative delta."
   [^AudioListPlayerComponent player time]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.controls) (.skipTime time)))
+  (-> player  (.mediaPlayer)  (.controls) (.skipTime time)))
 
 (defn skip-position!
   "Skip forward or backward by a change in position.
     To skip backwards specify a negative delta.
   position is a relative percentage of the total length of the media."
   [^AudioListPlayerComponent player position]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.controls) (.skipPosition position)))
+  (-> player  (.mediaPlayer)  (.controls) (.skipPosition position)))
 
 (defn set-time! [^AudioListPlayerComponent player time]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.controls) (.setTime time)))
+  (-> player  (.mediaPlayer)  (.controls) (.setTime time)))
 
 (defn set-position! [^AudioListPlayerComponent player position]
-  (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.controls) (.setPosition position)))
+  (-> player  (.mediaPlayer)  (.controls) (.setPosition position)))
 
 (defn- make-media-list
   "Create a new media list containing the specified paths.

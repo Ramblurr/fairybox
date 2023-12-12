@@ -39,7 +39,7 @@
   (let [{:keys [state at] :as wtf} (get button-states button-id)]
     (if (and (= :pressed state) (= at orig-nanotime))
       [(assoc button-states button-id {:state :held :at at})
-       (button-event button-id :hold)]
+       (button-event button-id :button/hold)]
       [button-states nil])))
 
 (defn press-handler [button-event-chan button-states button-id nanotime]
@@ -57,7 +57,7 @@
         delta (- nanotime at)]
     (if (#{:held :pressed} state)
       [(assoc button-states button-id {:state :released :at nanotime})
-       (button-event button-id (condp = state :held :hold-release :pressed :single-press))]
+       (button-event button-id (condp = state :held :button/hold-release :pressed :button/single-press))]
       [button-states nil])))
 
 (defn debounce [in ms]
