@@ -1,49 +1,50 @@
 (ns fairy.box.audio
   (:require
+   [jp.nijohando.event :as ev]
    [clojure.core.async :as async]
    [fairy.box.audio.interop :as interop]
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(def player-commands-topic :player-control)
-(def player-events-topic :player-events)
-
-(defn handler [player publisher {:keys [topic value] :as event}]
+(defn command-handler [player emitter {:keys [topic value] :as event}]
   (println "player got: " value)
   (when (= :bar (:foo value))
-    (async/put! publisher {:topic player-events-topic :value {:foo :baz}})))
+    {:path "/player/events" :value {:foo :baz}}))
 
-(defn audio-loop [exit-ch subscriber {:keys [publication publisher] :as bus} init-state]
-  (log/info "\n-=[starting audio]=-")
+(defn audio-loop [exit-ch emitter commands init-state]
   (async/go-loop [player init-state]
     (async/alt!
       exit-ch ([_]
-               (log/info "\n-=[goodbye audio]=-")
                (interop/release-player! player)
-               (async/unsub publication player-commands-topic subscriber)
                (async/close! exit-ch)
-               (async/close! subscriber)
                nil)
-      subscriber ([ev]
-                  (handler player publisher ev)
-                  (recur player)))))
+      commands ([ev]
+                (when-let [event (command-handler player emitter ev)]
+                  (async/>! emitter event))
+                (recur player)))))
 
-(defn init-audio [{:keys [bus]}]
-  (let [subscriber (async/chan)
+(defn init-audio! [{:keys [bus]}]
+  (let [emitter (async/chan)
+        commands (async/chan)
         exit-ch (async/chan)
-        sub (async/sub (:publication bus) player-commands-topic subscriber)
         init-state (interop/init-player)]
-    (audio-loop exit-ch subscriber bus init-state)
-    {:subscriber subscriber
-     :sub sub
+    (ev/listen bus "/player/commands/*" commands)
+    (ev/emitize bus emitter)
+    (audio-loop exit-ch emitter commands init-state)
+    {:emitter emitter
+     :commands commands
      :exit-ch exit-ch
      :state init-state}))
 
-(defn halt-player! [{:keys [exit-ch]}]
-  (async/put! exit-ch true))
+(defn halt-player! [{:keys [exit-ch commands emitter]}]
+  (async/put! exit-ch true)
+  (async/close! commands)
+  (async/close! emitter))
 
 (defmethod ig/init-key ::player [_ opts]
-  (init-audio opts))
+  (log/info "\n-=[starting audio]=-")
+  (init-audio! opts))
 
 (defmethod ig/halt-key! ::player [_ opts]
+  (log/info "\n-=[goodbye audio]=-")
   (halt-player! opts))

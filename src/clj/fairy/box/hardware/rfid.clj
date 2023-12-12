@@ -1,5 +1,6 @@
 (ns fairy.box.hardware.rfid
   (:require
+   [jp.nijohando.event :as ev]
    [clojure.tools.logging :as log]
    [clojure.core.async :as async])
   (:import
@@ -38,41 +39,39 @@
                   :config config
                   :get-card-uid-fn mfrc522-get-card-uid}))))
 
-(defn poller-loop [publisher device get-card-uid-fn]
-  (let [{:keys [poll-delay uid status at] :as state} @rfid-state]
-    (SleepUtil/sleepMillis poll-delay)
-    (let [now (System/nanoTime)]
-      ;; (prn "rfid :: poller wakeup")
-      (reset! rfid-state
-              (if-let [uid (get-card-uid-fn device)]
-                (condp = status
-                  :present state
-                  :absent (do
-                            ;; (prn "CARD PLACED" uid)
-                            (async/put! publisher
-                                        {:topic :rfid
-                                         :value {:uid uid :action :placed :at now}})
-                            (-> state
-                                (assoc :uid uid)
-                                (assoc :status :present)
-                                (assoc :poll-delay present-poll-delay)
-                                (assoc :at now))))
-                (condp = status
-                  :present (do
-                             ;; (prn "CARD REMOVED" uid)
-                             (async/put! publisher
-                                         {:topic :rfid
-                                          :value {:uid uid :action :removed :at now}})
-                             (-> state
-                                 (assoc :uid nil)
-                                 (assoc :status :absent)
-                                 (assoc :poll-delay absent-poll-delay)
-                                 (assoc :at now)))
-                  :absent state)))))
-  ;; (prn "rfid :: poller sleeping")
-  @poller-active?)
+(defn rfid-event [uid action at]
+  {:path "/hardware/input/rfid"
+   :value {:uid uid :action action :at at}})
 
-(defn start-poller! [opts publisher]
+(defn rfid-uid-detected [status state now uid]
+  (condp = status
+    :present [state nil]
+    :absent [(-> state
+                 (assoc :uid uid)
+                 (assoc :status :present)
+                 (assoc :poll-delay present-poll-delay)
+                 (assoc :at now))
+             (rfid-event uid :placed now)]))
+
+(defn rfid-uid-not-detected [status state now old-uid]
+  (condp = status
+    :present [(-> state
+                  (assoc :uid nil)
+                  (assoc :status :absent)
+                  (assoc :poll-delay absent-poll-delay)
+                  (assoc :at now))
+              (rfid-event old-uid :removed now)]
+    :absent [state nil]))
+
+(defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn]
+  (SleepUtil/sleepMillis poll-delay)
+  (let [now (System/nanoTime)
+        [rfid-state external-event] (if-let [uid (get-card-uid-fn device)]
+                                      (rfid-uid-detected status state now uid)
+                                      (rfid-uid-not-detected status state now uid))]
+    [rfid-state external-event]))
+
+(defn start-poller! [{:keys [bus] :as opts} publisher]
   (reset! poller-active? true)
   (reset! rfid-state {:at 0 :status :absent :uid nil :poll-delay absent-poll-delay})
   (future
@@ -80,13 +79,23 @@
     (let [{:keys [device get-card-uid-fn]} (->rfid opts)]
       (assert device)
       (assert get-card-uid-fn)
-      (with-open [device device]
-        (loop []
-          (if (poller-loop publisher device get-card-uid-fn)
-            (recur)
-            (do
-              (prn "rfid :: poller stopping")
-              nil)))))))
+      (let [emitter (async/chan)]
+        (try
+          (ev/emitize bus emitter)
+          (with-open [device device]
+            (loop []
+              (let [[new-state external-event] (poller-loop @rfid-state device get-card-uid-fn)]
+                (if @poller-active?
+                  (do
+                    (reset! rfid-state new-state)
+                    (when external-event
+                      (async/put! emitter external-event))
+                    (recur))
+                  (do
+                    nil)))))
+          (finally
+            (async/close! emitter)
+            (prn "rfid :: poller stopping")))))))
 
 (defn init-rfid! [{:keys [rfid-type bus] :as opts}]
   (when-not (SUPPORTED-RFID-TYPES rfid-type)

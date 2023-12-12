@@ -8,47 +8,26 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(defn rfid-handler [rfid publisher {:keys [topic value] :as event}]
-  (println "rfid got: " value))
-
-(defn buttons-handler [buttons publisher {:keys [topic value] :as event}]
-  (println "buttons got: " value))
-
-(defn leds-handler [leds publisher {:keys [topic value] :as event}]
-  (println "leds got: " value))
-
-(defn init-rfid! [opts]
+(defmethod ig/init-key ::rfid [_ opts]
+  (log/info "\n-=[starting rfid]=-")
   (rfid/init-rfid! opts))
 
-(defn init-buttons! [opts]
+(defmethod ig/halt-key! ::rfid [_ opts]
+  (log/info "\n-=[goodbye rfid]=-")
+  (rfid/release-rfid! opts))
+
+(defmethod ig/init-key ::buttons [_ {:keys [bus] :as opts}]
+  (log/info "\n-=[starting buttons]=-")
   (button/init-buttons! opts))
 
-(defn init-leds! [opts]
-  (led/init-leds! opts))
-
-(defn release-rfid! [rfid]
-  (rfid/release-rfid! rfid))
-
-(defn release-buttons! [buttons]
-  (button/release-buttons! buttons))
-
-(defn release-leds! [leds]
-  (led/release-leds! leds))
-
-(defmethod ig/init-key ::rfid [_ opts]
-  (bus/init-system opts "rfid" init-rfid! release-rfid! rfid-handler :rfid))
-
-(defmethod ig/halt-key! ::rfid [_ opts]
-  (bus/halt-system! opts))
-
-(defmethod ig/init-key ::buttons [_ opts]
-  (bus/init-system opts "buttons" init-buttons! release-buttons! buttons-handler :buttons))
-
 (defmethod ig/halt-key! ::buttons [_ opts]
-  (bus/halt-system! opts))
+  (log/info "\n-=[goodbye buttons]=-")
+  (button/release-buttons! opts))
 
 (defmethod ig/init-key ::leds [_ opts]
-  (bus/init-system opts "leds" init-leds! release-leds! leds-handler :leds))
+  (log/info "\n-=[starting rfid]=-")
+  (led/init-leds! opts))
 
 (defmethod ig/halt-key! ::leds [_ opts]
-  (bus/halt-system! opts))
+  (log/info "\n-=[goodbye leds]=-")
+  (led/release-leds! opts))

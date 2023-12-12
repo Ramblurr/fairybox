@@ -12,20 +12,6 @@
 
 (def aliases {:dark "@media (prefers-color-scheme: dark)"
               :light "@media (prefers-color-scheme: light)"
-              :text-xs {:font-size "0.3rem" :line-height "0.7rem"}
-              :text-sm {:font-size "0.5rem" :line-height "0.75rem"}
-              :text-base {:font-size "0.75rem" :line-height "0.75rem"}
-              :text-info-panel {:font-size "0.75rem" :line-height "17px"}
-              :text-lg {:font-size "0.8rem" :line-height "0.8rem"}
-              :text-xl {:font-size "1.25rem" :line-height "1.75rem"}
-              :text-2xl {:font-size "1.5rem" :line-height "2rem"}
-              :text-3xl {:font-size "1.875rem" :line-height "2.25rem"}
-              :text-4xl {:font-size "2.25rem" :line-height "2.5rem"}
-              :text-5xl {:font-size "3rem" :line-height "1"}
-              :text-6xl {:font-size "3.75rem" :line-height "1"}
-              :text-7xl {:font-size "4.5rem" :line-height "1"}
-              :text-8xl {:font-size "6rem" :line-height "1"}
-              :text-9xl {:font-size "8rem" :line-height "1"}
               :float-right {:float "right"}
               :float-none {:float "none"}
               :float-left {:float "left"}
@@ -59,12 +45,14 @@
    (css-color-vars (merge prefixed-colors base-colors))
    "\n"
    (reduce (fn [css [class styles]]
-             (str css
-                  (str "." (name class) " {\n")
-                  (reduce str
-                          ""
-                          (map style->str styles))
-                  "}\n")) "" aliases)))
+             (if (string? styles)
+               css
+               (str css
+                    (str "." (name class) " {\n")
+                    (reduce str
+                            ""
+                            (map style->str styles))
+                    "}\n"))) "" aliases)))
 
 (defn write-to! [f css]
   (spit f css))

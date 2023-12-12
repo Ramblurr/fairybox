@@ -1,14 +1,15 @@
 (ns fairy.box.web.routes.api
   (:require
-    [fairy.box.web.controllers.health :as health]
-    [fairy.box.web.middleware.exception :as exception]
-    [fairy.box.web.middleware.formats :as formats]
-    [integrant.core :as ig]
-    [reitit.coercion.malli :as malli]
-    [reitit.ring.coercion :as coercion]
-    [reitit.ring.middleware.muuntaja :as muuntaja]
-    [reitit.ring.middleware.parameters :as parameters]
-    [reitit.swagger :as swagger]))
+   [fairy.box.web.views.home :as home]
+   [fairy.box.web.controllers.health :as health]
+   [fairy.box.web.middleware.exception :as exception]
+   [fairy.box.web.middleware.formats :as formats]
+   [integrant.core :as ig]
+   [reitit.coercion.malli :as malli]
+   [reitit.ring.coercion :as coercion]
+   [reitit.ring.middleware.muuntaja :as muuntaja]
+   [reitit.ring.middleware.parameters :as parameters]
+   [reitit.swagger :as swagger]))
 
 (def route-data
   {:coercion   malli/coercion
@@ -38,7 +39,15 @@
            :swagger {:info {:title "fairy.box API"}}
            :handler (swagger/create-swagger-handler)}}]
    ["/health"
-    {:get health/healthcheck!}]])
+    {:get health/healthcheck!}]
+   ["/ws" (fn [request]
+            {:undertow/websocket
+             {:on-open (fn [{:keys [channel]}]
+                         (home/new-ws-client channel))
+              :on-message (fn [ev]
+                            (home/ws-handler ev))
+              :on-close-message (fn [{:keys [channel message]}]
+                                  (home/remove-ws-client channel message))}})]])
 
 (derive :reitit.routes/api :reitit/routes)
 

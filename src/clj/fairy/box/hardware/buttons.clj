@@ -1,5 +1,6 @@
 (ns fairy.box.hardware.buttons
   (:require
+   [jp.nijohando.event :as ev]
    [clojure.core.async :as async])
   (:import
    [java.util.function LongConsumer]
@@ -17,33 +18,29 @@
   500)
 
 ;; This is here just for debugging
-(defonce button-states (atom {}))
+(defonce ^:private button-states (atom {}))
 
 (defn set-interval [callback ms]
   (future
     (SleepUtil/sleepMillis ms)
     (callback)))
 
-(defn ->publish-button-event
-  "Return a function that publishes button events to the given publisher."
-  [publisher]
-  (fn  [button-id action]
-    (async/put! publisher
-                {:topic :buttons
-                 :value {:button-id button-id
-                         :action action}})))
+(defn button-event
+  "Constructs a valid event map for a button event"
+  [button-id action]
+  {:path "/hardware/input/buttons"
+   :value {:button-id button-id
+           :action action}})
 
 ;; These are low level handlers that try to smooth out the the electrical noise from the raw events
+;; they must return the button-states map and an optional external event that will be published on the bus
 
-(defn long-press-handler [button-states publish-button-event button-id at orig-nanotime]
+(defn long-press-handler [button-states button-id at orig-nanotime]
   (let [{:keys [state at] :as wtf} (get button-states button-id)]
     (if (and (= :pressed state) (= at orig-nanotime))
-      (do
-        ;; (tap> {:msg "doing hold" :orig orig-nanotime :old-state state})
-        (publish-button-event button-id :hold)
-        ;; (prn "HOLD" button-id (/  (- (System/nanoTime) orig-nanotime) 1000000.0) at orig-nanotime wtf)
-        (assoc button-states button-id {:state :held :at at}))
-      button-states)))
+      [(assoc button-states button-id {:state :held :at at})
+       (button-event button-id :hold)]
+      [button-states nil])))
 
 (defn press-handler [button-event-chan button-states button-id nanotime]
   (let [{:keys [state]} (get button-states button-id)]
@@ -52,25 +49,16 @@
         ;; (tap> {:msg "doing press" :at nanotime :old-state state})
         (set-interval (fn []
                         (async/put! button-event-chan {:event :check-hold :button-id button-id :at nanotime :orig-at nanotime})) hold-threshold)
-        (assoc button-states button-id {:state :pressed :at nanotime}))
-      button-states)))
+        [(assoc button-states button-id {:state :pressed :at nanotime}) nil])
+      [button-states nil])))
 
-(defn release-handler [button-states publish-button-event button-id nanotime]
+(defn release-handler [button-states button-id nanotime]
   (let [{:keys [state at]} (get button-states button-id)
         delta (- nanotime at)]
     (if (#{:held :pressed} state)
-      (do
-        ;; (prn "RELEASE after debounce")
-        ;; (tap> {:msg "doing release" :at nanotime :old-state state})
-        (condp = state
-          :held (do
-                  ;; (prn "HOLD_release" button-id (/ delta 1000000.0))
-                  (publish-button-event button-id :hold-release))
-          :pressed (do
-                     ;; (prn "SINGLE PRESS" button-id (/ delta 1000000.0))
-                     (publish-button-event button-id :single-press)))
-        (assoc button-states button-id {:state :released :at nanotime}))
-      button-states)))
+      [(assoc button-states button-id {:state :released :at nanotime})
+       (button-event button-id (condp = state :held :hold-release :pressed :single-press))]
+      [button-states nil])))
 
 (defn debounce [in ms]
   (let [out (async/chan)]
@@ -87,8 +75,11 @@
     out))
 
 (defn init-button-event-handler!
-  "Initializes the go loop that handles the button events from the event channel."
-  [{:keys [publisher] :as bus} button-event-chan exit-chan]
+  "Initializes the go loop that handles the button events from the event channel.
+    * emitter is the external channel to which we will emit actual button events to the rest of the application
+    * button-event-chan is the channel from which we will receive raw, but debounced, button events - this is an internal channel
+    * exit-ch is a channel that when a message is receieved upon will cause the listener to exit"
+  [emitter button-event-chan exit-chan]
   (async/go-loop []
     (async/alt!
       exit-chan ([_]
@@ -96,21 +87,24 @@
       button-event-chan ([{:keys [event button-id at orig-at]}]
                          ;; (prn "got" event button-id at)
                          (let [states @button-states
-                               after (case event
-                                       :press (press-handler button-event-chan states button-id at)
-                                       :release (release-handler states (->publish-button-event publisher) button-id at)
-                                       :check-hold (long-press-handler states (->publish-button-event publisher) button-id at orig-at))]
+                               [after external-event] (case event
+                                                        :press (press-handler button-event-chan states button-id at)
+                                                        :release (release-handler states button-id at)
+                                                        :check-hold (long-press-handler states button-id at orig-at))]
                            (assert (some? after) (format  "NIL STATE  e=%s " event))
-                           (reset! button-states after))
-                         (recur)))))
+                           (reset! button-states after)
+                           (when external-event
+                             (async/>! emitter external-event))
+                           (recur))))))
 
-(defn raw-press-handler [button-event-chan button-id nanotime]
+(defn raw-press-handler [raw-button-event-chan button-id nanotime]
   ;; (prn "raw press")
-  (async/put! button-event-chan {:event :press :button-id button-id :at nanotime}))
+  ;;
+  (async/put! raw-button-event-chan {:event :press :button-id button-id :at nanotime}))
 
-(defn raw-release-handler [button-event-chan button-id nanotime]
+(defn raw-release-handler [raw-button-event-chan button-id nanotime]
   ;; (prn "raw release")
-  (async/put! button-event-chan {:event :release :button-id button-id :at nanotime}))
+  (async/put! raw-button-event-chan {:event :release :button-id button-id :at nanotime}))
 
 (defn raw-button-listener!
   "Connect the raw button press listeners"
@@ -138,23 +132,26 @@
      :listener (raw-button-listener! button-event-chan button action)}))
 
 (defn init-buttons! [{:keys [buttons bus]}]
-  (let [;; publish-button-event (->publish-button-event (:publisher bus))
-        exit-chan (async/chan)
+  (let [exit-chan (async/chan)
         button-event-chan (async/chan (async/sliding-buffer 100))
-        debounced-event-chan (debounce button-event-chan (/ debounce-delay 1000000.0))]
+        debounced-event-chan (debounce button-event-chan (/ debounce-delay 1000000.0))
+        emitter (async/chan)]
+    (ev/emitize bus emitter)
     (reset! button-states {})
-    (init-button-event-handler! bus debounced-event-chan exit-chan)
+    (init-button-event-handler! emitter debounced-event-chan exit-chan)
     {:event-handler-exit-chan exit-chan
      :button-event-chan button-event-chan
      :debounced-event-chan debounced-event-chan
+     :emitter emitter
      :buttons (doall
                (map (partial init-button! button-event-chan) buttons))}))
 
-(defn release-buttons! [{:keys [buttons button-event-chan event-handler-exit-chan debounced-event-chan]}]
+(defn release-buttons! [{:keys [buttons emitter button-event-chan event-handler-exit-chan debounced-event-chan]}]
   (async/put! event-handler-exit-chan true)
-  (async/close! event-handler-exit-chan)
   (async/close! button-event-chan)
+  (async/close! emitter)
   (async/close! debounced-event-chan)
+  (async/close! event-handler-exit-chan)
   (doseq [{:keys [^Button button action]} buttons]
     (when button
       (release-raw-button-listener! button)
