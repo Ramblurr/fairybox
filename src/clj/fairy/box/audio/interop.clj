@@ -1,5 +1,6 @@
 (ns fairy.box.audio.interop
   (:require
+   [fairy.box.audio.browse :as browse]
    [clojure.string :as str]
    [clojure.tools.logging :as log])
   (:import
@@ -123,13 +124,7 @@
 (defn set-position! [^AudioListPlayerComponent player position]
   (-> player (.mediaListPlayer) (.mediaPlayer) (.mediaPlayer)  (.controls) (.setPosition position)))
 
-(defn release-media-list [^MediaListRef list]
-  (.release list))
-
-(defn make-media-ref [path]
-  (let []))
-
-(defn make-media-list
+(defn- make-media-list
   "Create a new media list containing the specified paths.
   You must release the returned media list when you are finished with it."
   ^MediaList [^AudioListPlayerComponent player paths]
@@ -141,7 +136,7 @@
         (.release media-ref)))
     media-list))
 
-(defn set-media-list!
+(defn- set-media-list!
   "Set a new media list. The media list will be released."
   [^AudioListPlayerComponent player ^MediaList list]
   (let [list-ref (.newMediaListRef list)]
@@ -149,3 +144,13 @@
       (-> player (.mediaListPlayer) (.list) (.setMediaList list-ref))
       (finally
         (.release list-ref)))))
+
+(defn play-folder! [^AudioListPlayerComponent player folder-path]
+  (let [paths (->> (str browse/media-dir "/" folder-path)
+                   (browse/list-media-files)
+                   (map :abs-path))]
+    (if (seq paths)
+      (do
+        (set-media-list! player (make-media-list player paths))
+        (unpause! player))
+      (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))

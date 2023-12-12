@@ -9,7 +9,8 @@
    :abs-path (.getAbsolutePath f)
    :rel-path (-> root (.relativize (.toPath f)) (.toString))
    :dir? (.isDirectory f)
-   :file? (.isFile f)})
+   :file? (.isFile f)
+   :media-file? (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac)$" (.getName f))})
 
 (defn list-contents [path]
   (let [root (io/file path)]
@@ -17,15 +18,23 @@
      (seq (.listFiles root))
      (map (partial dir-item (.toPath root))))))
 
-(defn list-dirs [path]
+(defn list-media-files [path]
   (->> (list-contents path)
-       (filter :dir?)))
+       (filter :media-file?)))
+
+(defn list-dirs
+  ([path]
+   (->> (list-contents path)
+        (filter :dir?)))
+  ([root path]
+   (->> (list-contents (str root "/" path))
+        (filter :dir?))))
 
 (defn list-media-dir []
   (list-dirs media-dir))
 
 (comment
-  (list-contents media-dir)
+  (list-media-files (str  media-dir "/WinnieThePooh"))
   (list-dirs media-dir)
 
   ;; rcf

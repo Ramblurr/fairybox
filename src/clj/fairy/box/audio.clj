@@ -6,12 +6,19 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(defn command-handler [player emitter {:keys [topic value] :as event}]
-  (println "player got: " value)
-  (when (= :bar (:foo value))
-    {:path "/player/events" :value {:foo :baz}}))
+(defn command-handler [player emitter {:keys [path value] :as event}]
+  (try
+    (tap> {:command value})
+    (let [{:keys [action folder-path]} value]
+      (when (= action :play)
+        (interop/play-folder! player folder-path))
 
-(defn audio-loop [exit-ch emitter commands init-state]
+      (when (= action :stop)
+        (interop/stop! player)))
+    (catch Exception e
+      (log/error e "audio command error"))))
+
+(defn- audio-loop [exit-ch emitter commands init-state]
   (async/go-loop [player init-state]
     (async/alt!
       exit-ch ([_]
@@ -23,7 +30,7 @@
                   (async/>! emitter event))
                 (recur player)))))
 
-(defn init-audio! [{:keys [bus]}]
+(defn- init-audio! [{:keys [bus]}]
   (let [emitter (async/chan)
         commands (async/chan)
         exit-ch (async/chan)
@@ -36,7 +43,7 @@
      :exit-ch exit-ch
      :state init-state}))
 
-(defn halt-player! [{:keys [exit-ch commands emitter]}]
+(defn- halt-player! [{:keys [exit-ch commands emitter]}]
   (async/put! exit-ch true)
   (async/close! commands)
   (async/close! emitter))
