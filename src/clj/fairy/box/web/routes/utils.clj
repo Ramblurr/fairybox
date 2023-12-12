@@ -9,3 +9,9 @@
 (defn route-data-key
   [req k]
   (get-in req (conj route-data-path k)))
+
+(defn req-db [req]
+  @(-> (route-data req) :db-conn))
+
+(defn req-db-conn [req]
+  (-> (route-data req) :db-conn))

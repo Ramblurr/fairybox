@@ -32,14 +32,14 @@
       :as   opts}]
   [base-path (route-data opts) (home/ui-routes base-path)])
 
-(defn ws-events-handler! [{:keys [path value]}]
+(defn ws-events-handler! [{:keys [db-conn]} {:keys [path value]}]
   (try
     (condp = path
       "/player/events"
       (prn "GOT PLAYER EVENT" value)
       "/hardware/input/rfid"
       (let [{:keys [uid action at]} value]
-        (home/broadcast-rfid-change! uid action)))
+        (home/broadcast-rfid-change! @db-conn uid action)))
     (catch Exception e
       (log/error e "ws-events-handler error"))))
 
@@ -50,7 +50,7 @@
     (home/init-ws!)
     (async/go-loop []
       (when-some [event (async/<! listener)]
-        (ws-events-handler! event)
+        (ws-events-handler! opts event)
         (recur)))
     {:listener listener}))
 

@@ -20,6 +20,10 @@
   (assert conn)
   (swap! conn update-in [:linked-tags tag-uid] assoc :folder folder-path))
 
+(defn linked-folder [db tag-uid]
+  (when tag-uid
+    (get-in db [:linked-tags tag-uid :folder])))
+
 (comment
   (do
     (require '[integrant.repl.state :as state])

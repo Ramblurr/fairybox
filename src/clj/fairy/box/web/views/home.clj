@@ -30,17 +30,22 @@
   (doseq [channel @ws-clients]
     (ws/send msg channel)))
 
-(defn current-rfid [rfid-uid]
+(defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
    [:input {:type :hidden :value  rfid-uid
             :name "rfid-uid"}]
    [:input {:type :text :disabled true
             :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0 :sm:text-sm :sm:leading-6 :opacity-50 :cursor-not-allowed)
-            :value (or rfid-uid "RFID Tag Not Present")}]])
+            :value (or rfid-uid "RFID Tag Not Present")}]
 
-(defn broadcast-rfid-change! [uid action]
+   (when (and rfid-uid linked-folder)
+     [:input {:type :text :disabled true
+              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0 :sm:text-sm :sm:leading-6 :opacity-50 :cursor-not-allowed)
+              :value linked-folder}])])
+
+(defn broadcast-rfid-change! [db uid action]
   (reset! rfid-cache {:uid uid :action action})
-  (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid)))))
+  (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
 
 (defn ws-handler [{:keys [channel data]}]
   (let [payload (<-json data)]
@@ -54,9 +59,8 @@
             :value name}]
    [:label {:for (str idx name), :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} name]])
 
-(defn rfid-link-form [req]
-  (let  [{:keys [uid action]} @rfid-cache
-         rfid-uid (when (= action :placed) uid)]
+(defn rfid-link-form [uid linked-folder]
+  (let  []
     [:form {:hx-target "#rfid-link" :hx-post "rfid-link" :id "rfid-link"}
      [:div {:class (css   :pb-12)}
       [:h2 {:class (css :text-base :font-semibold :leading-7 :text-gray-900)} "RFID Tag Link"]
@@ -72,7 +76,7 @@
          [:label {:for "username", :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Current RFID Tag"]
          [:div {:class (css :mt-2)}
           [:div {:class (css :flex :rounded-md :shadow-sm :ring-1 :ring-inset :ring-gray-300 [:focus-within :ring-2 :ring-inset :ring-indigo-600] [:sm :max-w-md])}
-           (current-rfid rfid-uid)]]]]
+           (current-rfid uid linked-folder)]]]]
 
        [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
         [:button {:type "button", :class (css :text-sm :font-semibold :leading-6 :text-gray-900)} "Cancel"]
@@ -83,23 +87,29 @@
   (tap> {:rfid rfid-uid :folder folder-item})
   (when (and (seq rfid-uid) (seq folder-item))
     (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
-  (rfid-link-form req))
+  (let [{:keys [uid action]} @rfid-cache
+        rfid-uid (when (= action :placed) uid)
+        linked-folder (db/linked-folder (util/req-db req) uid)]
+    (rfid-link-form rfid-uid linked-folder)))
 
 (defcomponent ^:endpoint home [req]
   rfid-link
   (tap> {:route-data (util/route-data req)})
-  [:div {:id "home" :class (css :px-10)}
-   [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}]
-   [:h1 {:class (css :text-2xl)} "Settings"]
-   (rfid-link-form req)
-   #_[:div
-      "WEBSOCK"
-      [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}
-       [:div {:id "thing"}]
+  (let [{:keys [uid action]} @rfid-cache
+        rfid-uid (when (= action :placed) uid)
+        linked-folder (db/linked-folder (util/req-db req) uid)]
+    [:div {:id "home" :class (css :px-10)}
+     [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}]
+     [:h1 {:class (css :text-2xl)} "Settings"]
+     (rfid-link-form rfid-uid linked-folder)
+     #_[:div
+        "WEBSOCK"
+        [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}
+         [:div {:id "thing"}]
 
-       [:form {:hx-ws "send" :id "ws-form"}
-        [:input {:name "input" :value "hello"}]
-        [:button {:type :submit} "Send"]]]]])
+         [:form {:hx-ws "send" :id "ws-form"}
+          [:input {:name "input" :value "hello"}]
+          [:button {:type :submit} "Send"]]]]]))
 
 (defn ui-routes [base-path]
   (simpleui/make-routes

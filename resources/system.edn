@@ -1,7 +1,8 @@
 {:fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
  :fairy.box.bus/bus {}
  :fairy.box.audio/player {:bus #ig/ref :fairy.box.bus/bus}
- :fairy.box.web.routes.ui/ws-events  {:bus #ig/ref :fairy.box.bus/bus}
+ :fairy.box.web.routes.ui/ws-events  {:bus #ig/ref :fairy.box.bus/bus
+                                      :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.hardware/rfid {:bus #ig/ref :fairy.box.bus/bus
                            :rfid-type :mfrc522
                            :mfrc522 {:reset-gpio 25}}
