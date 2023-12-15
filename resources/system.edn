@@ -5,6 +5,8 @@
  :fairy.box.audio.system/player {:bus #ig/ref :fairy.box.bus/bus}
  :fairy.box.web.routes.ui/ws-events  {:bus #ig/ref :fairy.box.bus/bus
                                       :db-conn #ig/ref :fairy.box.db/db}
+ :reitit.routes/bus-emitter {:bus #ig/ref :fairy.box.bus/bus
+                             :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.hardware/rfid {:bus #ig/ref :fairy.box.bus/bus
                            :rfid-type :mfrc522
                            :mfrc522 {:reset-gpio 25}}
@@ -64,7 +66,8 @@
 
  :reitit.routes/api
  {:base-path "/api"
-  :env #ig/ref :system/env}
+  :env #ig/ref :system/env
+  :emitter     #ig/ref :reitit.routes/bus-emitter}
 
  :router/routes
  {:routes #ig/refset :reitit/routes}

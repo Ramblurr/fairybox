@@ -7,7 +7,8 @@
  :tasks {:requires   ([babashka.fs :as fs]
                       [babashka.tasks :refer [shell]])
          remote-repl {:doc  "Start nREPL for remote development"
-                      :task (clojure {:dir "."} "-M:dev:remote-dev")}
+                      ;; :task (clojure {:dir "."} "-M:dev:remote-dev")
+                      :task (shell {:dir "."} "make deps-repl")}
          run         {:doc  "starts the app"
                       :task (if (fs/windows?)
                               (clojure {:dir "."} "-M:dev")

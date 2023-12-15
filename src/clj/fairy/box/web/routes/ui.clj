@@ -62,22 +62,26 @@
 
 (defn init-ws-events! [{:keys [bus] :as opts}]
   (let [listener (async/chan)
+        emitter (async/chan)
         time-ch (async/chan (async/sliding-buffer 1))
         position-ch (async/chan (async/sliding-buffer 1))
         throttled-time (throttle time-ch 500)
         throttled-position (throttle position-ch 1000)]
+    (ev/emitize bus emitter)
     (ev/listen bus "/hardware/input/rfid" listener)
     (ev/listen bus "/player/events" listener)
     (home/init-ws!)
     (start-throttled-forwarder! throttled-time)
     (start-throttled-forwarder! throttled-position)
     (start-main-loop! (-> opts
+                          (assoc :emitter emitter)
                           (assoc :time-ch time-ch)
                           (assoc :position-ch position-ch))
                       listener)
 
     {:listener listener
      :position position-ch
+     :emitter emitter
      :time time-ch
      :throttled-position throttled-position
      :throttled-time throttled-time}))
@@ -85,7 +89,8 @@
 (defmethod ig/init-key ::ws-events [_ opts]
   (init-ws-events! opts))
 
-(defmethod ig/halt-key! ::ws-events [_ {:keys [listener position time throttled-position throttled-time]}]
+(defmethod ig/halt-key! ::ws-events [_ {:keys [listener position time throttled-position throttled-time emitter]}]
+  (async/close! emitter)
   (async/close! listener)
   (async/close! position)
   (async/close! time)

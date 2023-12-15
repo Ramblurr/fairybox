@@ -1,5 +1,8 @@
 (ns fairy.box.web.routes.api
   (:require
+
+   [clojure.core.async :as async]
+   [jp.nijohando.event :as ev]
    [fairy.box.web.views.home :as home]
    [fairy.box.web.controllers.health :as health]
    [fairy.box.web.middleware.exception :as exception]
@@ -33,7 +36,7 @@
                 exception/wrap-exception]})
 
 ;; Routes
-(defn api-routes [_opts]
+(defn api-routes [{:keys [emitter] :as opts}]
   [["/swagger.json"
     {:get {:no-doc  true
            :swagger {:info {:title "fairy.box API"}}
@@ -45,7 +48,7 @@
              {:on-open (fn [{:keys [channel]}]
                          (home/new-ws-client channel))
               :on-message (fn [ev]
-                            (home/ws-handler ev))
+                            (home/ws-handler opts ev))
               :on-close-message (fn [{:keys [channel message]}]
                                   (home/remove-ws-client channel message))}})]])
 
@@ -56,3 +59,11 @@
       :or   {base-path ""}
       :as   opts}]
   [base-path route-data (api-routes opts)])
+
+(defmethod ig/init-key :reitit.routes/bus-emitter [_ {:keys [bus] :as opts}]
+  (let [emitter (async/chan)]
+    (ev/emitize bus emitter)
+    emitter))
+
+(defmethod ig/halt-key! :reitit.routes/bus-emitter [_ {:keys [emitter]}]
+  (async/close! emitter))
