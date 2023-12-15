@@ -167,6 +167,7 @@
         :audio/prev (interop/previous! player)
         :audio/volume-up (interop/adjust-volume! player (get-in config [:volume-up-step]))
         :audio/volume-down (interop/adjust-volume! player ((get-in config [:volume-down-step])))
+        :audio/skip-time (interop/skip-time! player (get-in value [:milliseconds]))
         nil))
     (catch Exception e
       (log/error e "audio command error"))))

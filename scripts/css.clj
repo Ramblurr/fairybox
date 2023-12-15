@@ -10,30 +10,62 @@
 (def css-out-dir "resources/public/css")
 (def generated-css-out (format "%s/generated.css" css-out-dir))
 
-(def aliases {:dark "@media (prefers-color-scheme: dark)"
-              :light "@media (prefers-color-scheme: light)"
-
-              :-my-2 {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
-              :-mt-2 {:margin-top "-0.5rem"}
-              :-ml-2 {:margin-left "-0.5rem"}
-              :w-half {:width "50%"}
-              :left-half {:left "50%"}
-              :top-half {:top "50%"}
-              :float-right {:float "right"}
-              :float-none {:float "none"}
-              :float-left {:float "left"}
-              :outline-0 {:outline-width "0px"}
-              :outline-1 {:outline-width "1px"}
-              :outline-2 {:outline-width "2px"}
-              :outline-4 {:outline-width "4px"}
-              :outline-8 {:outline-width "8px"}
-              :outline-offset-0     {:outline-offset "0px"}
-              :outline-offset-1     {:outline-offset "1px"}
-              :outline-offset-2     {:outline-offset "2px"}
-              :outline-offset-4     {:outline-offset "4px"}
-              :outline-offset-8     {:outline-offset "8px"}
+(def aliases {:dark                            "@media (prefers-color-scheme: dark)"
+              :light                           "@media (prefers-color-scheme: light)"
+              :-my-2                           {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
+              :-mt-2                           {:margin-top "-0.5rem"}
+              :-ml-2                           {:margin-left "-0.5rem"}
+              :w-half                          {:width "50%"}
+              :left-half                       {:left "50%"}
+              :top-half                        {:top "50%"}
+              :float-right                     {:float "right"}
+              :float-none                      {:float "none"}
+              :float-left                      {:float "left"}
+              :outline-0                       {:outline-width "0px"}
+              :outline-1                       {:outline-width "1px"}
+              :outline-2                       {:outline-width "2px"}
+              :outline-4                       {:outline-width "4px"}
+              :outline-8                       {:outline-width "8px"}
+              :outline-offset-0                {:outline-offset "0px"}
+              :outline-offset-1                {:outline-offset "1px"}
+              :outline-offset-2                {:outline-offset "2px"}
+              :outline-offset-4                {:outline-offset "4px"}
+              :outline-offset-8                {:outline-offset "8px"}
               :bg-form-invalid-400-transparent {:background-color "color-mix(in srgb, var(--form-invalid-400) 20%, transparent)"}
-              :bg-form-valid-400-transparent {:background-color "color-mix(in srgb, var(--form-valid-400) 20%, transparent)"}})
+              :bg-form-valid-400-transparent   {:background-color "color-mix(in srgb, var(--form-valid-400) 20%, transparent)"}
+              :scale-0                         {:transform "scale(0)"}
+              :scale-x-0                       {:transform " scaleX(0)"}
+              :scale-y-0                       {:transform "scaleY(0)"}
+              :scale-50                        {:transform "scale(.5)"}
+              :scale-x-50                      {:transform "scaleX(.5)"}
+              :scale-y-50                      {:transform "scaleY(.5)"}
+              :scale-75                        {:transform "scale(.75)"}
+              :scale-x-75                      {:transform "scaleX(.75)"}
+              :scale-y-75                      {:transform "scaleY(.75)"}
+              :scale-90                        {:transform "scale(.9)"}
+              :scale-x-90                      {:transform "scaleX(.9)"}
+              :scale-y-90                      {:transform "scaleY(.9)"}
+              :scale-95                        {:transform "scale(.95)"}
+              :scale-x-95                      {:transform "scaleX(.95)"}
+              :scale-y-95                      {:transform "scaleY(.95)"}
+              :scale-100                       {:transform "scale(1)"}
+              :scale-x-100                     {:transform "scaleX(1)"}
+              :scale-y-100                     {:transform "scaleY(1)"}
+              :scale-105                       {:transform "scale(1.05)"}
+              :scale-x-105                     {:transform "scaleX(1.05)"}
+              :scale-y-105                     {:transform "scaleY(1.05)"}
+              :scale-110                       {:transform "scale(1.1)"}
+              :scale-x-110                     {:transform "scaleX(1.1)"}
+              :scale-y-110                     {:transform "scaleY(1.1)"}
+              :scale-125                       {:transform "scale(1.25)"}
+              :scale-x-125                     {:transform "scaleX(1.25)"}
+              :scale-y-125                     {:transform "scaleY(1.25)"}
+              :scale-150                       {:transform "scale(1.5)"}
+              :scale-x-150                     {:transform "scaleX(1.5)"}
+              :scale-y-150                     {:transform "scaleY(1.5)"}
+              :transition-transform            {:transition-property        "transform"
+                                                :transition-timing-function "cubic-bezier(0.4, 0, 0.2, 1)"
+                                                :transition-duration       "150ms"}})
 
 (defn update-color-alias-groups [color-groups]
   (assoc color-groups "accent-" :accent-color))

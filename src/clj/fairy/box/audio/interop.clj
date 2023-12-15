@@ -162,6 +162,7 @@
   "Skip forward or backward by a period of time.
    To skip backwards specify a negative delta."
   [^AudioListPlayerComponent player time]
+  (assert (number? time))
   (-> player  (.mediaPlayer)  (.controls) (.skipTime time)))
 
 (defn skip-position!
@@ -169,6 +170,7 @@
     To skip backwards specify a negative delta.
   position is a relative percentage of the total length of the media."
   [^AudioListPlayerComponent player position]
+  (assert (number? position))
   (-> player  (.mediaPlayer)  (.controls) (.skipPosition position)))
 
 (defn set-time! [^AudioListPlayerComponent player time]

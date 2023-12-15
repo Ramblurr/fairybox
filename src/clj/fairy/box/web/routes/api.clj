@@ -65,5 +65,6 @@
     (ev/emitize bus emitter)
     emitter))
 
-(defmethod ig/halt-key! :reitit.routes/bus-emitter [_ {:keys [emitter]}]
-  (async/close! emitter))
+(defmethod ig/halt-key! :reitit.routes/bus-emitter [_ emitter]
+  (when emitter
+    (async/close! emitter)))
