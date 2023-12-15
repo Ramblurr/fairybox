@@ -1,37 +1,31 @@
 {:min-bb-version "0.8.156"
- :deps  {failjure/failjure {:mvn/version "2.3.0"}
-         com.thheller/shadow-css          {:mvn/version "0.4.4"}}
- :pods {org.babashka/fswatcher {:version "0.0.5"}}
- :paths ["resources" "scripts"]
- :tasks {:requires ([babashka.fs :as fs]
-                    [babashka.tasks :refer [shell]])
 
+ :deps  {failjure/failjure       {:mvn/version "2.3.0"}
+         com.thheller/shadow-css {:mvn/version "0.4.4"}}
+ :pods  {org.babashka/fswatcher {:version "0.0.5"}}
+ :paths ["resources" "scripts"]
+ :tasks {:requires   ([babashka.fs :as fs]
+                      [babashka.tasks :refer [shell]])
          remote-repl {:doc  "Start nREPL for remote development"
                       :task (clojure {:dir "."} "-M:dev:remote-dev")}
-
-         run {:doc  "starts the app"
-              :task (if (fs/windows?)
-                      (clojure {:dir "."} "-M:dev")
-                      (shell {:dir "."} "clj -M:dev"))}
-
-         nrepl {:doc  "starts the nREPL"
-                :task (clojure {:dir "."} "-M:dev:nrepl")}
-
-         cider {:doc  "starts the cider"
-                :task (clojure {:dir "."} "-M:dev:cider")}
-
-         test {:doc  "runs tests"
-               :task (clojure {:dir "."} "-M:test")}
-
-         uberjar {:doc  "builds the uberjar"
-                  :task (clojure {:dir "."} "-T:build all")}
-
-         format {:doc  "Formats codebase"
-                 :task (try
-                         (shell {:dir "src"} "cljstyle fix")
-                         (catch Exception _
-                           (clojure {:dir "src"} "-M:dev -m cljstyle.main fix")))}
-
-         watch {:requires ([pod.babashka.fswatcher :as fw])
-                :task (exec 'watch/dev-watch)}
+         run         {:doc  "starts the app"
+                      :task (if (fs/windows?)
+                              (clojure {:dir "."} "-M:dev")
+                              (shell {:dir "."} "clj -M:dev"))}
+         nrepl       {:doc  "starts the nREPL"
+                      :task (clojure {:dir "."} "-M:dev:nrepl")}
+         cider       {:doc  "starts the cider"
+                      :task (clojure {:dir "."} "-M:dev:cider")}
+         test        {:doc  "runs tests"
+                      :task (clojure {:dir "."} "-M:test")}
+         uberjar     {:doc  "builds the uberjar"
+                      :task (clojure {:dir "."} "-T:build all")}
+         format      {:doc  "Formats codebase"
+                      :task (try
+                              (shell {:dir "src"} "cljstyle fix")
+                              (catch Exception _
+                                (clojure {:dir "src"} "-M:dev -m cljstyle.main fix")))}
+         watch       {:requires ([pod.babashka.fswatcher :as fw])
+                      :task     (exec 'watch/dev-watch)}
+         sync        {:task (exec 'sync/do-sync!)}
          css-release {:task (exec 'css/css-release)}}}

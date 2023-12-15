@@ -1,3 +1,5 @@
+include Makefile.enrich
+
 clean:
 	rm -rf target
 
