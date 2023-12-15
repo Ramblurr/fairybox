@@ -1,5 +1,6 @@
 (ns fairy.box.hardware.buttons
   (:require
+   [fairy.box.util :refer [debounce]]
    [jp.nijohando.event :as ev]
    [clojure.core.async :as async])
   (:import
@@ -59,20 +60,6 @@
       [(assoc button-states button-id {:state :released :at nanotime})
        (button-event button-id (condp = state :held :button/hold-release :pressed :button/single-press))]
       [button-states nil])))
-
-(defn debounce [in ms]
-  (let [out (async/chan)]
-    (async/go-loop [last-val nil]
-      (let [val   (if (nil? last-val) (async/<! in) last-val)
-            timer (async/timeout ms)
-            [new-val ch] (async/alts! [in timer])]
-        (condp = ch
-          timer (do (when-not
-                     (async/>! out val)
-                      (async/close! in))
-                    (recur nil))
-          in (when new-val (recur new-val)))))
-    out))
 
 (defn init-button-event-handler!
   "Initializes the go loop that handles the button events from the event channel.

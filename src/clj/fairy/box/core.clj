@@ -18,7 +18,7 @@
    [fairy.box.db]
    [fairy.box.bus]
    [fairy.box.switchboard]
-   [fairy.box.audio]
+   [fairy.box.audio.system]
    [fairy.box.hardware])
   (:gen-class))
 

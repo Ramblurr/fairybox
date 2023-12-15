@@ -22,6 +22,11 @@
   (->> (list-contents path)
        (filter :media-file?)))
 
+(defn list-media-file-paths [folder-path]
+  (->> (str media-dir "/" folder-path)
+       (list-media-files)
+       (map :abs-path)))
+
 (defn list-dirs
   ([path]
    (->> (list-contents path)

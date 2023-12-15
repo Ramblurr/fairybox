@@ -12,6 +12,13 @@
 
 (def aliases {:dark "@media (prefers-color-scheme: dark)"
               :light "@media (prefers-color-scheme: light)"
+
+              :-my-2 {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
+              :-mt-2 {:margin-top "-0.5rem"}
+              :-ml-2 {:margin-left "-0.5rem"}
+              :w-half {:width "50%"}
+              :left-half {:left "50%"}
+              :top-half {:top "50%"}
               :float-right {:float "right"}
               :float-none {:float "none"}
               :float-left {:float "left"}

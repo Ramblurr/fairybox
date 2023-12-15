@@ -1,34 +1,74 @@
 (ns fairy.box.audio.interop
+  "Attempt to confine the VLCJ interop to this namespace."
   (:require
-   [fairy.box.audio.browse :as browse]
-   [clojure.string :as str]
-   [clojure.tools.logging :as log])
+   [clojure.string :as str])
   (:import
    [uk.co.caprica.vlcj.player.base MediaPlayer]
    [uk.co.caprica.vlcj.player.component  AudioListPlayerComponent]
    [uk.co.caprica.vlcj.factory MediaPlayerFactory]
    [uk.co.caprica.vlcj.medialist MediaList MediaListRef MediaListEventAdapter]
-   [uk.co.caprica.vlcj.player.list PlaybackMode]
-   [uk.co.caprica.vlcj.media ParseFlag MetaData MediaParsedStatus MediaEventListener Media MediaRef MediaEventAdapter]))
+   [uk.co.caprica.vlcj.player.list PlaybackMode MediaListPlayer]
+   [uk.co.caprica.vlcj.media ParseFlag Meta Picture MetaData MediaParsedStatus MediaEventListener Media MediaRef MediaEventAdapter]))
 
-(defn init-player ^AudioListPlayerComponent []
+(defn munge-enum-name [^Enum e]
+  (-> e (.name) (str/replace #"\W" "-") (str/replace #"_" "-") (str/lower-case) (keyword)))
+
+(defn init-player! ^AudioListPlayerComponent [player-event-handler!]
   (proxy [AudioListPlayerComponent] []
-    (mediaStateChanged [media newState]
-      ;; (prn "State changed to" newState)
-      )
-    (timeChanged [mediaPlayer newTime]
-      ;; (prn "Time changed to" newTime)
-      )
-    (finished [mediaPlayer]
-      (prn "Finished playing media"))
-    (error [mediaPlayer]
-      (prn "Failed to play media"))))
+    (mediaStateChanged [media newState] (player-event-handler! {:event :internal-player/media-state-changed :media media :new-state (munge-enum-name newState)}))
+    (timeChanged [_mediaPlayer newTime] (player-event-handler! {:event :internal-player/time-changed :new-time newTime}))
+    (finished [mediaPlayer] (player-event-handler! {:event :internal-player/finished}))
+    (error [mediaPlayer] (player-event-handler! {:event :internal-player/error}))
+    (backward [_mediaPlayer] (player-event-handler! {:event :internal-player/backward}))
+    (forward [_mediaPlayer] (player-event-handler! {:event :internal-player/forward}))
+    (buffering [_mediaPlayer newCache] (player-event-handler! {:event :internal-player/buffering :new-cache newCache}))
+    (lengthChanged [_ newLength] (player-event-handler! {:event :internal-player/length-changed :new-length newLength}))
+    (mediaChanged [^MediaPlayer player ^MediaRef mediaRef]
+      (player-event-handler! {:event :internal-player/media-changed :media-ref mediaRef :player player :listener this}))
+    (mediaDurationChange [_ newDuration] (player-event-handler! {:event :internal-player/media-duration-change :new-duration newDuration}))
+    (mediaListEndReached [_] (player-event-handler! {:event :internal-player/media-list-end-reached}))
+    (mediaListPlayerFinished [_] (player-event-handler! {:event :internal-player/media-list-player-finished}))
+    (mediaMetaChanged [^Media media ^Meta meta] (player-event-handler! {:event :internal-player/media-meta-changed :media media :meta meta}))
+    (mediaParsedChanged [^Media media ^MediaParsedStatus newStatus] (player-event-handler! {:event :internal-player/media-parsed-changed :media media :new-status (munge-enum-name newStatus)}))
+    (mediaPlayerReady [_] (player-event-handler! {:event :internal-player/media-player-ready}))
+    (mediaThumbnailGenerated [^Media media ^Picture picture] (player-event-handler! {:event :internal-player/media-thumbnail-generate :media media :picture picture}))
+    (muted [_ muted?] (player-event-handler! {:event :internal-player/muted :muted? muted?}))
+    (nextItem [_ ^MediaRef mediaRef] (player-event-handler! {:event :internal-player/next-item :media-ref mediaRef}))
+    (opening [_] (player-event-handler! {:event :internal-player/opening}))
+    (paused [_] (player-event-handler! {:event :internal-player/paused}))
+    (playing [_] (player-event-handler! {:event :internal-player/playing}))
+    (positionChanged [_ newPosition] (player-event-handler! {:event :internal-player/position-changed :new-position newPosition}))
+    (stopped [^MediaListPlayer _] (player-event-handler! {:event :internal-player/stopped}))
+    (volumeChanged [_ newVolume] (player-event-handler! {:event :internal-player/volume-changed :new-volume newVolume}))
+    (audioDeviceChanged [_  ^String audioDevice] (player-event-handler! {:event :internal-player/audio-device-changed :audio-device audioDevice}))
+    (mediaListItemAdded [_ ^MediaList mediaList ^MediaRef mediaRef index] (player-event-handler! {:event :internal-player/media-list-item-added :media-list mediaList :media-ref mediaRef :index index}))
+    (mediaListItemDeleted [_ ^MediaList mediaList ^MediaRef mediaRef index] (player-event-handler! {:event :internal-player/media-list-item-deleted :media-list mediaList :media-ref mediaRef :index index}))
+    ;;
+    ))
 
 (defn release-player! [^AudioListPlayerComponent player]
   (.release player))
 
-(defn munge-enum-name [^Enum e]
-  (-> e (.name) (str/replace #"\W" "-") (str/replace #"_" "-") (str/lower-case) (keyword)))
+(defn metadata->map [^MetaData metadata]
+  (->> (.values metadata)
+       (reduce (fn [acc [k v]]
+                 (assoc acc (munge-enum-name k) v)) {})))
+
+(defn media->meta-map [^Media media]
+  (when-let [metadata (-> media (.meta) (.asMetaData))]
+    (metadata->map metadata)))
+
+(defn media->mrl [^Media media]
+  (-> media (.info) (.mrl)))
+
+(defn media->media-type [^Media media]
+  (munge-enum-name (-> media (.info) (.type))))
+
+(defn media->media-state [^Media media]
+  (munge-enum-name (-> media (.info) (.state))))
+
+(defn media->media-duration [^Media media]
+  (-> media (.info) (.duration)))
 
 (defn extract-metadata-async [filename]
   (let [factory (MediaPlayerFactory.)
@@ -137,19 +177,64 @@
 (defn set-position! [^AudioListPlayerComponent player position]
   (-> player  (.mediaPlayer)  (.controls) (.setPosition position)))
 
-(defn- make-media-list
+(defn make-medias!
+  "Create a new Media object for every item in paths.
+  Returns a vector of Medias."
+  [paths]
+  (let [factory (MediaPlayerFactory.)]
+    (->> paths
+         (map (fn [path]
+                (-> factory (.media) (.newMedia path nil)))))))
+
+(defn release-medias!
+  "Release all the Medias in medias."
+  [medias]
+  (doseq [media medias]
+    (when media
+      (-> media (.release)))))
+
+(defn make-media-list
   "Create a new media list containing the specified paths.
   You must release the returned media list when you are finished with it."
-  ^MediaList [^AudioListPlayerComponent player paths]
+  ^MediaList [medias]
   (let [factory (MediaPlayerFactory.)
         media-list (-> factory (.media) (.newMediaList))]
-    (doseq [path paths]
-      (let [media-ref (-> factory (.media) (.newMediaRef path nil))]
-        (-> media-list (.media) (.add media-ref nil))
-        (.release media-ref)))
+    (doseq [media medias]
+      (let [media-ref (.newMediaRef media)]
+        (try
+          (-> media-list (.media) (.add media-ref nil))
+          (finally
+            (.release media-ref)))))
     media-list))
 
-(defn- set-media-list!
+(defn release-media-list! [^MediaList media-list]
+  (.release media-list))
+
+(defn parse-event-listener ^MediaEventAdapter [callback]
+  (proxy [MediaEventAdapter] []
+    (mediaParsedChanged [^Media media ^MediaParsedStatus newStatus]
+      (try
+        (callback media (metadata->map (-> media (.meta) (.asMetaData))) newStatus)
+        (finally
+          (-> media (.events) (.removeMediaEventListener this)))))))
+
+(defn parse-medias!
+  [^MediaEventListener event-listener  medias]
+  (doseq [^Media media medias]
+    (-> media (.events) (.addMediaEventListener event-listener))
+    (-> media (.parsing) (.parse))))
+
+(defn parse-media-list!
+  "Parse"
+  [^MediaEventListener event-listener ^MediaList list]
+  (let [n-tracks (-> list (.media) (.count))]
+    (tap> {:parsing n-tracks})
+    (doseq [i (range n-tracks)]
+      (let [media (-> list (.media) (.newMedia i))]
+        (-> media (.events) (.addMediaEventListener event-listener))
+        (-> media (.parsing) (.parse))))))
+
+(defn set-media-list!
   "Set a new media list. The media list will be released."
   [^AudioListPlayerComponent player ^MediaList list]
   (let [list-ref (.newMediaListRef list)]
@@ -158,12 +243,15 @@
       (finally
         (.release list-ref)))))
 
-(defn play-folder! [^AudioListPlayerComponent player folder-path]
-  (let [paths (->> (str browse/media-dir "/" folder-path)
-                   (browse/list-media-files)
-                   (map :abs-path))]
-    (if (seq paths)
-      (do
-        (set-media-list! player (make-media-list player paths))
-        (unpause! player))
-      (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))
+#_(defn play-folder! [^AudioListPlayerComponent player folder-path]
+    (let [paths (->> (str browse/media-dir "/" folder-path)
+                     (browse/list-media-files)
+                     (map :abs-path))]
+      (if (seq paths)
+        (do
+          (let [media-list (make-media-list player paths)]
+            (parse-media-list! player media-list)
+            (SleepUtil/sleepMillis 1000)
+            (set-media-list! player media-list))
+          (unpause! player))
+        (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))

@@ -1,6 +1,7 @@
 (ns fairy.box.web.views.home
   (:require
    [fairy.box.db :as db]
+   [fairy.box.audio :as audio]
    [fairy.box.web.routes.utils :as util]
    [ring.adapter.undertow.websocket :as ws]
    [cheshire.core :as cheshire]
@@ -47,7 +48,17 @@
   (reset! rfid-cache {:uid uid :action action})
   (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
 
-(defn ws-handler [{:keys [channel data]}]
+(declare progress-bar)
+(declare the-time)
+
+(defn broadcast-player-event! [event]
+  ;; (tap> {:event event})
+  (condp = (:event event)
+    :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
+    :player/time-changed (broadcast! (partial-htmx (the-time (:time event))))
+    nil))
+
+(defn ^:export ws-handler [{:keys [channel data]}]
   (let [payload (<-json data)]
     (tap> {:channel channel :data payload})
     #_(ws/send "<div id=\"thing\"> WOWOWWW</div>" channel)))
@@ -92,14 +103,104 @@
         linked-folder (db/linked-folder (util/req-db req) uid)]
     (rfid-link-form rfid-uid linked-folder)))
 
+(defn duration-data
+  [^long duration-in-millis]
+  (let [milliseconds (mod duration-in-millis 1000),
+        duration-in-secs (quot duration-in-millis 1000),
+        seconds (mod duration-in-secs 60),
+        duration-in-mins (quot duration-in-secs 60),
+        minutes (mod duration-in-mins 60),
+        duration-in-hours (quot duration-in-mins 60),
+        hours (mod duration-in-hours 24),
+        days (quot duration-in-hours 24)]
+    {:milliseconds milliseconds,
+     :seconds seconds,
+     :minutes minutes,
+     :hours hours,
+     :days days}))
+
+(defn format-duration [milliseconds]
+  (let [{:keys [days hours minutes seconds milliseconds]} (duration-data milliseconds)
+        rounded-seconds (if (> milliseconds 0)
+                          (inc seconds)
+                          seconds)]
+    (str (when (> days 0) (format "%02dd " days)) (when (> hours 0) (format "%02d:" hours)) (format "%02d" minutes) ":" (format "%02d" rounded-seconds))))
+
+(defn progress-bar [current-position]
+  (let [dur-str (if (float? current-position) (format "%.2f%%" (* 100 current-position)) "0%")
+        left-str (format "left: %s" dur-str)
+        width-str (format "width: %s" dur-str)]
+    ;; (tap> dur-str)
+    [:div {:id "progress-bar" :class (css :relative)}
+     [:div {:class (css :bg-slate-100 :transition-all :duration-500 :dark:bg-slate-700 :rounded-full :overflow-hidden)}
+      [:div {:class (css :bg-cyan-500 :transition-all :duration-500 :dark:bg-cyan-400 :h-2), :role "progressbar", :aria-label "music :progress", :aria-valuenow "1456", :aria-valuemin "0", :aria-valuemax "4550"
+             :style width-str}]]
+     [:div {:class (css :ring-cyan-500 :transition-all :duration-500 :dark:ring-cyan-400 :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center :bg-white :rounded-full :shadow)
+            :id "progress-bar-point"
+            :style left-str}
+      [:div {:class (css :w-1.5 :h-1.5 :bg-cyan-500 :transition-all :duration-500 :dark:bg-cyan-400 :rounded-full :ring-1 :ring-inset :ring-slate-900)}]]]))
+
+(defn the-time [current-time]
+  [:div {:id "current-time" :class (css :text-cyan-500 :transition-all :duration-500 :dark:text-slate-100)}
+   (format-duration (or current-time 0))])
+
+(defn player [{:keys [artist album duration title mrl track-number current-position current-time]}]
+  [:div {:class (css :mt-6 :sm:mt-10 :relative :z-10 :rounded-xl :shadow-xl)}
+   [:div {:class (css :bg-white :border-slate-100 :transition-all :duration-500 :dark:bg-slate-800 :transition-all :duration-500 :dark:border-slate-500 :border-b :rounded-t-xl :p-4 :pb-6 :sm:p-10 :sm:pb-8 :lg:p-6 :xl:p-10 :xl:pb-8 :space-y-6 :sm:space-y-8 :lg:space-y-6 :xl:space-y-8)}
+    [:div {:class (css :flex :items-center :space-x-4)}
+     [:div {:class (css :flex-none :rounded-lg :bg-slate-100)}
+      [:svg {:width "88" :height "88"  :xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 88.441 74"} [:g  [:path {:d "M52 16.7a2 2 0 0 0-1.7-.3L25.6 23a2 2 0 0 0-1.4 1.9v20.2a9.3 9.3 0 0 0-4.5-1.1c-4.6 0-8.4 3.3-8.4 7.3s3.8 7.3 8.4 7.3c4.6 0 8.5-3.2 8.5-7.3v-16l20.6-5.6v9.9a9.3 9.3 0 0 0-4.4-1.1c-4.6 0-8.4 3.3-8.4 7.3s3.8 7.3 8.4 7.3c4.6 0 8.4-3.3 8.4-7.3V18.3a2 2 0 0 0-.8-1.6zm-32.3 38c-2.4 0-4.4-1.5-4.4-3.3 0-1.8 2-3.3 4.4-3.3 2.4 0 4.5 1.5 4.5 3.2 0 1.7-2.1 3.4-4.5 3.4zm8.5-23.6v-4.6l20.6-5.6v4.7zm16.2 18c-2.4 0-4.4-1.5-4.4-3.3 0-1.8 2-3.3 4.4-3.3 2.4 0 4.4 1.5 4.4 3.3 0 1.8-2.1 3.3-4.5 3.3z", :data-name "Compound Path"}] [:path {:d "M66 0H8a8 8 0 0 0-8 8v58a8 8 0 0 0 8 8h58a8 8 0 0 0 8-8v-1.4a33.5 33.5 0 0 0 0-55.1V8a8 8 0 0 0-8-8zm4 66a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4h58a4 4 0 0 1 4 4v15.4a14.4 14.4 0 0 0 0 27.1zm14.5-29A29.4 29.4 0 0 1 74 59.6V49.1a2 2 0 0 0-1.5-1.9 10.4 10.4 0 0 1 0-20.3A2 2 0 0 0 74 25V14.4A29.4 29.4 0 0 1 84.5 37Z"}]]]]
+     [:div {:class (css :min-w-0 :flex-auto :space-y-1 :font-semibold)}
+      [:p {:class (css :text-cyan-500 :transition-all :duration-500 :dark:text-cyan-400 :text-sm :leading-6)}
+       artist]
+      [:h2 {:class (css :text-slate-500 :transition-all :duration-500 :dark:text-slate-400 :text-sm :leading-6 :truncate)} album]
+      [:p {:class (css :text-slate-900 :transition-all :duration-500 :dark:text-slate-50 :text-lg)}
+       (when track-number (str track-number " - "))
+       title]]]
+    [:div {:class (css :space-y-2)}
+     (progress-bar current-position)
+     [:div {:class (css :flex :justify-between :text-sm :leading-6 :font-medium :tabular-nums)}
+      (the-time current-time)
+      [:div {:class (css :text-slate-500 :transition-all :duration-500 :dark:text-slate-400)}
+       (format-duration duration)]]]]
+   [:div {:class (css :bg-slate-50 :text-slate-500 :transition-all :duration-500 :dark:bg-slate-600 :transition-all :duration-500 :dark:text-slate-200 :rounded-b-xl :flex :items-center)}
+    [:div {:class (css :flex-auto :flex :items-center :justify-evenly)}
+     #_[:button {:type "button", :aria-label "Add :to :favorites"}
+        [:svg {:width "24", :height "24"}
+         [:path {:d "M7 6.931C7 5.865 7.853 5 8.905 5h6.19C16.147 5 17 5.865 17 6.931V19l-5-4-5 4V6.931Z", :fill "currentColor", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]]]
+     [:button {:type "button", :class (css :hidden :sm:block :lg:hidden :xl:block), :aria-label "Previous"}
+      [:svg {:width "24", :height "24", :fill "none"}
+       [:path {:d "m10 12 8-6v12l-8-6Z", :fill "currentColor", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]
+       [:path {:d "M6 6v12", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]]]
+     [:button {:type "button", :aria-label "Rewind 10 :seconds"}
+      [:svg {:width "24", :height "24", :fill "none"}
+       [:path {:d "M6.492 16.95c2.861 2.733 7.5 2.733 10.362 0 2.861-2.734 2.861-7.166 0-9.9-2.862-2.733-7.501-2.733-10.362 0A7.096 7.096 0 0 0 5.5 8.226", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]
+       [:path {:d "M5 5v3.111c0 .491.398.889.889.889H9", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]]]]
+    [:button {:type "button", :class (css :bg-white :text-slate-900 :transition-all :duration-500 :dark:bg-slate-100 :transition-all :duration-500 :dark:text-slate-700 :flex-none :-my-2 :mx-auto :w-20 :h-20 :rounded-full :ring-1 :ring-slate-900 :shadow-md :flex :items-center :justify-center), :aria-label "Pause"}
+     [:svg {:width "30", :height "32", :fill "currentColor"}
+      [:rect {:x "6", :y "4", :width "4", :height "24", :rx "2"}]
+      [:rect {:x "20", :y "4", :width "4", :height "24", :rx "2"}]]]
+    [:div {:class (css :flex-auto :flex :items-center :justify-evenly)}
+     [:button {:type "button", :aria-label "Skip 10 :seconds"}
+      [:svg {:width "24", :height "24", :fill "none"}
+       [:path {:d "M17.509 16.95c-2.862 2.733-7.501 2.733-10.363 0-2.861-2.734-2.861-7.166 0-9.9 2.862-2.733 7.501-2.733 10.363 0 .38.365.711.759.991 1.176", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]
+       [:path {:d "M19 5v3.111c0 .491-.398.889-.889.889H15", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]]]
+     [:button {:type "button", :class (css :hidden :sm:block :lg:hidden :xl:block), :aria-label "Next"}
+      [:svg {:width "24", :height "24", :fill "none"}
+       [:path {:d "M14 12 6 6v12l8-6Z", :fill "currentColor", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]
+       [:path {:d "M18 6v12", :stroke "currentColor", :stroke-width "2", :stroke-linecap "round", :stroke-linejoin "round"}]]]
+     [:button {:type "button", :class "rounded-lg :text-xs :leading-6 :font-semibold :px-2 :ring-2 :ring-inset :ring-slate-500 :text-slate-500 :transition-all :duration-500 :dark:text-slate-100 :transition-all :duration-500 :dark:ring-0 :transition-all :duration-500 :dark:bg-slate-500"}]]]])
+
 (defcomponent ^:endpoint home [req]
   rfid-link
   (tap> {:route-data (util/route-data req)})
   (let [{:keys [uid action]} @rfid-cache
         rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid)]
+        linked-folder (db/linked-folder (util/req-db req) uid)
+        current-track (audio/current-track!)]
     [:div {:id "home" :class (css :px-10)}
      [:div {:hx-ext "ws"  :hx-ws "connect:/api/ws"}]
+     (player current-track)
      [:h1 {:class (css :text-2xl)} "Settings"]
      (rfid-link-form rfid-uid linked-folder)
      #_[:div

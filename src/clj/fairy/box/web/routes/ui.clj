@@ -1,6 +1,6 @@
 (ns fairy.box.web.routes.ui
   (:require
-
+   [fairy.box.util :refer [throttle]]
    [clojure.core.async :as async]
    [jp.nijohando.event :as ev]
    [fairy.box.web.middleware.exception :as exception]
@@ -32,30 +32,62 @@
       :as   opts}]
   [base-path (route-data opts) (home/ui-routes base-path)])
 
-(defn ws-events-handler! [{:keys [db-conn]} {:keys [path value]}]
+(defn ws-events-handler! [{:keys [db-conn position-ch time-ch]} {:keys [path value]}]
   (try
     (condp = path
-      "/player/events"
-      (prn "GOT PLAYER EVENT" value)
+      "/player/events" (do (when-not (contains? #{:player/time-changed :player/position-changed}  (:event value))
+                             (tap> {(:event value) value}))
+                           (condp = (:event value)
+                             :player/position-changed (async/put! position-ch value)
+                             :player/time-changed (async/put! time-ch value)
+                             (home/broadcast-player-event! value)))
+
       "/hardware/input/rfid"
       (let [{:keys [uid action at]} value]
         (home/broadcast-rfid-change! @db-conn uid action)))
     (catch Exception e
       (log/error e "ws-events-handler error"))))
 
+(defn start-throttled-forwarder! [ch]
+  (async/go-loop []
+    (when-some [event (async/<! ch)]
+      (home/broadcast-player-event! event)
+      (recur))))
+
+(defn start-main-loop! [opts listener]
+  (async/go-loop []
+    (when-some [event (async/<! listener)]
+      (ws-events-handler! opts event)
+      (recur))))
+
 (defn init-ws-events! [{:keys [bus] :as opts}]
-  (let [listener (async/chan)]
+  (let [listener (async/chan)
+        time-ch (async/chan (async/sliding-buffer 1))
+        position-ch (async/chan (async/sliding-buffer 1))
+        throttled-time (throttle time-ch 500)
+        throttled-position (throttle position-ch 1000)]
     (ev/listen bus "/hardware/input/rfid" listener)
     (ev/listen bus "/player/events" listener)
     (home/init-ws!)
-    (async/go-loop []
-      (when-some [event (async/<! listener)]
-        (ws-events-handler! opts event)
-        (recur)))
-    {:listener listener}))
+    (start-throttled-forwarder! throttled-time)
+    (start-throttled-forwarder! throttled-position)
+    (start-main-loop! (-> opts
+                          (assoc :time-ch time-ch)
+                          (assoc :position-ch position-ch))
+                      listener)
+
+    {:listener listener
+     :position position-ch
+     :time time-ch
+     :throttled-position throttled-position
+     :throttled-time throttled-time}))
 
 (defmethod ig/init-key ::ws-events [_ opts]
   (init-ws-events! opts))
 
-(defmethod ig/halt-key! ::ws-events [_ {:keys [listener]}]
-  (async/close! listener))
+(defmethod ig/halt-key! ::ws-events [_ {:keys [listener position time throttled-position throttled-time]}]
+  (async/close! listener)
+  (async/close! position)
+  (async/close! time)
+  (async/close! throttled-position)
+  (async/close! throttled-time))
