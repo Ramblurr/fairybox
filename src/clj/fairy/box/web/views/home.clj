@@ -36,27 +36,11 @@
   (doseq [channel @ws-clients]
     (ws/send msg channel)))
 
-(defn current-rfid [rfid-uid linked-folder]
-  [:div {:id "current-rfid"}
-   [:input {:type :hidden :value  rfid-uid
-            :name "rfid-uid"}]
-   [:input {:type :text :disabled true
-            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0
-                        [:sm :text-sm :leading-6]
-                        :opacity-50 :cursor-not-allowed)
-            :value (or rfid-uid "RFID Tag Not Present")}]
-
-   (when (and rfid-uid linked-folder)
-     [:input {:type :text :disabled true
-              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0
-                          [:sm :text-sm :leading-6]
-                          :opacity-50 :cursor-not-allowed)
-              :value linked-folder}])])
-
 (defn broadcast-rfid-change! [db uid action]
   (reset! rfid-cache {:uid uid :action action})
   (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
 
+(declare current-rfid)
 (declare progress-bar)
 (declare the-time)
 (declare time-left)
@@ -117,28 +101,45 @@
 
       nil)))
 
+(defn current-rfid [rfid-uid linked-folder]
+  [:div {:id "current-rfid"}
+   [:input {:type :hidden :value  rfid-uid
+            :name "rfid-uid"}]
+   [:input {:type :text :disabled true
+            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] :focus:ring-0
+                        [:sm :text-sm :leading-6]
+                        :opacity-50 :cursor-not-allowed)
+            :value (or rfid-uid "RFID Tag Not Present")}]
+
+   (when (and rfid-uid linked-folder)
+     [:input {:type :text :disabled true
+              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] :focus:ring-0
+                          [:sm :text-sm :leading-6]
+                          :opacity-50 :cursor-not-allowed)
+              :value linked-folder}])])
+
 (defn folder-list [idx {:keys [name]}]
   [:div {:class (css :flex :items-center :gap-x-3)}
    [:input {:id (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
             :required true
             :value name}]
-   [:label {:for (str idx name), :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} name]])
+   [:label {:for (str idx name), :class (css :block :text-sm :font-medium :leading-6 :text-gray-900 [:dark :text-gray-300])} name]])
 
 (defn rfid-link-form [uid linked-folder]
   (let  []
     [:form {:hx-target "#rfid-link" :hx-post "rfid-link" :id "rfid-link"}
      [:div {:class (css   :pb-12)}
-      [:h2 {:class (css :text-base :font-semibold :leading-7 :text-gray-900)} "RFID Tag Link"]
+      [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
       [:div
        [:div {:class (css :mt-8 :space-y-10)}
         [:fieldset
-         [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900)} "Audio Folders"]
-         [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600)} "Every card can be mapped to an audio folder under the media root."]
+         [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
+         [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Every card can be mapped to an audio folder under the media root."]
          [:div {:class (css :mt-6 :space-y-2)}
           (map-indexed folder-list  (browse/list-media-dir))]]]
        [:div {:class (css :mt-4 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
         [:div {:class (css  [:sm :col-span-4])}
-         [:label {:for "username", :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Current RFID Tag"]
+         [:label {:for "username", :class (css :block :text-sm :font-medium :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
          [:div {:class (css :mt-2)}
           [:div {:class (css :flex :rounded-md :shadow-sm :ring-1 :ring-inset :ring-gray-300 [:focus-within :ring-2 :ring-inset :ring-indigo-600] [:sm :max-w-md])}
            (current-rfid uid linked-folder)]]]]
@@ -321,7 +322,7 @@
         [:button {:value "next" :name "action" :type :submit :class (cs $button-base) :aria-label "Next" :title "Next"}
          [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]]]
        ;; volume slider wrapper
-       [:div {:class (css :mt-6 :flex :flex-row :items-center :gap-x-4)}
+       [:div {:class (css :my-6 :flex :flex-row :items-center :gap-x-4)}
         [:button {:value "toggle-mute" :name "action" :type :submit :class (cs $button-base)} (volume-icon current-volume muted?)]
         (volume-bar current-volume)
         [:button {:value "volume-down-step" :name "action" :type :submit :class (cs $button-base)}

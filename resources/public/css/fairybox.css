@@ -2,10 +2,10 @@
 @import "vars.css";
 @import "range.css";
 html {
-      font-family: "Noto Sans", monospace, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-family: "Noto Sans", monospace, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 body {
-     background: var(--white-rock-100);
+    background: var(--white-rock-100);
     height: 100%;
 }
 
@@ -23,8 +23,8 @@ body {
 }
 
 button:focus {
-  outline:none;
-  box-shadow: none;
+    outline:none;
+    box-shadow: none;
 }
 
 input,
@@ -37,8 +37,8 @@ a {
 
 button {
     -webkit-touch-callout: none; /* iOS Safari */
-        -webkit-user-select: none; /* Safari */
-           -moz-user-select: none; /* Old versions of Firefox */
-                user-select: none; /* Non-prefixed version, currently
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Old versions of Firefox */
+    user-select: none; /* Non-prefixed version, currently
                                       supported by Chrome, Edge, Opera and Firefox */
 }
