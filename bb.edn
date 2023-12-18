@@ -29,4 +29,5 @@
          watch       {:requires ([pod.babashka.fswatcher :as fw])
                       :task     (exec 'watch/dev-watch)}
          sync        {:task (exec 'sync/do-sync!)}
+         css-dev {:task (exec 'css/css-dev)}
          css-release {:task (exec 'css/css-release)}}}

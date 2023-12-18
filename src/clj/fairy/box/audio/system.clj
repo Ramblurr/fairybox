@@ -20,7 +20,8 @@
 
 (def ^:private audio-init-state {:play-requests {}
                                  :current-play-request nil
-                                 :current-track {}
+                                 :current-track {} ; media's meta data, title, artist, etc
+                                 :current-playback {} ; current playback state, position, time, etc
                                  :player {}
                                  :config {:volume-up-step 5
                                           :volume-down-step -5}})
@@ -33,6 +34,9 @@
 
 (defn current-track! []
   (-> @audio-state :current-track))
+
+(defn current-playback! []
+  (-> @audio-state :current-playback))
 
 (defn- release-play-request! [state play-request-id]
   (let [{:keys [medias media-list]} (get-in state [:play-requests play-request-id])]
@@ -89,8 +93,24 @@
       :internal-player/pre-play-parse          (handle-pre-play-parse sys event)
       :internal-player/pre-play-parse-finished (handle-pre-play-parse-finished sys event)
       :internal-player/media-changed (handle-media-changed sys event)
-      :internal-player/position-changed (async/put! emitter (player-event {:event :player/position-changed :position (:new-position event)}))
-      :internal-player/time-changed (async/put! emitter (player-event {:event :player/time-changed :time (:new-time event)}))
+      :internal-player/muted (do
+                               (swap! audio-state assoc-in [:current-playback :muted?] (:muted? event))
+                               (async/put! emitter (player-event {:event :player/muted :muted? (:muted? event)})))
+      :internal-player/volume-changed (do
+                                        (swap! audio-state assoc-in [:current-playback :current-volume] (:new-volume event))
+                                        (async/put! emitter (player-event {:event :player/volume-changed :volume (:new-volume event)})))
+      :internal-player/playing (do (swap! audio-state assoc-in [:current-playback :state] :playing)
+                                   (async/put! emitter (player-event {:event :player/state-changed :state :playing})))
+      :internal-player/paused (do (swap! audio-state assoc-in [:current-playback :state] :paused)
+                                  (async/put! emitter (player-event {:event :player/state-changed :state :paused})))
+      :internal-player/opening (do (swap! audio-state assoc-in [:current-playback :state] :opening)
+                                   (async/put! emitter (player-event {:event :player/state-changed :state :opening})))
+      :internal-player/finished (do (swap! audio-state assoc-in [:current-playback :state] :finished)
+                                    (async/put! emitter (player-event {:event :player/state-changed :state :finished})))
+      :internal-player/position-changed (do (swap! audio-state assoc-in [:current-playback :current-position] (:new-position event))
+                                            (async/put! emitter (player-event {:event :player/position-changed :position (:new-position event)})))
+      :internal-player/time-changed (do (swap! audio-state assoc-in [:current-playback :current-time] (:new-time event))
+                                        (async/put! emitter (player-event {:event :player/time-changed :time (:new-time event)})))
       nil)
     (catch Exception e
       (log/error e "internal event error"))))
@@ -168,6 +188,12 @@
         :audio/volume-up (interop/adjust-volume! player (get-in config [:volume-up-step]))
         :audio/volume-down (interop/adjust-volume! player ((get-in config [:volume-down-step])))
         :audio/skip-time (interop/skip-time! player (get-in value [:milliseconds]))
+        :audio/set-time (interop/set-time! player (get-in value [:milliseconds]))
+        :audio/adjust-volume (interop/adjust-volume! player (get-in value [:delta]))
+        :audio/set-volume (interop/set-volume! player
+                                               ;; interop wants [0, 100] integer
+                                               (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
+        :audio/toggle-mute (interop/mute! player)
         nil))
     (catch Exception e
       (log/error e "audio command error"))))

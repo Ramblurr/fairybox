@@ -39,14 +39,15 @@
     [:meta {:charset "UTF-8"}]
     [:meta {:name    "viewport"
             :content "width=device-width, initial-scale=1, shrink-to-fit=no"}]
-    [:title "Htmx + Kit"]
+    [:title "Fairybox"]
     [:link {:rel "stylesheet" :href "/css/tailwind.css?v4"}]
     [:link {:rel "stylesheet" :href "/css/fairybox.css?v4"}]
     [:script {:src "/js/htmx.org@1.9.9.js" :defer true}]
-    [:script {:src "/js/htmx-ws@1.9.9.js" :defer true}]]
+    [:script {:src "/js/htmx-ws@1.9.9.js" :defer true}]
+    [:script {:src "/js/fairybox.js" :defer true}]]
    [:body (render/walk-attrs body)]))
 
-(defn partial-htmx [body]
+(defn partial-htmx [& body]
   (str
    (h2/html {:mode :html}
             (render/walk-attrs body))))

@@ -8,3 +8,6 @@
 
 (defn current-track! []
   (audio/current-track!))
+
+(defn current-playback! []
+  (audio/current-playback!))

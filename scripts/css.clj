@@ -190,6 +190,9 @@
       (prn :css-build-failure)
       (prn e))))
 
+(defn ^:export css-dev [& args]
+  (on-start!))
+
 (defn ^:export css-release
   "Build CSS for production releases"
   [& args]

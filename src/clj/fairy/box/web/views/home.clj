@@ -59,22 +59,38 @@
 
 (declare progress-bar)
 (declare the-time)
+(declare time-left)
+(declare play-pause-button)
+(declare current-meta)
+(declare volume-bar)
+(declare volume-icon)
 
 (defn broadcast-player-event! [event]
   ;; (tap> {:event event})
   (condp = (:event event)
-    :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
-    :player/time-changed (broadcast! (partial-htmx (the-time (:time event))))
+    ;; :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
+    :player/muted (broadcast! (partial-htmx (volume-icon (-> (audio/current-playback!) :current-volume) (:muted? event))))
+    :player/volume-changed (broadcast! (partial-htmx
+                                        (volume-icon (:volume event))
+                                        (volume-bar (:volume event))))
+    :player/media-changed (broadcast! (partial-htmx (current-meta (:info event))))
+    :player/state-changed (broadcast! (partial-htmx (play-pause-button (:state event))))
+    :player/time-changed (let [{:keys [current-time current-position]} (audio/current-playback!)
+                               {:keys [duration]} (-> (audio/current-track!))]
+                           (broadcast! (partial-htmx
+                                        (progress-bar current-position)
+                                        (time-left current-time duration)
+                                        (the-time current-time))))
     nil))
 
 (defn ^:export ws-handler [{:keys [emitter]} {:keys [channel data]}]
   (let [payload (<-json data)]
-    (tap> {:channel channel :data payload})
+    (tap> {:data payload})
     (condp = (:action payload)
       "play-pause" (async/put! emitter {:path "/player/commands"
                                         :value {:action :audio/play-pause}})
-      "prev" (async/put! emitter {:path "/player/commands"
-                                  :value {:action :audio/prev}})
+      "previous" (async/put! emitter {:path "/player/commands"
+                                      :value {:action :audio/prev}})
       "next" (async/put! emitter {:path "/player/commands"
                                   :value {:action :audio/next}})
       "skip-back" (async/put! emitter {:path "/player/commands"
@@ -84,9 +100,22 @@
                                           :value {:action :audio/skip-time
                                                   :milliseconds (* 10 1000)}})
 
-      nil)
+      "set-time" (async/put! emitter {:path "/player/commands"
+                                      :value {:action :audio/set-time
+                                              :milliseconds (:milliseconds payload)}})
+      "volume-up-step" (async/put! emitter {:path "/player/commands"
+                                            :value {:action :audio/adjust-volume
+                                                    :delta 5}})
+      "volume-down-step" (async/put! emitter {:path "/player/commands"
+                                              :value {:action :audio/adjust-volume
+                                                      :delta -5}})
+      "set-volume" (async/put! emitter {:path "/player/commands"
+                                        :value {:action :audio/set-volume
+                                                :volume (parse-double (:volume payload))}})
+      "toggle-mute" (async/put! emitter {:path "/player/commands"
+                                         :value {:action :audio/toggle-mute}})
 
-    #_(ws/send "<div id=\"thing\"> WOWOWWW</div>" channel)))
+      nil)))
 
 (defn folder-list [idx {:keys [name]}]
   [:div {:class (css :flex :items-center :gap-x-3)}
@@ -120,7 +149,7 @@
          "Link To Folder"]]]]]))
 
 (defcomponent ^:endpoint rfid-link [req folder-item rfid-uid]
-  (tap> {:rfid rfid-uid :folder folder-item})
+  ;; (tap> {:rfid rfid-uid :folder folder-item})
   (when (and (seq rfid-uid) (seq folder-item))
     (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
   (let [{:keys [uid action]} @rfid-cache
@@ -155,25 +184,94 @@
   (let [dur-str (if (float? current-position) (format "%.2f%%" (* 100 current-position)) "0%")
         left-str (format "left: %s" dur-str)
         width-str (format "width: %s" dur-str)]
-    ;; (tap> dur-str)
     [:div {:id "progress-bar" :class (css :relative)}
-     [:div {:class (css :bg-smoky-900 :transition-all :duration-500  :rounded-full :overflow-hidden
-                        [:dark :bg-slate-700])}
-      [:div {:class (css :bg-smoky-500 :transition-all :duration-500 [:dark :bg-smoky-400] :h-2), :role "progressbar", :aria-label "music :progress", :aria-valuenow "1456", :aria-valuemin "0", :aria-valuemax "4550"
+     [:div {:class (css :bg-smoky-900 :transition-all :duration-500  :rounded-full :overflow-hidden)}
+      [:div {:id "progress-bar-val" :class (css :bg-smoky-500 [:dark :bg-smoky-400] :h-2), :role "progressbar"
              :style width-str}]]
-     [:div {:class (css :ring-smoky-500 :transition-all :duration-500 [:dark :ring-smoky-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center
+     [:div {:class (css :ring-smoky-500   [:dark :ring-smoky-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center
                         :rounded-full :shadow :bg-smoky-500)
             :id "progress-bar-point"
-            :style left-str}
-      ;; dot
-      ;; [:div {:class (css :w-1.5 :h-1.5 :bg-smoky-500 :transition-all :duration-500 [:dark :bg-smoky-400] :rounded-full :ring-1 :ring-inset :ring-slate-900)}]
-      ]]))
+            :style left-str}]]))
 
 (defn the-time [current-time]
   [:div {:id "current-time" :class (css :transition-all :duration-500)}
    (format-duration (or current-time 0))])
 
-(defn player [{:keys [artist album duration title mrl track-number current-position current-time repeat-mode]}]
+(defn the-length [duration]
+  [:div {:id "current-length" :data-length (str duration) :class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
+   (format-duration duration)])
+
+(defn time-left [current-time duration]
+  ;; (tap> {:current-time current-time :duration duration})
+  [:div {:id "current-length" :data-length (str duration) :class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
+   (if (not current-time)
+     (format-duration duration)
+     (str "-" (format-duration (- duration current-time))))])
+
+(defn play-pause-button [state]
+  (let [icon (condp = state
+               :paused :play
+               :playing :pause
+               :opening :pause
+               :finished :play)]
+    [:button {:id "play-pause" :value "play-pause" :name "action" :type :submit
+              :class (css :transition-all :ease-out :duration-100 :flex-none
+                          :w-20 :h-20 :rounded-full :ring-1  :shadow-md :flex :items-center :justify-center
+                          ;; :bg-white
+                          :bg-smoky-900 :text-smoky-200 :ring-smoky-900
+                          [:hover-mouse [:hover :scale-110]]
+                          [:pointer-fine [:active :scale-105]]
+                          [:pointer-coarse [:active :scale-125 :duration-500]]
+                          [:dark :text-smoky-900 :bg-smoky-100
+                           [:pointer-fine [:active :scale-105]]
+                           [:pointer-coarse [:active :scale-125]]])
+
+              :aria-label "Pause"}
+     (icon {:play
+            [:svg {:width "30" :height "30" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 24 24"} [:path {:fill-rule "evenodd" :d "M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" :clip-rule "evenodd"}]]
+            :pause
+            [:svg {:width "30", :height "30", :fill "currentColor"}
+             [:rect {:x "4", :y "4", :width "8", :height "24", :rx "2"}]
+             [:rect {:x "18", :y "4", :width "8", :height "24", :rx "2"}]]})]))
+
+(defn current-meta [{:keys [artist album title]}]
+  (let [artist? (not (str/blank? artist))
+        album? (not (str/blank? album))]
+    [:div {:id "current-meta" :class (css  :flex :flex-col)}
+     [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
+     [:div {:class (css :flex :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
+      (cond
+        (and artist? album?) (list
+                              [:div  artist]
+                              [:div {:class (css :scale-75 :px-1)} "⬤"]
+                              [:div  album])
+        artist? artist
+        album? album
+        :else nil)]]))
+
+(defn volume-bar [volume]
+  [:input {:id "volume-slider" :type :range
+           :min 0 :max 1 :step 0.01
+           :hx-trigger "change"
+           :ws-send true
+           :hx-vals {:action "set-volume"}
+           :name "volume"
+           :value volume ;; :class "range range-xs"
+           :class (cs "range-sm" (css :w-full :h-1 :rounded-lg  :appearance-none :cursor-pointer
+                                      :bg-smoky-900 [:dark :bg-gray-700]))}])
+
+(defn volume-icon
+  ([volume muted?]
+   (let [icon (cond
+                (or (== 0 volume) (and (boolean? muted?) muted?)) :muted
+                (< volume 0.5) :quiet
+                :else :loud)]
+     (icon
+      {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
+       :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+       :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]}))))
+
+(defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?]}]
   (let [$button-base (css :transition-all :duration-500
                           :text-smoky-800
                           [:hover-mouse [:hover :scale-110]]
@@ -196,48 +294,26 @@
       ;; 2nd col
       [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
        ;; meta wrapper
-       [:div {:class (css  :flex :flex-col)}
-        [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
-        [:div {:class (css :flex :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
-         [:div  artist]
-         [:div {:class (css :scale-75 :px-1)} "⬤"]
-         [:div  album]]]
+       (current-meta current-track)
        ;; progress bar
        [:div {:class (css :mt-6 :space-y-2)}
         (progress-bar current-position)
         [:div {:class (css :flex :justify-between :text-xs :leading-6 :font-medium :tabular-nums :text-smoky-500 [:dark :text-smoky-500])}
          (the-time current-time)
-         [:div {:class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
-          (format-duration duration)]]]
+         ;; (the-length duration)
+         (time-left current-time duration)]]
        ;; button wrapper
        [:div {:class (css :flex :justify-center :transition-all :duration-500 :gap-x-8)}
-       ;; previous
+        ;; previous
         [:button {:value "previous" :name "action" :type :submit
                   :class (cs $button-base) :aria-label "Previous" :title "Previous"}
          [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]]]
-       ;; skip back
+        ;; skip back
         [:button {:value "skip-back" :name "action" :type :submit :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
                   :class (cs $button-base)}
          [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]]
-       ;; play/pause
-        [:button {:value "play-pause" :name "action" :type :submit
-                  :class (css :transition-all :ease-out :duration-100 :flex-none
-                              :w-20 :h-20 :rounded-full :ring-1  :shadow-md :flex :items-center :justify-center
-                              ;; :bg-white
-                              :bg-smoky-900 :text-smoky-200 :ring-smoky-900
-                              [:hover-mouse [:hover :scale-110]]
-                              [:pointer-fine [:active :scale-105]]
-                              [:pointer-coarse [:active :scale-125 :duration-500]]
-                              [:dark :text-smoky-900 :bg-smoky-100
-                               [:pointer-fine [:active :scale-105]]
-                               [:pointer-coarse [:active :scale-125]]])
-
-                  :aria-label "Pause"}
-         [:svg {:width "30", :height "32", :fill "currentColor"}
-          [:rect {:x "4", :y "4", :width "8", :height "24", :rx "2"}]
-          [:rect {:x "18", :y "4", :width "8", :height "24", :rx "2"}]]
-         #_[:svg {:style "fill: red" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm-1.56 19a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1zm6 0a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1z"}]]]
-
+        ;; play/pause
+        (play-pause-button state)
         [:button {:value "skip-forward" :name "action" :type :submit :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
                   :class (cs $button-base)}
 
@@ -246,28 +322,22 @@
          [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]]]
        ;; volume slider wrapper
        [:div {:class (css :mt-6 :flex :flex-row :items-center :gap-x-4)}
-        [:button {:class (cs $button-base)}
-
-         (or
-          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
-          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]])]
-        [:input {:id "volume-slider" :type :range :value "50" ;; :class "range range-xs"
-                 :class (cs "range-sm" (css :w-full :h-1 :rounded-lg  :appearance-none :cursor-pointer
-                                            :bg-smoky-900 [:dark :bg-gray-700]))}]
-        [:button {:class (cs $button-base)}
+        [:button {:value "toggle-mute" :name "action" :type :submit :class (cs $button-base)} (volume-icon current-volume muted?)]
+        (volume-bar current-volume)
+        [:button {:value "volume-down-step" :name "action" :type :submit :class (cs $button-base)}
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.935-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]]
-        [:button {:class (cs $button-base)}
+        [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
 (defcomponent ^:endpoint home [req]
   rfid-link
-  (tap> {:route-data (util/route-data req)})
   (let [{:keys [uid action]} @rfid-cache
         rfid-uid (when (= action :placed) uid)
         linked-folder (db/linked-folder (util/req-db req) uid)
-        current-track (audio/current-track!)]
+        current-track (audio/current-track!)
+        current-playback (audio/current-playback!)]
     [:div {:id "home" :hx-ext "ws" :ws-connect "/api/ws"}
-     (player current-track)
+     (player current-track current-playback)
      [:div {:class (css :px-10)}
       [:h1 {:class (css :text-2xl)} "Settings"]
       (rfid-link-form rfid-uid linked-folder)]

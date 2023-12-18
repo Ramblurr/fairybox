@@ -51,7 +51,10 @@
 (defn start-throttled-forwarder! [ch]
   (async/go-loop []
     (when-some [event (async/<! ch)]
-      (home/broadcast-player-event! event)
+      (try
+        (home/broadcast-player-event! event)
+        (catch Exception e
+          (log/error e "broadcast-player-event error")))
       (recur))))
 
 (defn start-main-loop! [opts listener]
