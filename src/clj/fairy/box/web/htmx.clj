@@ -40,8 +40,8 @@
     [:meta {:name    "viewport"
             :content "width=device-width, initial-scale=1, shrink-to-fit=no"}]
     [:title "Htmx + Kit"]
-    [:link {:rel "stylesheet" :href "/css/tailwind.css"}]
-    [:link {:rel "stylesheet" :href "/css/fairybox.css"}]
+    [:link {:rel "stylesheet" :href "/css/tailwind.css?v4"}]
+    [:link {:rel "stylesheet" :href "/css/fairybox.css?v4"}]
     [:script {:src "/js/htmx.org@1.9.9.js" :defer true}]
     [:script {:src "/js/htmx-ws@1.9.9.js" :defer true}]]
    [:body (render/walk-attrs body)]))

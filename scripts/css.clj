@@ -1,6 +1,6 @@
 (ns css
   (:require
-   [colors :refer [prefixed-colors css-color-vars colors]]
+   [colors :refer [prefixed-colors css-color-vars]]
    [clojure.java.io :as io]
    [shadow.css.build :as cb]))
 
@@ -12,10 +12,27 @@
 
 (def aliases {:dark                            "@media (prefers-color-scheme: dark)"
               :light                           "@media (prefers-color-scheme: light)"
+              :hover-mouse                     "@media(hover: hover) and (pointer: fine)"
+              :none-hover-mouse                "@media(hover: none) and (pointer: fine)"
+              :hover-touch                     "@media(hover: hover) and (any-pointer: coarse)"
+              :pointer-fine                    "@media(pointer: fine)"
+              :pointer-coarse                  "@media(any-pointer: coarse)"
               :-my-2                           {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
               :-mt-2                           {:margin-top "-0.5rem"}
               :-ml-2                           {:margin-left "-0.5rem"}
               :w-half                          {:width "50%"}
+              :max-w-none                      {:max-width "none"}
+              :max-w-xs                        {:max-width "20rem"} ;; /* 320px */
+              :max-w-sm                        {:max-width "24rem"} ;; /* 384px */
+              :max-w-md                        {:max-width "28rem"} ;; /* 448px */
+              :max-w-lg                        {:max-width "32rem"} ;; /* 512px */
+              :max-w-xl                        {:max-width "36rem"} ;; /* 576px */
+              :max-w-2xl                       {:max-width "42rem"} ;; /* 672px */
+              :max-w-3xl                       {:max-width "48rem"} ;; /* 768px */
+              :max-w-4xl                       {:max-width "56rem"} ;; /* 896px */
+              :max-w-5xl                       {:max-width "64rem"} ;; /* 1024px */
+              :max-w-6xl                       {:max-width "72rem"} ;; /* 1152px */
+              :max-w-7xl                       {:max-width "80rem"}  ;; /* 1280px */
               :left-half                       {:left "50%"}
               :top-half                        {:top "50%"}
               :float-right                     {:float "right"}
@@ -69,6 +86,19 @@
               :transition-all                  {:transition-property        "all"
                                                 :transition-timing-function "cubic-bezier(0.4, 0, 0.2, 1)"
                                                 :transition-duration        "150ms"}
+              :ease-linear                     {:transition-timing-function "linear"}
+              :ease-in                         {:transition-timing-function "cubic-bezier(0.4, 0, 1, 1)"}
+              :ease-out                        {:transition-timing-function "cubic-bezier(0, 0, 0.2, 1)"}
+              :ease-in-out                     {:transition-timing-function "cubic-bezier(0.4, 0, 0.2, 1)"}
+              :duration-0                      {:transition-duration "0s"}
+              :duration-75                     {:transition-duration "75ms"}
+              :duration-100                    {:transition-duration "100ms"}
+              :duration-150                    {:transition-duration "150ms"}
+              :duration-200                    {:transition-duration "200ms"}
+              :duration-300                    {:transition-duration "300ms"}
+              :duration-500                    {:transition-duration "500ms"}
+              :duration-700                    {:transition-duration "700ms"}
+              :duration-1000                   {:transition-duration "1000ms"}
               :delay-0                         {:transition-delay "0s"}
               :delay-75                        {:transition-delay "75ms"}
               :delay-100                       {:transition-delay "100ms"}
@@ -77,7 +107,13 @@
               :delay-300                       {:transition-delay "300ms"}
               :delay-500                       {:transition-delay "500ms"}
               :delay-700                       {:transition-delay "700ms"}
-              :delay-1000                      {:transition-delay "1000ms"}})
+              :delay-1000                      {:transition-delay "1000ms"}
+              :appearance-none                 {:appearance "none"}
+              :object-contain                  {:object-fit "contain"}
+              :object-cover                    {:object-fit "cover"}
+              :object-fill                     {:object-fit "fill"}
+              :object-none                     {:object-fit "none"}
+              :object-scale-down               {:object-fit "scale-down"}})
 
 (defn update-color-alias-groups [color-groups]
   (assoc color-groups "accent-" :accent-color))
@@ -111,6 +147,14 @@
 (defonce css-ref (atom nil))
 (defonce css-watch-ref (atom nil))
 
+#_(keys
+   (:aliases
+    (-> @css-ref
+        (update-config)
+        (cb/generate-color-aliases)
+        (cb/generate-spacing-aliases)
+
+        (cb/generate '{:tailwind {:include [fairy.*]}}))))
 (defn generate-css []
   (let [result
         (-> @css-ref

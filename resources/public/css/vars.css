@@ -4,4 +4,13 @@
     --color-border-table: var(--juniper-800);
     --color-background-table: var(--juniper-950);
     --color-hover-background: var(--mine-shaft-800);
+
+    --range-fg: var(--smoky-500);
+    --range-fill: var(--smoky-500);
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+    --range-fg: var(--smoky-100);
+    --range-fill: var(--smoky-500);
+    }
 }

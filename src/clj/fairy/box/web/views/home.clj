@@ -41,12 +41,16 @@
    [:input {:type :hidden :value  rfid-uid
             :name "rfid-uid"}]
    [:input {:type :text :disabled true
-            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0 :sm:text-sm :sm:leading-6 :opacity-50 :cursor-not-allowed)
+            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0
+                        [:sm :text-sm :leading-6]
+                        :opacity-50 :cursor-not-allowed)
             :value (or rfid-uid "RFID Tag Not Present")}]
 
    (when (and rfid-uid linked-folder)
      [:input {:type :text :disabled true
-              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0 :sm:text-sm :sm:leading-6 :opacity-50 :cursor-not-allowed)
+              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900  :focus:ring-0
+                          [:sm :text-sm :leading-6]
+                          :opacity-50 :cursor-not-allowed)
               :value linked-folder}])])
 
 (defn broadcast-rfid-change! [db uid action]
@@ -153,109 +157,107 @@
         width-str (format "width: %s" dur-str)]
     ;; (tap> dur-str)
     [:div {:id "progress-bar" :class (css :relative)}
-     [:div {:class (css :bg-slate-100 :transition-all :duration-500  :rounded-full :overflow-hidden
+     [:div {:class (css :bg-smoky-900 :transition-all :duration-500  :rounded-full :overflow-hidden
                         [:dark :bg-slate-700])}
-      [:div {:class (css :bg-cyan-500 :transition-all :duration-500 [:dark :bg-cyan-400] :h-2), :role "progressbar", :aria-label "music :progress", :aria-valuenow "1456", :aria-valuemin "0", :aria-valuemax "4550"
+      [:div {:class (css :bg-smoky-500 :transition-all :duration-500 [:dark :bg-smoky-400] :h-2), :role "progressbar", :aria-label "music :progress", :aria-valuenow "1456", :aria-valuemin "0", :aria-valuemax "4550"
              :style width-str}]]
-     [:div {:class (css :ring-cyan-500 :transition-all :duration-500 [:dark :ring-cyan-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center :bg-white :rounded-full :shadow)
+     [:div {:class (css :ring-smoky-500 :transition-all :duration-500 [:dark :ring-smoky-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center
+                        :rounded-full :shadow :bg-smoky-500)
             :id "progress-bar-point"
             :style left-str}
-      [:div {:class (css :w-1.5 :h-1.5 :bg-cyan-500 :transition-all :duration-500 [:dark :bg-cyan-400] :rounded-full :ring-1 :ring-inset :ring-slate-900)}]]]))
+      ;; dot
+      ;; [:div {:class (css :w-1.5 :h-1.5 :bg-smoky-500 :transition-all :duration-500 [:dark :bg-smoky-400] :rounded-full :ring-1 :ring-inset :ring-slate-900)}]
+      ]]))
 
 (defn the-time [current-time]
-  [:div {:id "current-time" :class (css :text-cyan-500 :transition-all :duration-500 [:dark :text-slate-100])}
+  [:div {:id "current-time" :class (css :transition-all :duration-500)}
    (format-duration (or current-time 0))])
 
 (defn player [{:keys [artist album duration title mrl track-number current-position current-time repeat-mode]}]
-  [:form {:id "player-controls" :ws-send true}
-   [:div {:class (css :mt-6 :sm:mt-10 :relative :z-10 :rounded-xl :shadow-xl)}
-    [:div {:class (css :bg-white :border-slate-100 :transition-all :duration-500 [:dark :bg-slate-800 :border-slate-500] :transition-all :duration-500  :border-b :rounded-t-xl :p-4
-                       :sm:p-10 :pb-6x :sm:pb-8x :lg:p-6 :xl:p-10 :xl:pb-8x :space-y-6 :sm:space-y-8 :lg:space-y-6 :xl:space-y-8)}
-     [:div {:class (css :flex :items-center :space-x-4)}
-      [:div {:class (css :flex-none :rounded-lg :bg-slate-100)}
-       [:svg {:width "88" :height "88"  :xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 88.441 74"} [:g  [:path {:d "M52 16.7a2 2 0 0 0-1.7-.3L25.6 23a2 2 0 0 0-1.4 1.9v20.2a9.3 9.3 0 0 0-4.5-1.1c-4.6 0-8.4 3.3-8.4 7.3s3.8 7.3 8.4 7.3c4.6 0 8.5-3.2 8.5-7.3v-16l20.6-5.6v9.9a9.3 9.3 0 0 0-4.4-1.1c-4.6 0-8.4 3.3-8.4 7.3s3.8 7.3 8.4 7.3c4.6 0 8.4-3.3 8.4-7.3V18.3a2 2 0 0 0-.8-1.6zm-32.3 38c-2.4 0-4.4-1.5-4.4-3.3 0-1.8 2-3.3 4.4-3.3 2.4 0 4.5 1.5 4.5 3.2 0 1.7-2.1 3.4-4.5 3.4zm8.5-23.6v-4.6l20.6-5.6v4.7zm16.2 18c-2.4 0-4.4-1.5-4.4-3.3 0-1.8 2-3.3 4.4-3.3 2.4 0 4.4 1.5 4.4 3.3 0 1.8-2.1 3.3-4.5 3.3z" :data-name "Compound Path"}] [:path {:d "M66 0H8a8 8 0 0 0-8 8v58a8 8 0 0 0 8 8h58a8 8 0 0 0 8-8v-1.4a33.5 33.5 0 0 0 0-55.1V8a8 8 0 0 0-8-8zm4 66a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4h58a4 4 0 0 1 4 4v15.4a14.4 14.4 0 0 0 0 27.1zm14.5-29A29.4 29.4 0 0 1 74 59.6V49.1a2 2 0 0 0-1.5-1.9 10.4 10.4 0 0 1 0-20.3A2 2 0 0 0 74 25V14.4A29.4 29.4 0 0 1 84.5 37Z"}]]]]
-      [:div {:class (css :min-w-0 :flex-auto :space-y-1 :font-semibold)}
-       [:p {:class (css :text-cyan-500 :transition-all :duration-500 [:dark :text-cyan-400] :text-sm :leading-6)}
-        artist]
-       [:h2 {:class (css :text-slate-500 :transition-all :duration-500 [:dark :text-slate-400] :text-sm :leading-6 :truncate)} album]
-       [:p {:class (css :text-slate-900 :transition-all :duration-500 [:dark :text-slate-50] :text-lg)}
-        (when track-number (str track-number " - "))
-        title]]]
-     [:div {:class (css :space-y-2)}
-      (progress-bar current-position)
-      [:div {:class (css :flex :justify-between :text-sm :leading-6 :font-medium :tabular-nums)}
-       (the-time current-time)
-       [:div {:class (css :text-slate-500 :transition-all :duration-500 [:dark :text-slate-400])}
-        (format-duration duration)]]
+  (let [$button-base (css :transition-all :duration-500
+                          :text-smoky-800
+                          [:hover-mouse [:hover :scale-110]]
+                          [:pointer-fine [:active :text-smoky-950 :scale-105]]
+                          [:pointer-coarse [:active :text-smoky-950 :scale-125 :duration-500]]
+                          [:dark :text-smoky-100 [:active :text-smoky-500]])]
+    [:form {:id "player-controls" :ws-send true}
+     [:div {:class (css :mt-6 :mb-10 :flex :flex-col
+                        [:lg :flex-row :py-6 :max-w-5xl]
+                        ;; [:sm :mt-10]
+                        :relative :z-10 :rounded-xl :shadow-xl
+                        :bg-white-rock-100
+                        [:dark :bg-smoky-950])}
+      ;; cover wrapper
+      [:div {:class (css :px-6 :flex :flex-col :items-center :justify-center
+                         :py-6
+                         [:lg :py-0 :w-1of3])}
+       [:img {:class (css :object-cover :w-64 :h-64)
+              :src "/img/fairy.png"}]]
+      ;; 2nd col
+      [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
+       ;; meta wrapper
+       [:div {:class (css  :flex :flex-col)}
+        [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
+        [:div {:class (css :flex :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
+         [:div  artist]
+         [:div {:class (css :scale-75 :px-1)} "⬤"]
+         [:div  album]]]
+       ;; progress bar
+       [:div {:class (css :mt-6 :space-y-2)}
+        (progress-bar current-position)
+        [:div {:class (css :flex :justify-between :text-xs :leading-6 :font-medium :tabular-nums :text-smoky-500 [:dark :text-smoky-500])}
+         (the-time current-time)
+         [:div {:class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
+          (format-duration duration)]]]
+       ;; button wrapper
+       [:div {:class (css :flex :justify-center :transition-all :duration-500 :gap-x-8)}
+       ;; previous
+        [:button {:value "previous" :name "action" :type :submit
+                  :class (cs $button-base) :aria-label "Previous" :title "Previous"}
+         [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]]]
+       ;; skip back
+        [:button {:value "skip-back" :name "action" :type :submit :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
+                  :class (cs $button-base)}
+         [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]]
+       ;; play/pause
+        [:button {:value "play-pause" :name "action" :type :submit
+                  :class (css :transition-all :ease-out :duration-100 :flex-none
+                              :w-20 :h-20 :rounded-full :ring-1  :shadow-md :flex :items-center :justify-center
+                              ;; :bg-white
+                              :bg-smoky-900 :text-smoky-200 :ring-smoky-900
+                              [:hover-mouse [:hover :scale-110]]
+                              [:pointer-fine [:active :scale-105]]
+                              [:pointer-coarse [:active :scale-125 :duration-500]]
+                              [:dark :text-smoky-900 :bg-smoky-100
+                               [:pointer-fine [:active :scale-105]]
+                               [:pointer-coarse [:active :scale-125]]])
 
-      [:div {:class (css :flex-auto :flex :justify-end :items-center)}
-       (let [$normal (css :rounded-lg :text-xs :leading-6 :font-semibold :px-2 :ring-2 :ring-inset :ring-slate-500 :text-slate-500 :transition-all :duration-500
-                          [:hover :scale-110]
-                          [:active :bg-slate-500 :text-slate-800 :scale-105]
-                          [:dark :text-slate-100 :ring-0 [:active :text-slate-800]]
-                          :transition-all :duration-500 :transition-all :duration-500)
-             $active (css [:dark :bg-slate-500])]
-         [:button {:value "repeat" :name "action" :type :submit :class (cs $normal (when (#{:repeat-one :repeat-all} repeat-mode) $active))}
-          (condp =  repeat-mode
-            :repeat-all
-            [:svg {:width "24" :height "24" :fill "currentColor"
-                   :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M23 3.976H9l1.12-1.12a1 1 0 0 0-1.41-1.42l-2.83 2.83a1 1 0 0 0 0 1.41l2.83 2.84a1 1 0 0 0 1.41-1.41L9 5.976h14a5 5 0 0 1 5 5v8a1 1 0 0 0 2 0v-8a7 7 0 0 0-7-7Zm-1.71 17.46a1 1 0 0 0-1.41 1.41l1.12 1.13H7a5 5 0 0 1-5-5v-8a1 1 0 0 0-2 0v8a7 7 0 0 0 7 7h14l-1.12 1.12a1 1 0 1 0 1.41 1.41l2.83-2.83a1 1 0 0 0 0-1.41z"}]]
-            :repeat-one
-            [:svg {:width "24" :height "24" :fill "currentColor"
-                   :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:g {:data-name "Layer 3"} [:path {:d "M23 3.976H9l1.12-1.12a1 1 0 0 0-1.41-1.42l-2.83 2.83a1 1 0 0 0 0 1.41l2.83 2.83a1 1 0 0 0 1.41-1.41L9 5.976h14a5 5 0 0 1 5 5v8a1 1 0 0 0 2 0v-8a7 7 0 0 0-7-7Zm-1.71 17.46a1 1 0 0 0-1.41 1.41l1.12 1.13H7a5 5 0 0 1-5-5v-8a1 1 0 0 0-2 0v8a7 7 0 0 0 7 7h14l-1.12 1.12a1 1 0 1 0 1.41 1.41l2.83-2.83a1 1 0 0 0 0-1.41z"}] [:path {:d "M15 19.976a1 1 0 0 0 1-1v-8a1 1 0 0 0-1.71-.71l-2 2a1 1 0 0 0 1.41 1.41l.29-.29v5.59a1 1 0 0 0 1.01 1Z"}]]]
-            [:svg {:width "24" :height "24" :fill "currentColor"
-                   :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M23 3.976H9l1.12-1.12a1 1 0 0 0-1.41-1.42l-2.83 2.83a1 1 0 0 0 0 1.41l2.83 2.84a1 1 0 0 0 1.41-1.41L9 5.976h14a5 5 0 0 1 5 5v8a1 1 0 0 0 2 0v-8a7 7 0 0 0-7-7Zm-1.71 17.46a1 1 0 0 0-1.41 1.41l1.12 1.13H7a5 5 0 0 1-5-5v-8a1 1 0 0 0-2 0v8a7 7 0 0 0 7 7h14l-1.12 1.12a1 1 0 1 0 1.41 1.41l2.83-2.83a1 1 0 0 0 0-1.41z"}]])])]]]
+                  :aria-label "Pause"}
+         [:svg {:width "30", :height "32", :fill "currentColor"}
+          [:rect {:x "4", :y "4", :width "8", :height "24", :rx "2"}]
+          [:rect {:x "18", :y "4", :width "8", :height "24", :rx "2"}]]
+         #_[:svg {:style "fill: red" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm-1.56 19a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1zm6 0a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1z"}]]]
 
-    [:div {:class (css :bg-slate-50 :text-slate-500 :transition-all :duration-500 [:dark :bg-slate-600 :text-slate-200] :transition-all :duration-500  :rounded-b-xl :flex :items-center)}
-     [:div {:class (css :flex-auto :flex :items-center :justify-evenly)}
-      #_[:button {:type "button" :aria-label "Add :to :favorites"}
-         [:svg {:width "24" :height "24"}
-          [:path {:d "M7 6.931C7 5.865 7.853 5 8.905 5h6.19C16.147 5 17 5.865 17 6.931V19l-5-4-5 4V6.931Z" :fill "currentColor" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]]]
-      [:button {:value "previous" :name "action" :type :submit
-                :class (css :sm:block :lg:hidden :xl:block :transition-transform
-                            [:hover :scale-110]
-                            [:active  :text-slate-800 :scale-105]
-                            [:dark  :text-slate-300 [:active :text-slate-800]]) :aria-label "Previous" :title "Previous"}
-       [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]]
-       #_[:svg {:width "24" :height "24" :fill "none"}
-          [:path {:d "m10 12 8-6v12l-8-6Z" :fill "currentColor" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]
-          [:path {:d "M6 6v12" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]]]
-      [:button {:value "skip-back" :name "action" :type :submit :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
-                :class (css :transition-transform
-                            [:hover :scale-110]
-                            [:active :text-slate-800 :scale-105]
-                            [:dark :text-slate-300 [:active :text-slate-800]])}
-       [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]]]
-     [:button {:value "play-pause" :name "action" :type :submit
-               :class (css :bg-white :text-slate-900 :transition-all :duration-500  :transition-all :duration-500  :flex-none :transition-transform
-                           [:hover :scale-105]
-                           [:active :bg-slate-300 :text-slate-800 :scale-105]
-                           :-my-2 :mx-auto :w-20 :h-20 :rounded-full :ring-1 :ring-slate-900 :shadow-md :flex :items-center :justify-center
-                           [:dark :bg-slate-800 :text-slate-300
-                            [:active :bg-slate-300 :text-slate-800]])
+        [:button {:value "skip-forward" :name "action" :type :submit :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
+                  :class (cs $button-base)}
 
-               :aria-label "Pause"}
-      [:svg {:fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm-1.56 19a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1zm6 0a1 1 0 0 1-1 1h-.89a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h.89a1 1 0 0 1 1 1z", :data-name "Layer 27"}]]]
-     [:div {:class (css :flex-auto :flex :items-center :justify-evenly)}
-      [:button {:value "skip-forward" :name "action" :type :submit :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
-                :class (css :transition-transform
-                            [:hover :scale-110]
-                            [:active :text-slate-800 :scale-105]
-                            [:dark :text-slate-300 [:active :text-slate-800]])}
+         [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 11.63 13 5.63a1 1 0 0 0-1.5.87v4.27L2.61 5.63a1 1 0 0 0-1.5.87v12a1 1 0 0 0 1.5.87l8.89-5.14v4.27a1 1 0 0 0 1.5.87l10.39-6a1 1 0 0 0 0-1.73z", :data-name "Layer 23"}]]]
+        [:button {:value "next" :name "action" :type :submit :class (cs $button-base) :aria-label "Next" :title "Next"}
+         [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]]]
+       ;; volume slider wrapper
+       [:div {:class (css :mt-6 :flex :flex-row :items-center :gap-x-4)}
+        [:button {:class (cs $button-base)}
 
-       [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 11.63 13 5.63a1 1 0 0 0-1.5.87v4.27L2.61 5.63a1 1 0 0 0-1.5.87v12a1 1 0 0 0 1.5.87l8.89-5.14v4.27a1 1 0 0 0 1.5.87l10.39-6a1 1 0 0 0 0-1.73z", :data-name "Layer 23"}]]
-       #_[:svg {:width "24" :height "24" :fill "none"}
-          [:path {:d "M17.509 16.95c-2.862 2.733-7.501 2.733-10.363 0-2.861-2.734-2.861-7.166 0-9.9 2.862-2.733 7.501-2.733 10.363 0 .38.365.711.759.991 1.176" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]
-          [:path {:d "M19 5v3.111c0 .491-.398.889-.889.889H15" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]]]
-      [:button {:value "next" :name "action" :type :submit :class (css :sm:block :lg:hidden :xl:block
-                                                                       :transition-transform
-                                                                       [:hover :scale-110]
-                                                                       [:active :text-slate-800 :scale-105]
-                                                                       [:dark :text-slate-300 [:active :text-slate-800]]) :aria-label "Next" :title "Next"}
-       [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]
-       #_[:svg {:width "24" :height "24" :fill "none"}
-          [:path {:d "M14 12 6 6v12l8-6Z" :fill "currentColor" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]
-          [:path {:d "M18 6v12" :stroke "currentColor" :stroke-width "2" :stroke-linecap "round" :stroke-linejoin "round"}]]]]]]])
+         (or
+          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]])]
+        [:input {:id "volume-slider" :type :range :value "50" ;; :class "range range-xs"
+                 :class (cs "range-sm" (css :w-full :h-1 :rounded-lg  :appearance-none :cursor-pointer
+                                            :bg-smoky-900 [:dark :bg-gray-700]))}]
+        [:button {:class (cs $button-base)}
+         [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.935-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]]
+        [:button {:class (cs $button-base)}
+         [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
 (defcomponent ^:endpoint home [req]
   rfid-link
@@ -264,10 +266,11 @@
         rfid-uid (when (= action :placed) uid)
         linked-folder (db/linked-folder (util/req-db req) uid)
         current-track (audio/current-track!)]
-    [:div {:id "home" :class (css :px-10) :hx-ext "ws" :ws-connect "/api/ws"}
+    [:div {:id "home" :hx-ext "ws" :ws-connect "/api/ws"}
      (player current-track)
-     [:h1 {:class (css :text-2xl)} "Settings"]
-     (rfid-link-form rfid-uid linked-folder)
+     [:div {:class (css :px-10)}
+      [:h1 {:class (css :text-2xl)} "Settings"]
+      (rfid-link-form rfid-uid linked-folder)]
      #_[:div
         "WEBSOCK"
         [:div {:hx-ext "ws"  :ws-connect "/api/ws"}
@@ -300,6 +303,22 @@
   :mute
   [:svg {:xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]])
 
+:plus
+[:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]
+:minus
+[:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.925-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]
+
+:volume-down
+[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+:volume-up
+[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]
+:download
+[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm7.51 15.9-6.81 6.81a1 1 0 0 1-1.41 0l-6.8-6.81a1 1 0 0 1 .71-1.71h3.08V8a1 1 0 0 1 1-1h5.44a1 1 0 0 1 1 1v6.19h3.08a1 1 0 0 1 .71 1.71z", :data-name "Layer 29"}]]
+:playlist
+[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M30 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h20a1 1 0 0 1 1 1zm-1 7H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1Zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1ZM5.45 2.11l-4-2A1 1 0 0 0 0 1v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 9v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 17v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 25v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79z", :data-name "Layer 6"}]]
+:volume-middle
+[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M18 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38H3a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm7.38 18.15a14 14 0 0 0 0-16.31 1 1 0 0 0-1.62 1.16 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 15"}]]
+
 (def credits [{:author "Yoyon Pujiyono"
                :link "https://thenounproject.com/icon/repeat-play-2447134/"
                :license "https://creativecommons.org/licenses/by/3.0/"}
@@ -329,4 +348,22 @@
                :license "https://creativecommons.org/licenses/by/3.0/"}
               {:license "https://creativecommons.org/licenses/by/3.0/"
                :author "Yoyon Pujiyono"
-               :link "https://thenounproject.com/icon/rewind-2506784/"}])
+               :link "https://thenounproject.com/icon/rewind-2506784/"}
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/middle-volume-2506798/"}
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/volume-down-2506806/"}
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/volume-up-2506805/"}
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/download-2506781/"}
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/play-list-2506807/"}])
+
+:link "https://thenounproject.com/icon/new-3190873/"
+:link "https://thenounproject.com/icon/disable-3190864/"

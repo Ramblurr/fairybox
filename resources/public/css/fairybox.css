@@ -1,16 +1,17 @@
 @import "generated.css";
 @import "vars.css";
+@import "range.css";
 html {
       font-family: "Noto Sans", monospace, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 body {
-     background: var(--zinc-200);
+     background: var(--white-rock-100);
     height: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
     body {
-        background: var(--zinc-900);
+        background: var(--smoky-950);
         color: white;
     }
 }
@@ -19,4 +20,25 @@ body {
     height: 100%;
     width: 100%;
     position: relative;
+}
+
+button:focus {
+  outline:none;
+  box-shadow: none;
+}
+
+input,
+textarea,
+button,
+select,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button {
+    -webkit-touch-callout: none; /* iOS Safari */
+        -webkit-user-select: none; /* Safari */
+           -moz-user-select: none; /* Old versions of Firefox */
+                user-select: none; /* Non-prefixed version, currently
+                                      supported by Chrome, Edge, Opera and Firefox */
 }
