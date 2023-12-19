@@ -11,6 +11,7 @@
    [fairy.box.audio.browse :as browse]
    [shadow.css :refer (css)]
    [simpleui.core :as simpleui :refer [defcomponent]]
+   [simpleui.response :as response]
    [fairy.box.web.htmx :refer [page-htmx partial-htmx htmx? trigger-response]]))
 
 (defn cs [& names]
@@ -370,7 +371,7 @@
     [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
      [:ul {:role "list", :class (css :-mx-2 :space-y-1)}
       (settings-option "RFID Tags" icons/radio-frequency "rfid-link")
-      (settings-option "Files" icons/file-audio "rfid-link")
+      (settings-option "Browse Audio" icons/file-audio "browse-audio")
       (settings-option "Listening History" icons/clock-rotate-left "rfid-link")]]]])
 
 (defn tab [name comp label active-tab extra-css]
@@ -431,6 +432,45 @@
    (player-tabs active-tab)
    content])
 
+(defn file-row [root-dir current-dir idx {:keys [name abs-path rel-path dir? file? media-file?]}]
+  [:tr
+   [:td {:class (css :whitespace-nowrap :py-4 :pl-4 :pr-3 :text-sm :font-medium :text-gray-900 [:sm :pl-6] [:lg :pl-8]  [:hover :bg-gray-100])}
+    [:button {:class (css :cursor-pointer :flex :w-full)}
+     (icons/folder-solid {:class (css :h-5 :w-5 :mr-2)}) name]]
+   [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
+    [:button {:hx-post "play-folder!" :hx-vals {:folder-path rel-path}} (icons/play {:class (css :h-4 :w-4)})]]])
+
+(defn file-table [root-dir current-dir files]
+  [:table {:class (css :min-w-full :divide-y :divide-gray-300)}
+   [:thead {:class (css :bg-gray-50)}
+    [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold :text-gray-900 [:sm :pl-6] [:lg :pl-8])} "Name"]
+    [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold :text-gray-900)} ""]]
+   [:tbody {:class (css :divide-y :divide-gray-200 :bg-white)}
+    (map-indexed (partial file-row root-dir current-dir) files)]])
+
+(defn browse-media-folder [req]
+  (let [folders (browse/list-media-dir)]
+    [:div {:class (cs "fade-in-out" (css :px-4))}
+     [:div
+      [:p {:class (css :text-lg :font-bold)} "Fairybox Audio Folders"]]
+     (file-table "" "" folders)]))
+
+(defcomponent ^:endpoint play-folder! [req folder-path]
+  (let [emitter (:emitter (util/route-data req))]
+    (async/put! emitter {:path "/player/commands"
+                         :value {:action :audio/play-folder
+                                 :folder-path folder-path
+                                 :uid nil}})
+    (tap> [folder-path emitter])
+    (response/hx-redirect "player-controls?loading=true")))
+
+(defcomponent ^:endpoint browse-audio [req]
+  (let [{:keys [uid action]} @rfid-cache
+        body [:div {:id "active-tab"} (browse-media-folder req)]]
+    (if (htmx? req)
+      body
+      (page-htmx (home-page :settings body)))))
+
 (defcomponent ^:endpoint rfid-link [req]
   (let [{:keys [uid action]} @rfid-cache
         linked-folder (db/linked-folder (util/req-db req) uid)
@@ -459,22 +499,27 @@
       (trigger-response "tab-change" body {:data {:activeTab :settings}})
       (page-htmx (home-page :settings body)))))
 
-(defn player-controls-tab []
+(defn player-controls-tab [req]
   (let [current-track (audio/current-track!)
-        current-playback (audio/current-playback!)]
-    [:div {:id "active-tab"}
+        current-playback (audio/current-playback!)
+        loading? (and (-> req :params :loading) (empty? current-track))]
+    [:div {:id "active-tab" :hx-get (str "player-controls" (when loading? "?loading=true")) :hx-trigger (when loading? "every 1s")}
      [:div {:class "fade-in-out"}
-      (player current-track current-playback)]]))
+      (if loading?
+        [:div {:class (css :text-smoky-700 :w-screen :h-screen :flex :items-center :justify-center)}
+         [:svg {:class (css :w-20 :h-20) :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 24 24"} [:style nil "@keyframes spinner_XVY9{50%{transform:rotate(180deg)}}"] [:circle {:cx "12", :cy "12", :r "3"}] [:g {:style "transform-origin:center;animation:spinner_XVY9 1s cubic-bezier(.36,.6,.31,1) infinite"} [:circle {:cx "4", :cy "12", :r "3"}] [:circle {:cx "20", :cy "12", :r "3"}]]]]
+        (player current-track current-playback))]]))
 
 (defcomponent ^:endpoint player-controls [req]
-  (let [body  (player-controls-tab)]
+  (let [body  (player-controls-tab req)]
     (if (htmx? req)
       (trigger-response "tab-change" body {:data {:activeTab :controls}})
       (page-htmx (home-page :controls body)))))
 
 (defcomponent ^:endpoint home [req]
-  rfid-link-folder! rfid-link play-queue player-controls play-queue-item settings
-  (home-page :controls (player-controls-tab)))
+  rfid-link-folder! rfid-link play-queue player-controls play-queue-item settings browse-audio
+  play-folder!
+  (home-page :controls (player-controls-tab req)))
 
 (defn ui-routes [base-path]
   (simpleui/make-routes

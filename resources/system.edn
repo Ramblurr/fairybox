@@ -76,4 +76,5 @@
  {:routes #ig/ref :router/routes}
  :reitit.routes/ui {:base-path "",
                     :db-conn #ig/ref :fairy.box.db/db
+                    :emitter     #ig/ref :reitit.routes/bus-emitter
                     :env #ig/ref :system/env}}
