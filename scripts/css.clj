@@ -18,6 +18,7 @@
               :pointer-fine                    "@media(pointer: fine)"
               :pointer-coarse                  "@media(any-pointer: coarse)"
               :-my-2                           {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
+              :-mx-2                           {:margin-left "-0.5rem" :margin-right "-0.5rem"}
               :-mt-2                           {:margin-top "-0.5rem"}
               :-ml-2                           {:margin-left "-0.5rem"}
               :w-half                          {:width "50%"}

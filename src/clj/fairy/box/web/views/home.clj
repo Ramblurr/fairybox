@@ -1,5 +1,6 @@
 (ns fairy.box.web.views.home
   (:require
+   [fairy.box.web.views.icon :as icons]
    [clojure.string :as str]
    [clojure.core.async :as async]
    [fairy.box.db :as db]
@@ -49,10 +50,9 @@
 (defn broadcast-rfid-change! [db uid action]
   (reset! rfid-cache {:uid uid :action action})
   (broadcast! (partial-htmx
-                (if (= action :placed)
-                  (rfid-link-form uid (db/linked-folder db uid))
-                  (rfid-link-form nil nil) )))
-  )
+               (if (= action :placed)
+                 (rfid-link-form uid (db/linked-folder db uid))
+                 (rfid-link-form nil nil)))))
 
 (defn broadcast-player-event! [event]
   ;; (tap> {:event event})
@@ -152,28 +152,27 @@
        (audio-folder-select linked-folder)]]
 
      [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-      [:button {:type "button", :class (css :text-sm :font-semibold :leading-6 :text-gray-900
-                                            [:dark :text-smoky-300])} "Cancel"]
-      [:button {:type "submit", :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
-                                            :bg-smoky-600
-                                            [:dark :bg-cloud-burst-600])}
+      [:button {:type "button" :class (css :text-sm :font-semibold :leading-6 :text-gray-900
+                                           [:dark :text-smoky-300])
+                :hx-get "settings" :hx-target "#active-tab"}
+       "Cancel"]
+      [:button {:type "submit" :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
+                                           :bg-smoky-600
+                                           [:dark :bg-cloud-burst-600])}
        "Link To Folder"]]]]])
 
-(defn rfid-link-form-view [req]
- (let [{:keys [uid action]} @rfid-cache
+(defcomponent ^:endpoint rfid-link-form-view [req]
+  (let [{:keys [uid action]} @rfid-cache
         linked-folder (db/linked-folder (util/req-db req) uid)]
     (if (= action :placed)
       (rfid-link-form uid linked-folder)
-      (rfid-link-form nil nil))) )
+      (rfid-link-form nil nil))))
 
 (defcomponent ^:endpoint rfid-link [req folder-item rfid-uid]
   ;; (tap> {:rfid rfid-uid :folder folder-item})
   (when (and (seq rfid-uid) (seq folder-item))
-    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item)
-    )
-    (rfid-link-form-view req)
-
-  )
+    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
+  (rfid-link-form-view req))
 
 (defn duration-data
   [^long duration-in-millis]
@@ -192,11 +191,12 @@
      :days days}))
 
 (defn format-duration [milliseconds]
-  (let [{:keys [days hours minutes seconds milliseconds]} (duration-data milliseconds)
-        rounded-seconds (if (> milliseconds 0)
-                          (inc seconds)
-                          seconds)]
-    (str (when (> days 0) (format "%02dd " days)) (when (> hours 0) (format "%02d:" hours)) (format "%02d" minutes) ":" (format "%02d" rounded-seconds))))
+  (when milliseconds
+    (let [{:keys [days hours minutes seconds milliseconds]} (duration-data milliseconds)
+          rounded-seconds (if (> milliseconds 0)
+                            (inc seconds)
+                            seconds)]
+      (str (when (> days 0) (format "%02dd " days)) (when (> hours 0) (format "%02d:" hours)) (format "%02d" minutes) ":" (format "%02d" rounded-seconds)))))
 
 (defn progress-bar [current-position]
   (let [dur-str (if (float? current-position) (format "%.2f%%" (* 100 current-position)) "0%")
@@ -355,17 +355,28 @@
         [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
+(defn settings-option [label icon hx-get]
+  [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"
+   [:a {:hx-get hx-get :hx-target "#settings-view" :hx-push-url hx-get
+        :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold
+                    :text-smoky-800
+                    [:dark :text-smoky-400])}
+    (icon {:class (css :h-6 :w-6 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])})
+    label]])
+
 (defn settings-view [req]
-  (let [{:keys [uid action]} @rfid-cache
-        rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid)]
-    [:div {:class (css :px-10)}
-     [:h1 {:class (css :text-2xl)} "Settings"]
-     (rfid-link-form-view req)]))
+  [:div {:class (css :px-10)}
+   [:h1 {:class (css :text-2xl)} "Settings"]
+   [:div {:id "settings-view"}
+    [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
+     [:ul {:role "list", :class (css :-mx-2 :space-y-1)}
+      (settings-option "RFID Tags" icons/radio-frequency "rfid-link-form-view")
+      (settings-option "Files" icons/file-audio "rfid-link-form-view")
+      (settings-option "Listening History" icons/clock-rotate-left "rfid-link-form-view")]]]])
 
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
-                       :py-2 :px-1 :text-center :text-sm :font-medium  [:focus :z-10]
+                       :py-2 :px-1 :text-center :text-sm :leading-normal :font-medium  [:focus :z-10]
                        :text-smoky-800
                        ;; [:hover :bg-smoky-800]
                        [:dark :text-smoky-500])
@@ -532,7 +543,15 @@
                :link "https://thenounproject.com/icon/download-2506781/"}
               {:license "https://creativecommons.org/licenses/by/3.0/"
                :author "Yoyon Pujiyono"
-               :link "https://thenounproject.com/icon/play-list-2506807/"}])
+               :link "https://thenounproject.com/icon/play-list-2506807/"}
 
-:link "https://thenounproject.com/icon/new-3190873/"
-:link "https://thenounproject.com/icon/disable-3190864/"
+              {:author "Yoyon Pujiyono"
+               :license "https://creativecommons.org/licenses/by/3.0/"
+               :link "https://thenounproject.com/icon/new-3190873/"}
+              {:author "Yoyon Pujiyono"
+               :link "https://thenounproject.com/icon/disable-3190864/"
+               :license "https://creativecommons.org/licenses/by/3.0/"}
+
+              {:license "https://creativecommons.org/licenses/by/3.0/"
+               :link "https://thenounproject.com/icon/radio-frequency-identification-4500829/"
+               :author "Iconbunny"}])
