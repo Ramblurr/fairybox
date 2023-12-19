@@ -36,7 +36,7 @@
   (doseq [channel @ws-clients]
     (ws/send msg channel)))
 
-(declare current-rfid)
+(declare rfid-link-form)
 (declare progress-bar)
 (declare the-time)
 (declare time-left)
@@ -48,7 +48,11 @@
 
 (defn broadcast-rfid-change! [db uid action]
   (reset! rfid-cache {:uid uid :action action})
-  (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
+  (broadcast! (partial-htmx
+                (if (= action :placed)
+                  (rfid-link-form uid (db/linked-folder db uid))
+                  (rfid-link-form nil nil) )))
+  )
 
 (defn broadcast-player-event! [event]
   ;; (tap> {:event event})
@@ -108,60 +112,68 @@
 
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
-   [:input {:type :hidden :value  rfid-uid
-            :name "rfid-uid"}]
-   [:input {:type :text :disabled true
-            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] [:focus :ring-0]
-                        [:sm :text-sm :leading-6]
-                        :opacity-50 :cursor-not-allowed)
-            :value (or rfid-uid "RFID Tag Not Present")}]
+   [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]
+   [:dl {:class ""}
+    [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
+     [:dt {:class (css :text-sm :font-medium :leading-6)} "RFID UID"]
+     [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0])} (or rfid-uid "RFID Tag Not Present")]]
+    (when (and rfid-uid linked-folder)
+      [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
+       [:dt {:class (css :text-sm :font-medium :leading-6)} "Linked Folder"]
+       [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0])} linked-folder]])]])
 
-   (when (and rfid-uid linked-folder)
-     [:input {:type :text :disabled true
-              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] [:focus :ring-0]
-                          [:sm :text-sm :leading-6]
-                          :opacity-50 :cursor-not-allowed)
-              :value linked-folder}])])
-
-(defn folder-list [idx {:keys [name]}]
+(defn folder-list [active-path idx {:keys [abs-path name]}]
   [:div {:class (css :flex :items-center :gap-x-3)}
    [:input {:id (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
             :required true
+            :checked (= active-path name)
             :value name}]
    [:label {:for (str idx name), :class (css :block :text-sm :font-medium :leading-6 :text-gray-900 [:dark :text-gray-300])} name]])
 
-(defn rfid-link-form [uid linked-folder]
-  (let  []
-    [:form {:hx-target "#rfid-link" :hx-post "rfid-link" :id "rfid-link"}
-     [:div {:class (css   :pb-12)}
-      [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
-      [:div
-       [:div {:class (css :mt-8 :space-y-10)}
-        [:fieldset
-         [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
-         [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Every card can be mapped to an audio folder under the media root."]
-         [:div {:class (css :mt-6 :space-y-2)}
-          (map-indexed folder-list  (browse/list-media-dir))]]]
-       [:div {:class (css :mt-4 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
-        [:div {:class (css  [:sm :col-span-4])}
-         [:label {:for "username", :class (css :block :text-sm :font-medium :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
-         [:div {:class (css :mt-2)}
-          [:div {:class (css :flex :rounded-md :shadow-sm :ring-1 :ring-inset :ring-gray-300 [:focus-within :ring-2 :ring-inset :ring-indigo-600] [:sm :max-w-md])}
-           (current-rfid uid linked-folder)]]]]
+(defn audio-folder-select [selected-path]
+  [:div {:id "audio-folder-select" :class (css :mt-6 :space-y-2)}
+   (map-indexed (partial folder-list selected-path)  (browse/list-media-dir))])
 
-       [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-        [:button {:type "button", :class (css :text-sm :font-semibold :leading-6 :text-gray-900)} "Cancel"]
-        [:button {:type "submit", :class (css :rounded-md :bg-indigo-600 :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-indigo-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-indigo-600])}
-         "Link To Folder"]]]]]))
+(defn rfid-link-form [uid linked-folder]
+  [:form {:hx-target "#rfid-link" :hx-post "rfid-link" :id "rfid-link"}
+   [:div {:class (css   :pb-12)}
+    [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
+    [:div
+     [:div {:class (css :mt-8 :space-y-10)}
+      [:fieldset
+       [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
+       [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Place an RFID tag on your Fairybox, and the ID number will appear here."]
+       [:div {:class (css :mt-6 :space-y-2)}
+        (current-rfid uid linked-folder)]]]
+     [:div {:class (css :mt-8 :space-y-10)}
+      [:fieldset
+       [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
+       [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
+       (audio-folder-select linked-folder)]]
+
+     [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
+      [:button {:type "button", :class (css :text-sm :font-semibold :leading-6 :text-gray-900
+                                            [:dark :text-smoky-300])} "Cancel"]
+      [:button {:type "submit", :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
+                                            :bg-smoky-600
+                                            [:dark :bg-cloud-burst-600])}
+       "Link To Folder"]]]]])
+
+(defn rfid-link-form-view [req]
+ (let [{:keys [uid action]} @rfid-cache
+        linked-folder (db/linked-folder (util/req-db req) uid)]
+    (if (= action :placed)
+      (rfid-link-form uid linked-folder)
+      (rfid-link-form nil nil))) )
 
 (defcomponent ^:endpoint rfid-link [req folder-item rfid-uid]
   ;; (tap> {:rfid rfid-uid :folder folder-item})
   (when (and (seq rfid-uid) (seq folder-item))
-    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
-  (let [{:keys [uid action]} @rfid-cache
-        rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid)]
-    (rfid-link-form rfid-uid linked-folder)))
+    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item)
+    )
+    (rfid-link-form-view req)
+
+  )
 
 (defn duration-data
   [^long duration-in-millis]
@@ -344,13 +356,12 @@
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
 (defn settings-view [req]
-  (let [
-        {:keys [uid action]} @rfid-cache
+  (let [{:keys [uid action]} @rfid-cache
         rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid) ]
+        linked-folder (db/linked-folder (util/req-db req) uid)]
     [:div {:class (css :px-10)}
      [:h1 {:class (css :text-2xl)} "Settings"]
-     (rfid-link-form rfid-uid linked-folder)]))
+     (rfid-link-form-view req)]))
 
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
@@ -419,7 +430,7 @@
   (let [body [:div {:id "active-tab"} (settings-view req)]]
     (if (htmx? req)
       (trigger-response "tab-change" body {:data {:activeTab :settings}})
-      (page-htmx (home-page :settings body )))))
+      (page-htmx (home-page :settings body)))))
 
 (defn player-controls-tab []
   (let [current-track (audio/current-track!)

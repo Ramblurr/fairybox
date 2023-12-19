@@ -8,7 +8,6 @@
    [integrant.core :as ig]))
 
 (defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
-  (tap> {:rfid-scanned ev})
   (if (= (:action value) :placed)
     (when-let [folder-path (db/linked-folder @db-conn (:uid value))]
       (async/put! emitter {:path "/player/commands"
