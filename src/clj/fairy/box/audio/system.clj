@@ -28,12 +28,23 @@
 
 (defonce ^:private audio-state (atom audio-init-state))
 
+@audio-state
+
 (defn current-play-request! []
   (let [state @audio-state]
     (get-in state [:play-requests (:current-play-request state)])))
 
 (defn current-track! []
   (-> @audio-state :current-track))
+
+(defn current-play-queue! []
+  (let [request (current-play-request!)
+        current-track (current-track!)]
+    {:folder-path (:folder-path request)
+     :tracks (map (fn [^Media media]
+                    (let [meta (get-in request [:media-info media])]
+                      {:current? (= (:mrl current-track) (:mrl meta))
+                       :meta meta})) (:medias request))}))
 
 (defn current-playback! []
   (-> @audio-state :current-playback))
@@ -45,6 +56,14 @@
     (when media-list
       (interop/release-media-list! media-list))))
 
+(defn media-info [^Media media]
+  (let [file-info {:mrl (interop/media->mrl media)
+                   :media-state (interop/media->media-state media)
+                   :duration (interop/media->media-duration media)
+                   :media-type (interop/media->media-type media)}
+        meta (or (interop/media->meta-map media) {})]
+    (merge meta file-info)))
+
 (defn handle-pre-play-parse [{:keys [internal-ch player]} {:keys [media status meta-map play-request-id]}]
   (let [state @audio-state]
     (if (not= play-request-id (-> state :current-play-request))
@@ -53,6 +72,7 @@
         (swap! audio-state m/dissoc-in [:play-requests play-request-id]))
       (let [parsed-countdown (dec (get-in state [:play-requests play-request-id :parsed-countdown]))]
         (swap! audio-state assoc-in [:play-requests play-request-id :parsed-countdown] parsed-countdown)
+        (swap! audio-state assoc-in [:play-requests play-request-id :media-info media] (media-info media))
         (when (= 0 parsed-countdown)
           (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id play-request-id}))))))
 
@@ -69,12 +89,7 @@
 (defn handle-media-changed [{:keys [emitter]} {:keys [media-ref]}]
   (let [media (-> media-ref (.newMedia))]
     (try
-      (let [file-info {:mrl (interop/media->mrl media)
-                       :media-state (interop/media->media-state media)
-                       :duration (interop/media->media-duration media)
-                       :media-type (interop/media->media-type media)}
-            meta (or (interop/media->meta-map media) {})
-            info     (merge meta file-info)]
+      (let [info (media-info media)]
         (swap! audio-state assoc :current-track info)
         ;; (tap> {:meta info :media media :active (current-play-request!)})
         (async/put! emitter (player-event {:event :player/media-changed :info info})))
@@ -194,6 +209,7 @@
                                                ;; interop wants [0, 100] integer
                                                (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
         :audio/toggle-mute (interop/mute! player)
+        :audio/play-queue-index (interop/play-index! player (:item-index value))
         nil))
     (catch Exception e
       (log/error e "audio command error"))))

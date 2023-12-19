@@ -42,3 +42,29 @@ button {
     user-select: none; /* Non-prefixed version, currently
                                       supported by Chrome, Edge, Opera and Firefox */
 }
+
+.htmx-swapping > .fade-in-out {
+  opacity: 0;
+}
+
+.htmx-swapping.htmx-settling > .fade-in-out {
+  opacity: 1;
+}
+
+.fade-in-out {
+  opacity: 1;
+  transition: opacity 0.1s ease-out;
+}
+
+.tab-active {
+  background: var(--smoky-500);
+  color: var(--smoky-900);
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab-active {
+   background: var(--smoky-900);
+   color: var(--smoky-400);
+  }
+}

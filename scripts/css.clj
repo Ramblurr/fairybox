@@ -32,7 +32,7 @@
               :max-w-4xl                       {:max-width "56rem"} ;; /* 896px */
               :max-w-5xl                       {:max-width "64rem"} ;; /* 1024px */
               :max-w-6xl                       {:max-width "72rem"} ;; /* 1152px */
-              :max-w-7xl                       {:max-width "80rem"}  ;; /* 1280px */
+              :max-w-7xl                       {:max-width "80rem"} ;; /* 1280px */
               :left-half                       {:left "50%"}
               :top-half                        {:top "50%"}
               :float-right                     {:float "right"}
@@ -113,7 +113,26 @@
               :object-cover                    {:object-fit "cover"}
               :object-fill                     {:object-fit "fill"}
               :object-none                     {:object-fit "none"}
-              :object-scale-down               {:object-fit "scale-down"}})
+              :object-scale-down               {:object-fit "scale-down"}
+              :opacity-0                       {:opacity "0"}
+              :opacity-5                       {:opacity "0.05"}
+              :opacity-10                      {:opacity "0.1"}
+              :opacity-20                      {:opacity "0.2"}
+              :opacity-25                      {:opacity "0.25"}
+              :opacity-30                      {:opacity "0.3"}
+              :opacity-40                      {:opacity "0.4"}
+              :opacity-50                      {:opacity "0.5"}
+              :opacity-60                      {:opacity "0.6"}
+              :opacity-70                      {:opacity "0.7"}
+              :opacity-75                      {:opacity "0.75"}
+              :opacity-80                      {:opacity "0.8"}
+              :opacity-90                      {:opacity "0.9"}
+              :opacity-95                      {:opacity "0.95"}
+              :opacity-100                     {:opacity "1"}
+              :fill-none                       {:fill "none"}
+              :fill-inherit                    {:fill "inherit"}
+              :fill-current                    {:fill "currentColor"}
+              :fill-transparent                {:fill "transparent"}})
 
 (defn update-color-alias-groups [color-groups]
   (assoc color-groups "accent-" :accent-color))

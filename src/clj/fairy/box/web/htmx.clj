@@ -1,5 +1,6 @@
 (ns fairy.box.web.htmx
   (:require
+   [cheshire.core :as cheshire]
    [simpleui.render :as render]
    [ring.util.http-response :as http-response]
    [hiccup2.core :as h2]
@@ -51,6 +52,26 @@
   (str
    (h2/html {:mode :html}
             (render/walk-attrs body))))
+(defn htmx? [req]
+  (= "true"
+     (get-in req [:headers "hx-request"] false)))
+
+(def hx-trigger-types
+  {:hx-trigger "HX-Trigger"
+   :hx-trigger-after-settle "HX-Trigger-After-Settle"
+   :hx-trigger-after-swap "HX-Trigger-After-Swap"})
+
+(defn trigger-response
+  ([trigger-name body]
+   (trigger-response trigger-name body {}))
+  ([trigger-name body {:keys [trigger-type data]
+                       :or {trigger-type :hx-trigger}}]
+   {:status 200
+    :headers {"Content-Type" "text/html" (get hx-trigger-types trigger-type)
+              (if data
+                (cheshire/generate-string {trigger-name data})
+                trigger-name)}
+    :body (partial-htmx body)}))
 
 (comment
 

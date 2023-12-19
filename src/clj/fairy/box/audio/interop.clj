@@ -93,6 +93,9 @@
 (defn play! [^AudioListPlayerComponent player filename]
   (-> player  (.mediaPlayer) (.media) (.play filename nil)))
 
+(defn play-index! [^AudioListPlayerComponent player index]
+  (-> player  (.mediaListPlayer) (.controls) (.play index)))
+
 (defn mute! [^AudioListPlayerComponent player]
   (-> player  (.mediaPlayer) (.audio) (.mute)))
 

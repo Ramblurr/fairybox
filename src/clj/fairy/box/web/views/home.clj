@@ -10,7 +10,7 @@
    [fairy.box.audio.browse :as browse]
    [shadow.css :refer (css)]
    [simpleui.core :as simpleui :refer [defcomponent]]
-   [fairy.box.web.htmx :refer [page-htmx partial-htmx]]))
+   [fairy.box.web.htmx :refer [page-htmx partial-htmx htmx? trigger-response]]))
 
 (defn cs [& names]
   (str/join " " (filter identity names)))
@@ -36,10 +36,6 @@
   (doseq [channel @ws-clients]
     (ws/send msg channel)))
 
-(defn broadcast-rfid-change! [db uid action]
-  (reset! rfid-cache {:uid uid :action action})
-  (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
-
 (declare current-rfid)
 (declare progress-bar)
 (declare the-time)
@@ -48,6 +44,11 @@
 (declare current-meta)
 (declare volume-bar)
 (declare volume-icon)
+(declare play-queue-list)
+
+(defn broadcast-rfid-change! [db uid action]
+  (reset! rfid-cache {:uid uid :action action})
+  (broadcast! (partial-htmx (current-rfid (when (= action :placed) uid) (db/linked-folder db uid)))))
 
 (defn broadcast-player-event! [event]
   ;; (tap> {:event event})
@@ -55,9 +56,11 @@
     ;; :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
     :player/muted (broadcast! (partial-htmx (volume-icon (-> (audio/current-playback!) :current-volume) (:muted? event))))
     :player/volume-changed (broadcast! (partial-htmx
-                                        (volume-icon (:volume event))
+                                        (volume-icon (:volume event) nil)
                                         (volume-bar (:volume event))))
-    :player/media-changed (broadcast! (partial-htmx (current-meta (:info event))))
+    :player/media-changed (broadcast! (partial-htmx
+                                       (play-queue-list)
+                                       (current-meta (:info event))))
     :player/state-changed (broadcast! (partial-htmx (play-pause-button (:state event))))
     :player/time-changed (let [{:keys [current-time current-position]} (audio/current-playback!)
                                {:keys [duration]} (-> (audio/current-track!))]
@@ -98,6 +101,8 @@
                                                 :volume (parse-double (:volume payload))}})
       "toggle-mute" (async/put! emitter {:path "/player/commands"
                                          :value {:action :audio/toggle-mute}})
+      "play-queue-item" (async/put! emitter {:path "/player/commands"
+                                             :value {:action :audio/play-queue-index :item-index (parse-long (:item-index payload))}})
 
       nil)))
 
@@ -106,14 +111,14 @@
    [:input {:type :hidden :value  rfid-uid
             :name "rfid-uid"}]
    [:input {:type :text :disabled true
-            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] :focus:ring-0
+            :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] [:focus :ring-0]
                         [:sm :text-sm :leading-6]
                         :opacity-50 :cursor-not-allowed)
             :value (or rfid-uid "RFID Tag Not Present")}]
 
    (when (and rfid-uid linked-folder)
      [:input {:type :text :disabled true
-              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] :focus:ring-0
+              :class (css :block :flex-1 :border-0 :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:dark :text-gray-300] [:focus :ring-0]
                           [:sm :text-sm :leading-6]
                           :opacity-50 :cursor-not-allowed)
               :value linked-folder}])])
@@ -235,20 +240,27 @@
              [:rect {:x "4", :y "4", :width "8", :height "24", :rx "2"}]
              [:rect {:x "18", :y "4", :width "8", :height "24", :rx "2"}]]})]))
 
-(defn current-meta [{:keys [artist album title]}]
+(defn icon-dot [$class]
+  [:svg {:viewbox "0 0 2 2", :class (cs (css :fill-current) $class)} [:circle {:cx "1", :cy "1", :r "1"}]])
+
+(defn artist-dot-album [artist album]
   (let [artist? (not (str/blank? artist))
         album? (not (str/blank? album))]
-    [:div {:id "current-meta" :class (css  :flex :flex-col)}
-     [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
-     [:div {:class (css :flex :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
-      (cond
-        (and artist? album?) (list
-                              [:div  artist]
-                              [:div {:class (css :scale-75 :px-1)} "⬤"]
-                              [:div  album])
-        artist? artist
-        album? album
-        :else nil)]]))
+
+    (cond
+      (and artist? album?) (list
+                            [:div  artist]
+                            [:div (icon-dot (css :h-2 :w-2))]
+                            [:div  album])
+      artist? artist
+      album? album
+      :else nil)))
+
+(defn current-meta [{:keys [artist album title]}]
+  [:div {:id "current-meta" :class (css  :flex :flex-col)}
+   [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
+   [:div {:class (css :flex :items-center :gap-x-1 :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
+    (artist-dot-album artist album)]])
 
 (defn volume-bar [volume]
   [:input {:id "volume-slider" :type :range
@@ -291,6 +303,7 @@
                          :py-6
                          [:lg :py-0 :w-1of3])}
        [:img {:class (css :object-cover :w-64 :h-64)
+              :style "transform: translateZ(0)"
               :src "/img/fairy.png"}]]
       ;; 2nd col
       [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
@@ -330,18 +343,84 @@
         [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
+(defn tab [name comp label active-tab extra-css]
+  (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
+                       :py-2 :px-1 :text-center :text-sm :font-medium  [:focus :z-10]
+                       :text-smoky-800
+                       ;; [:hover :bg-smoky-800]
+                       [:dark :text-smoky-500])
+        $active-tab "tab-active"]
+    [:a {:href "#"
+         :data-tab-name name
+         :hx-get comp  :hx-target "#active-tab"
+         :hx-swap "outerHTML swap:0.1s settle:0.1s"
+         :class (cs $tab-base (when (= name active-tab) $active-tab) extra-css)
+         :aria-current "page"}
+     [:span label]]))
+
+(defn player-tabs [active-tab]
+  [:div {:id "player-tabs" :hx-swap-oob "outerHTML :#player-tabs" :class (css :pt-2 :px-2 :max-w-5xl)}
+   [:nav {:class (css :isolate :flex  :rounded-lg :shadow), :aria-label "Tabs"}
+    (tab  :controls "player-controls" "Now Playing" active-tab nil)
+    (tab  :play-queue "play-queue" "Play Queue" active-tab nil)
+    (tab :settings "settings"
+         [:svg {:xmlns "http://www.w3.org/2000/svg", :fill "none", :stroke "currentColor", :stroke-width "1.5", :class (css :w-6 :h-6) , :viewBox "0 0 24 24"} [:path {:stroke-linecap "round", :stroke-linejoin "round", :d "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"}] [:path {:stroke-linecap "round", :stroke-linejoin "round", :d "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"}]]
+         active-tab
+         (css :grow-0 :shrink :min-w-min))]])
+
+(defn play-queue-item [idx {:keys [meta current?] :as t}]
+  (let [{:keys [title album artist]} meta
+        $base (css :flex  :items-center :justify-between :gap-x-6 :gap-y-2 :py-2 :pl-2 :rounded-lg :shadow)
+        $current (css :bg-white-rock-100 [:dark :bg-smoky-900])]
+    [:li {:class (cs $base (when current? $current))}
+     [:button {:type :submit :name "item-index" :value idx :class (css :text-left)}
+      [:div {:class (css :flex :flex-col)}
+       [:div {:class (css :font-bold :text-base :text-smoky-800 [:dark :text-smoky-300])} title]
+       [:div {:class (css :flex :items-center :gap-x-1 :text-sm :font-semibold :text-smoky-700 [:dark :text-smoky-400])}
+        (artist-dot-album artist album)]]]]))
+
+(defn play-queue-list []
+  (let
+   [{:keys [tracks folder-path]} (audio/current-play-queue!)]
+    [:form {:id "play-queue" :class "fade-in-out" :ws-send true :hx-vals {:action "play-queue-item"}}
+     [:div {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800 [:dark :text-smoky-300])}
+      [:div
+       [:p {:class (css :text-lg :font-bold)} "Current Folder"]
+       [:p {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])} "/" folder-path]]
+      [:div
+       [:p {:class (css :text-lg :font-bold)} "Folder Audio"]]
+      [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
+       (map-indexed play-queue-item tracks)]]]))
+
+(defcomponent ^:endpoint play-queue [req]
+  (let [body [:div {:id "active-tab"} (play-queue-list)]]
+    (if (htmx? req)
+      (trigger-response "tab-change" body {:data {:activeTab :play-queue}})
+      body)))
+
+(defcomponent ^:endpoint player-controls [req]
+  (let [current-track (audio/current-track!)
+        current-playback (audio/current-playback!)
+        body  [:div {:id "active-tab"}
+               [:div {:class "fade-in-out"}
+                (player current-track current-playback)]]]
+    (if (htmx? req)
+      (trigger-response "tab-change" body {:data {:activeTab :controls}})
+      body)))
+
 (defcomponent ^:endpoint home [req]
-  rfid-link
+  rfid-link play-queue player-controls play-queue-item
   (let [{:keys [uid action]} @rfid-cache
         rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid)
-        current-track (audio/current-track!)
-        current-playback (audio/current-playback!)]
+        linked-folder (db/linked-folder (util/req-db req) uid)]
+
     [:div {:id "home" :hx-ext "ws" :ws-connect "/api/ws"}
-     (player current-track current-playback)
-     [:div {:class (css :px-10)}
-      [:h1 {:class (css :text-2xl)} "Settings"]
-      (rfid-link-form rfid-uid linked-folder)]
+     (player-tabs :play-queue)
+     (play-queue req)
+     #_(player-controls req)
+     #_[:div {:class (css :px-10)}
+        [:h1 {:class (css :text-2xl)} "Settings"]
+        (rfid-link-form rfid-uid linked-folder)]
      #_[:div
         "WEBSOCK"
         [:div {:hx-ext "ws"  :ws-connect "/api/ws"}

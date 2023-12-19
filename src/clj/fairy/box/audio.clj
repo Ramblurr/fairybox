@@ -11,3 +11,6 @@
 
 (defn current-playback! []
   (audio/current-playback!))
+
+(defn current-play-queue! []
+  (audio/current-play-queue!))

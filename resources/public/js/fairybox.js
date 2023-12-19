@@ -16,8 +16,11 @@ function formatDuration(milliseconds) {
         return `${paddedMinutes}:${paddedSeconds}`;
     }
 }
-function initRange() {
-  const progressBar = document.getElementById("progress-bar");
+function initRange(el) {
+  console.log("INIT", el)
+  const progressBar = el.querySelectorAll("#progress-bar")[0];
+  console.log("PROG", progressBar)
+  //const progressBar = document.getElementById("progress-bar");
   const progressBarPoint = document.getElementById("progress-bar-point");
   const progressBarVal = document.getElementById("progress-bar-val");
   const currentTimeEl = document.getElementById("current-time");
@@ -108,10 +111,10 @@ function initRange() {
 function initWidgets(evt) {
   if(evt) {
     if (evt.target.querySelector("#progress-bar") || evt.target.querySelector("#progress-bar-point"))
-      initRange();
+      initRange(evt.target);
 
   } else {
-    initRange();
+    document.querySelectorAll("#progress-bar").forEach(element => initRange(element))
   }
 }
 
@@ -149,3 +152,30 @@ document.addEventListener("htmx:oobBeforeSwap", function (evt) {
 document.addEventListener("DOMContentLoaded", function() {
   initWidgets();
 });
+
+function getTabByName(name) {
+  const tabs = document.querySelectorAll("#player-tabs [data-tab-name]");
+  for (const tab of tabs) {
+    if (tab.getAttribute("data-tab-name") == name) {
+      return tab;
+    }
+  }
+  return null;
+}
+
+function getAllTabs() {
+  const tabs = document.querySelectorAll("#player-tabs [data-tab-name]");
+  return tabs;
+}
+
+document.body.addEventListener("tab-change", function(evt){
+  const $tab = getTabByName(evt.detail.activeTab);
+  if (!$tab) return;
+  $tab.classList.add("tab-active");
+  const $tabs = getAllTabs();
+  for (const tab of $tabs) {
+    if (tab != $tab) {
+      tab.classList.remove("tab-active");
+    }
+  }
+})
