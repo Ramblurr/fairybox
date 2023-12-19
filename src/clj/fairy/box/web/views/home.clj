@@ -343,6 +343,15 @@
         [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
          [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
 
+(defn settings-view [req]
+  (let [
+        {:keys [uid action]} @rfid-cache
+        rfid-uid (when (= action :placed) uid)
+        linked-folder (db/linked-folder (util/req-db req) uid) ]
+    [:div {:class (css :px-10)}
+     [:h1 {:class (css :text-2xl)} "Settings"]
+     (rfid-link-form rfid-uid linked-folder)]))
+
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
                        :py-2 :px-1 :text-center :text-sm :font-medium  [:focus :z-10]
@@ -352,7 +361,7 @@
         $active-tab "tab-active"]
     [:a {:href "#"
          :data-tab-name name
-         :hx-get comp  :hx-target "#active-tab"
+         :hx-get comp :hx-target "#active-tab" :hx-push-url comp
          :hx-swap "outerHTML swap:0.1s settle:0.1s"
          :class (cs $tab-base (when (= name active-tab) $active-tab) extra-css)
          :aria-current "page"}
@@ -392,43 +401,42 @@
       [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
        (map-indexed play-queue-item tracks)]]]))
 
+(defn play-queue-tab []
+  [:div {:id "active-tab"} (play-queue-list)])
+
+(defn home-page [active-tab content]
+  [:div {:id "home" :hx-ext "ws" :ws-connect "/api/ws"}
+   (player-tabs active-tab)
+   content])
+
 (defcomponent ^:endpoint play-queue [req]
-  (let [body [:div {:id "active-tab"} (play-queue-list)]]
+  (let [body (play-queue-tab)]
     (if (htmx? req)
       (trigger-response "tab-change" body {:data {:activeTab :play-queue}})
-      body)))
+      (page-htmx (home-page :play-queue body)))))
+
+(defcomponent ^:endpoint settings [req]
+  (let [body [:div {:id "active-tab"} (settings-view req)]]
+    (if (htmx? req)
+      (trigger-response "tab-change" body {:data {:activeTab :settings}})
+      (page-htmx (home-page :settings body )))))
+
+(defn player-controls-tab []
+  (let [current-track (audio/current-track!)
+        current-playback (audio/current-playback!)]
+    [:div {:id "active-tab"}
+     [:div {:class "fade-in-out"}
+      (player current-track current-playback)]]))
 
 (defcomponent ^:endpoint player-controls [req]
-  (let [current-track (audio/current-track!)
-        current-playback (audio/current-playback!)
-        body  [:div {:id "active-tab"}
-               [:div {:class "fade-in-out"}
-                (player current-track current-playback)]]]
+  (let [body  (player-controls-tab)]
     (if (htmx? req)
       (trigger-response "tab-change" body {:data {:activeTab :controls}})
-      body)))
+      (page-htmx (home-page :controls body)))))
 
 (defcomponent ^:endpoint home [req]
-  rfid-link play-queue player-controls play-queue-item
-  (let [{:keys [uid action]} @rfid-cache
-        rfid-uid (when (= action :placed) uid)
-        linked-folder (db/linked-folder (util/req-db req) uid)]
-
-    [:div {:id "home" :hx-ext "ws" :ws-connect "/api/ws"}
-     (player-tabs :play-queue)
-     (play-queue req)
-     #_(player-controls req)
-     #_[:div {:class (css :px-10)}
-        [:h1 {:class (css :text-2xl)} "Settings"]
-        (rfid-link-form rfid-uid linked-folder)]
-     #_[:div
-        "WEBSOCK"
-        [:div {:hx-ext "ws"  :ws-connect "/api/ws"}
-         [:div {:id "thing"}]
-
-         [:form {:hx-ws "send" :id "ws-form"}
-          [:input {:name "input" :value "hello"}]
-          [:button {:type :submit} "Send"]]]]]))
+  rfid-link play-queue player-controls play-queue-item settings
+  (home-page :controls (player-controls-tab)))
 
 (defn ui-routes [base-path]
   (simpleui/make-routes

@@ -16,9 +16,11 @@ function formatDuration(milliseconds) {
         return `${paddedMinutes}:${paddedSeconds}`;
     }
 }
-function initRange(el) {
-  console.log("INIT", el)
-  const progressBar = el.querySelectorAll("#progress-bar")[0];
+function initRange(progressBar) {
+  if(!progressBar) {
+    console.error("No progress bar found", progressBar);
+    return;
+  }
   console.log("PROG", progressBar)
   //const progressBar = document.getElementById("progress-bar");
   const progressBarPoint = document.getElementById("progress-bar-point");
@@ -109,12 +111,14 @@ function initRange(el) {
 }
 
 function initWidgets(evt) {
+  let pb = null;
   if(evt) {
-    if (evt.target.querySelector("#progress-bar") || evt.target.querySelector("#progress-bar-point"))
-      initRange(evt.target);
-
+    //pb = evt.target.querySelector("#progress-bar");
   } else {
-    document.querySelectorAll("#progress-bar").forEach(element => initRange(element))
+    pb = document.querySelector("#progress-bar")
+  }
+  if(pb) {
+    initRange(pb);
   }
 }
 
