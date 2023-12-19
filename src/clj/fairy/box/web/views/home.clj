@@ -135,7 +135,7 @@
    (map-indexed (partial folder-list selected-path)  (browse/list-media-dir))])
 
 (defn rfid-link-form [uid linked-folder]
-  [:form {:hx-target "#rfid-link" :hx-post "rfid-link" :id "rfid-link"}
+  [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link" :class (css :px-10)}
    [:div {:class (css   :pb-12)}
     [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
     [:div
@@ -156,23 +156,13 @@
                                            [:dark :text-smoky-300])
                 :hx-get "settings" :hx-target "#active-tab"}
        "Cancel"]
-      [:button {:type "submit" :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
-                                           :bg-smoky-600
-                                           [:dark :bg-cloud-burst-600])}
+      [:button {:type "submit"
+                :disabled (nil? uid)
+                :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
+                            [:disabled :bg-gray-400 :text-gray-300]
+                            :bg-smoky-600
+                            [:dark :bg-cloud-burst-600])}
        "Link To Folder"]]]]])
-
-(defcomponent ^:endpoint rfid-link-form-view [req]
-  (let [{:keys [uid action]} @rfid-cache
-        linked-folder (db/linked-folder (util/req-db req) uid)]
-    (if (= action :placed)
-      (rfid-link-form uid linked-folder)
-      (rfid-link-form nil nil))))
-
-(defcomponent ^:endpoint rfid-link [req folder-item rfid-uid]
-  ;; (tap> {:rfid rfid-uid :folder folder-item})
-  (when (and (seq rfid-uid) (seq folder-item))
-    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
-  (rfid-link-form-view req))
 
 (defn duration-data
   [^long duration-in-millis]
@@ -296,7 +286,7 @@
        :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
        :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]}))))
 
-(defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?]}]
+(defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?] :as playback}]
   (let [$button-base (css :transition-all :duration-500
                           :text-smoky-800
                           [:hover-mouse [:hover :scale-110]]
@@ -304,60 +294,69 @@
                           [:pointer-coarse [:active :text-smoky-950 :scale-125 :duration-500]]
                           [:dark :text-smoky-100 [:active :text-smoky-500]])]
     [:form {:id "player-controls" :ws-send true}
-     [:div {:class (css :mt-6 :mb-10 :flex :flex-col
-                        [:lg :flex-row :py-6 :max-w-5xl]
-                        ;; [:sm :mt-10]
-                        :relative :z-10 :rounded-xl :shadow-xl
-                        :bg-white-rock-100
-                        [:dark :bg-smoky-950])}
-      ;; cover wrapper
-      [:div {:class (css :px-6 :flex :flex-col :items-center :justify-center
-                         :py-6
-                         [:lg :py-0 :w-1of3])}
-       [:img {:class (css :object-cover :w-64 :h-64)
-              :style "transform: translateZ(0)"
-              :src "/img/fairy.png"}]]
-      ;; 2nd col
-      [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
-       ;; meta wrapper
-       (current-meta current-track)
-       ;; progress bar
-       [:div {:class (css :mt-6 :space-y-2)}
-        (progress-bar current-position)
-        [:div {:class (css :flex :justify-between :text-xs :leading-6 :font-medium :tabular-nums :text-smoky-500 [:dark :text-smoky-500])}
-         (the-time current-time)
-         ;; (the-length duration)
-         (time-left current-time duration)]]
-       ;; button wrapper
-       [:div {:class (css :flex :justify-center :transition-all :duration-500 :gap-x-8)}
-        ;; previous
-        [:button {:value "previous" :name "action" :type :submit
-                  :class (cs $button-base) :aria-label "Previous" :title "Previous"}
-         [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]]]
-        ;; skip back
-        [:button {:value "skip-back" :name "action" :type :submit :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
-                  :class (cs $button-base)}
-         [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]]
-        ;; play/pause
-        (play-pause-button state)
-        [:button {:value "skip-forward" :name "action" :type :submit :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
-                  :class (cs $button-base)}
+     (if (and mrl state)
 
-         [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 11.63 13 5.63a1 1 0 0 0-1.5.87v4.27L2.61 5.63a1 1 0 0 0-1.5.87v12a1 1 0 0 0 1.5.87l8.89-5.14v4.27a1 1 0 0 0 1.5.87l10.39-6a1 1 0 0 0 0-1.73z", :data-name "Layer 23"}]]]
-        [:button {:value "next" :name "action" :type :submit :class (cs $button-base) :aria-label "Next" :title "Next"}
-         [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]]]
-       ;; volume slider wrapper
-       [:div {:class (css :my-6 :flex :flex-row :items-center :gap-x-4)}
-        [:button {:value "toggle-mute" :name "action" :type :submit :class (cs $button-base)} (volume-icon current-volume muted?)]
-        (volume-bar current-volume)
-        [:button {:value "volume-down-step" :name "action" :type :submit :class (cs $button-base)}
-         [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.935-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]]
-        [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
-         [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]]))
+       [:div {:class (css :mt-6 :mb-10 :flex :flex-col
+                          [:lg :flex-row :py-6 :max-w-5xl]
+                         ;; [:sm :mt-10]
+                          :relative :z-10 :rounded-xl :shadow-xl
+                          :bg-white-rock-100
+                          [:dark :bg-smoky-950])}
+       ;; cover wrapper
+        [:div {:class (css :px-6 :flex :flex-col :items-center :justify-center
+                           :py-6
+                           [:lg :py-0 :w-1of3])}
+         [:img {:class (css :object-cover :w-64 :h-64)
+                :style "transform: translateZ(0)"
+                :src "/img/fairy.png"}]]
+       ;; 2nd col
+        [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
+        ;; meta wrapper
+         (current-meta current-track)
+        ;; progress bar
+         [:div {:class (css :mt-6 :space-y-2)}
+          (progress-bar current-position)
+          [:div {:class (css :flex :justify-between :text-xs :leading-6 :font-medium :tabular-nums :text-smoky-500 [:dark :text-smoky-500])}
+           (the-time current-time)
+          ;; (the-length duration)
+           (time-left current-time duration)]]
+        ;; button wrapper
+         [:div {:class (css :flex :justify-center :transition-all :duration-500 :gap-x-8)}
+         ;; previous
+          [:button {:value "previous" :name "action" :type :submit
+                    :class (cs $button-base) :aria-label "Previous" :title "Previous"}
+           [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]]]
+         ;; skip back
+          [:button {:value "skip-back" :name "action" :type :submit :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
+                    :class (cs $button-base)}
+           [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]]
+         ;; play/pause
+          (play-pause-button state)
+          [:button {:value "skip-forward" :name "action" :type :submit :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
+                    :class (cs $button-base)}
+
+           [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 11.63 13 5.63a1 1 0 0 0-1.5.87v4.27L2.61 5.63a1 1 0 0 0-1.5.87v12a1 1 0 0 0 1.5.87l8.89-5.14v4.27a1 1 0 0 0 1.5.87l10.39-6a1 1 0 0 0 0-1.73z", :data-name "Layer 23"}]]]
+          [:button {:value "next" :name "action" :type :submit :class (cs $button-base) :aria-label "Next" :title "Next"}
+           [:svg {:width "25" :height "25" :fill "currentColor"  :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18 5.5a1 1 0 0 0-1 1v4.62L7.5 5.63A1 1 0 0 0 6 6.5v12a1 1 0 0 0 1.5.87l9.5-5.48v4.61a1 1 0 0 0 2 0v-12a1 1 0 0 0-1-1z", :data-name "Layer 26"}]]]]
+        ;; volume slider wrapper
+         [:div {:class (css :my-6 :flex :flex-row :items-center :gap-x-4)}
+          [:button {:value "toggle-mute" :name "action" :type :submit :class (cs $button-base)} (volume-icon current-volume muted?)]
+          (volume-bar current-volume)
+          [:button {:value "volume-down-step" :name "action" :type :submit :class (cs $button-base)}
+           [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.935-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]]
+          [:button {:value "volume-up-step" :name "action" :type :submit :class (cs $button-base)}
+           [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", , :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]]]]]
+       [:div
+        [:div {:class (css :flex :justify-center :items-center :mt-10)}
+         [:div {:class (css :outline-dotted :p-6 :rounded-lg :outline-smoky-400 :text-smoky-900 [:dark :text-smoky-300])}
+          [:p {:class (css :text-lg)} "Nothing is playing."]
+          [:p {:class (css :text-sm :mt-2 :underline :decoration-inherit)}
+           [:a {:href "settings" :hx-boost true}
+            "Goto settings"]]]]])]))
 
 (defn settings-option [label icon hx-get]
   [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"
-   [:a {:hx-get hx-get :hx-target "#settings-view" :hx-push-url hx-get
+   [:a {:hx-get hx-get :hx-target "#active-tab" :hx-push-url hx-get
         :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold
                     :text-smoky-800
                     [:dark :text-smoky-400])}
@@ -365,14 +364,14 @@
     label]])
 
 (defn settings-view [req]
-  [:div {:class (css :px-10)}
+  [:div {:class (cs "fade-in-out" (css :px-10))}
    [:h1 {:class (css :text-2xl)} "Settings"]
-   [:div {:id "settings-view"}
+   [:div
     [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
      [:ul {:role "list", :class (css :-mx-2 :space-y-1)}
-      (settings-option "RFID Tags" icons/radio-frequency "rfid-link-form-view")
-      (settings-option "Files" icons/file-audio "rfid-link-form-view")
-      (settings-option "Listening History" icons/clock-rotate-left "rfid-link-form-view")]]]])
+      (settings-option "RFID Tags" icons/radio-frequency "rfid-link")
+      (settings-option "Files" icons/file-audio "rfid-link")
+      (settings-option "Listening History" icons/clock-rotate-left "rfid-link")]]]])
 
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
@@ -385,6 +384,7 @@
          :data-tab-name name
          :hx-get comp :hx-target "#active-tab" :hx-push-url comp
          :hx-swap "outerHTML swap:0.1s settle:0.1s"
+         ;; :hx-swap "outerHTML swap:3s settle:3s"
          :class (cs $tab-base (when (= name active-tab) $active-tab) extra-css)
          :aria-current "page"}
      [:span label]]))
@@ -431,6 +431,22 @@
    (player-tabs active-tab)
    content])
 
+(defcomponent ^:endpoint rfid-link [req]
+  (let [{:keys [uid action]} @rfid-cache
+        linked-folder (db/linked-folder (util/req-db req) uid)
+        body [:div {:id "active-tab"} (if (= action :placed)
+                                        (rfid-link-form uid linked-folder)
+                                        (rfid-link-form nil nil))]]
+    (if (htmx? req)
+      body
+      (page-htmx (home-page :settings body)))))
+
+(defcomponent ^:endpoint rfid-link-folder! [req folder-item rfid-uid]
+  ;; (tap> {:rfid rfid-uid :folder folder-item})
+  (when (and (seq rfid-uid) (seq folder-item))
+    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
+  (rfid-link req))
+
 (defcomponent ^:endpoint play-queue [req]
   (let [body (play-queue-tab)]
     (if (htmx? req)
@@ -457,7 +473,7 @@
       (page-htmx (home-page :controls body)))))
 
 (defcomponent ^:endpoint home [req]
-  rfid-link play-queue player-controls play-queue-item settings
+  rfid-link-folder! rfid-link play-queue player-controls play-queue-item settings
   (home-page :controls (player-controls-tab)))
 
 (defn ui-routes [base-path]

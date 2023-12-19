@@ -183,3 +183,5 @@ document.body.addEventListener("tab-change", function(evt){
     }
   }
 })
+
+htmx.config.defaultSwapStyle = 'outerHTML';
