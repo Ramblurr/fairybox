@@ -10,10 +10,12 @@
 (def css-out-dir "resources/public/css")
 (def generated-css-out (format "%s/generated.css" css-out-dir))
 
-(def aliases {:dark                            "@media (prefers-color-scheme: dark)"
-              :light                           "@media (prefers-color-scheme: light)"
-              :hover-mouse                     "@media (hover: hover) and (pointer: fine)"
-              :none-hover-mouse                "@media (hover: none) and (pointer: fine)"
+(def aliases {:dark             "@media (prefers-color-scheme: dark)"
+              :light            "@media (prefers-color-scheme: light)"
+              :hover-mouse      "@media (hover: hover) and (pointer: fine)"
+              :none-hover-mouse "@media
+ (hover: none) and (pointer: fine)"
+
               :hover-touch                     "@media (hover: hover) and (any-pointer: coarse)"
               :pointer-fine                    "@media (pointer: fine)"
               :pointer-coarse                  "@media (any-pointer: coarse)"
@@ -133,10 +135,24 @@
               :fill-none                       {:fill "none"}
               :fill-inherit                    {:fill "inherit"}
               :fill-current                    {:fill "currentColor"}
-              :fill-transparent                {:fill "transparent"}})
+              :fill-transparent                {:fill "transparent"}
+              :ring-0                          {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(0px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring-1                          {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring-2                          {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring                            {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring-4                          {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring-8                          {:box-shadow "var(--tw-ring-inset) 0 0 0 calc(8px + var(--tw-ring-offset-width)) var(--tw-ring-color)"}
+              :ring-inset                      {:--tw-ring-inset "inset"}
+              :ring-offset-0                   {:--tw-ring-offset-width "0px"}
+              :ring-offset-1                   {:--tw-ring-offset-width "1px"}
+              :ring-offset-2                   {:--tw-ring-offset-width "2px"}
+              :ring-offset-4                   {:--tw-ring-offset-width "4px"}
+              :ring-offset-8                   {:--tw-ring-offset-width "8px"}})
 
 (defn update-color-alias-groups [color-groups]
-  (assoc color-groups "accent-" :accent-color))
+  (-> color-groups
+      (assoc "accent-" :accent-color)
+      (assoc "ring-" :--tw-ring-color)))
 
 (defn update-config [config]
   (-> config

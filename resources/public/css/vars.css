@@ -1,4 +1,5 @@
 :root {
+    --tw-ring-inset: ;
     --color-accent-secondary-fade-85: var(--red-800);
     --color-text-header: var(--red-800);
     --color-border-table: var(--juniper-800);

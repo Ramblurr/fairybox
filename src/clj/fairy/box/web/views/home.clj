@@ -197,8 +197,8 @@
      [:div {:class (css :bg-smoky-900 :transition-all :duration-500  :rounded-full :overflow-hidden)}
       [:div {:id "progress-bar-val" :class (css :bg-smoky-500 [:dark :bg-smoky-400] :h-2), :role "progressbar"
              :style width-str}]]
-     [:div {:class (css :ring-smoky-500   [:dark :ring-smoky-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center
-                        :rounded-full :shadow :bg-smoky-500)
+     [:div {:class (css :ring-offset-0 :ring-smoky-500   [:dark :ring-smoky-400] :ring-2 :absolute :top-half :w-4 :h-4 :-mt-2 :-ml-2 :flex :items-center :justify-center
+                        :rounded-full  :bg-smoky-500)
             :id "progress-bar-point"
             :style left-str}]]))
 
@@ -408,10 +408,14 @@
         $current (css :bg-white-rock-100 [:dark :bg-smoky-900])]
     [:li {:class (cs $base (when current? $current))}
      [:button {:type :submit :name "item-index" :value idx :class (css :text-left)}
-      [:div {:class (css :flex :flex-col)}
-       [:div {:class (css :font-bold :text-base :text-smoky-800 [:dark :text-smoky-300])} title]
-       [:div {:class (css :flex :items-center :gap-x-1 :text-sm :font-semibold :text-smoky-700 [:dark :text-smoky-400])}
-        (artist-dot-album artist album)]]]]))
+      [:div {:class (css :flex :flex-row :gap-x-2)}
+       [:div {:class (css :self-center)}
+        [:span {:class (css :inline-flex :items-center :rounded-full :px-2 :py-1 :text-xs :font-medium :ring-1 :ring-offset-0 :ring-inset
+                            :ring-smoky-600 :text-smoky-600)} (inc idx)]]
+       [:div {:class (css :flex :flex-col)}
+        [:div {:class (css :font-bold :text-base :text-smoky-800 [:dark :text-smoky-300])} title]
+        [:div {:class (css :flex :items-center :gap-x-1 :text-sm :font-semibold :text-smoky-700 [:dark :text-smoky-400])}
+         (artist-dot-album artist album)]]]]]))
 
 (defn play-queue-list []
   (let
