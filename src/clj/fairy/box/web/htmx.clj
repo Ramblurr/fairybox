@@ -40,6 +40,8 @@
     [:meta {:charset "UTF-8"}]
     [:meta {:name    "viewport"
             :content "width=device-width, initial-scale=1, shrink-to-fit=no"}]
+    [:meta {:name "color-scheme" :content "dark"}]
+    [:meta {:name "darkreader-lock"}]
     [:title "Fairybox"]
     [:link {:rel "stylesheet" :href "/css/tailwind.css?v4"}]
     [:link {:rel "stylesheet" :href "/css/fairybox.css?v4"}]
