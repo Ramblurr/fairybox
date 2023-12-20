@@ -12,11 +12,11 @@
 
 (def aliases {:dark                            "@media (prefers-color-scheme: dark)"
               :light                           "@media (prefers-color-scheme: light)"
-              :hover-mouse                     "@media(hover: hover) and (pointer: fine)"
-              :none-hover-mouse                "@media(hover: none) and (pointer: fine)"
-              :hover-touch                     "@media(hover: hover) and (any-pointer: coarse)"
-              :pointer-fine                    "@media(pointer: fine)"
-              :pointer-coarse                  "@media(any-pointer: coarse)"
+              :hover-mouse                     "@media (hover: hover) and (pointer: fine)"
+              :none-hover-mouse                "@media (hover: none) and (pointer: fine)"
+              :hover-touch                     "@media (hover: hover) and (any-pointer: coarse)"
+              :pointer-fine                    "@media (pointer: fine)"
+              :pointer-coarse                  "@media (any-pointer: coarse)"
               :-my-2                           {:margin-top "-0.5rem" :margin-bottom "-0.5rem"}
               :-mx-2                           {:margin-left "-0.5rem" :margin-right "-0.5rem"}
               :-mt-2                           {:margin-top "-0.5rem"}

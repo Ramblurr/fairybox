@@ -1,5 +1,6 @@
 (ns fairy.box.switchboard
   (:require
+   [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [medley.core :as m]
    [jp.nijohando.event :as ev]
@@ -9,10 +10,12 @@
 
 (defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
   (if (= (:action value) :placed)
-    (when-let [folder-path (db/linked-folder @db-conn (:uid value))]
+    (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
+      ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+
       (async/put! emitter {:path "/player/commands"
-                           :value {:action :audio/play-folder
-                                   :folder-path folder-path
+                           :value {:action :audio/play-path
+                                   :item-path (browse/absoluteify rel-folder-path)
                                    :uid (:uid value)}}))
     (async/put! emitter {:path "/player/commands"
                          :value {:action :audio/stop}})))

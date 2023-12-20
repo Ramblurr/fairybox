@@ -359,17 +359,19 @@
   [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"
    [:a {:hx-get hx-get :hx-target "#active-tab" :hx-push-url hx-get
         :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold
-                    :text-smoky-800
-                    [:dark :text-smoky-400])}
+                    :cursor-pointer :text-smoky-800
+                    [:hover-mouse [:hover :bg-smoky-300]]
+                    [:dark :text-smoky-400
+                     [:hover-mouse [:hover :bg-smoky-800]]])}
     (icon {:class (css :h-6 :w-6 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])})
     label]])
 
 (defn settings-view [req]
-  [:div {:class (cs "fade-in-out" (css :px-10))}
+  [:div {:class (cs "fade-in-out" (css :px-10 :max-w-5xl))}
    [:h1 {:class (css :text-2xl)} "Settings"]
    [:div
     [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
-     [:ul {:role "list", :class (css :-mx-2 :space-y-1)}
+     [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
       (settings-option "RFID Tags" icons/radio-frequency "rfid-link")
       (settings-option "Browse Audio" icons/file-audio "browse-audio")
       (settings-option "Listening History" icons/clock-rotate-left "rfid-link")]]]])
@@ -418,7 +420,7 @@
      [:div {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800 [:dark :text-smoky-300])}
       [:div
        [:p {:class (css :text-lg :font-bold)} "Current Folder"]
-       [:p {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])} "/" folder-path]]
+       [:p {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])} folder-path]]
       [:div
        [:p {:class (css :text-lg :font-bold)} "Folder Audio"]]
       [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
@@ -432,36 +434,93 @@
    (player-tabs active-tab)
    content])
 
-(defn file-row [root-dir current-dir idx {:keys [name abs-path rel-path dir? file? media-file?]}]
-  [:tr
-   [:td {:class (css :whitespace-nowrap :py-4 :pl-4 :pr-3 :text-sm :font-medium :text-gray-900 [:sm :pl-6] [:lg :pl-8]  [:hover :bg-gray-100])}
-    [:button {:class (css :cursor-pointer :flex :w-full)}
-     (icons/folder-solid {:class (css :h-5 :w-5 :mr-2)}) name]]
-   [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
-    [:button {:hx-post "play-folder!" :hx-vals {:folder-path rel-path}} (icons/play {:class (css :h-4 :w-4)})]]])
+(defn file-icon-for [{:keys [dir? media-file?]}]
+  (cond
+    dir? icons/folder-solid
+    media-file? icons/file-audio
+    :else icons/file-solid))
 
-(defn file-table [root-dir current-dir files]
-  [:table {:class (css :min-w-full :divide-y :divide-gray-300)}
-   [:thead {:class (css :bg-gray-50)}
-    [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold :text-gray-900 [:sm :pl-6] [:lg :pl-8])} "Name"]
-    [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold :text-gray-900)} ""]]
-   [:tbody {:class (css :divide-y :divide-gray-200 :bg-white)}
-    (map-indexed (partial file-row root-dir current-dir) files)]])
+(defn file-row [{:keys [endpoint target values] :as target-params} root-dir current-dir idx {:keys [name abs-path dir? media-file?] :as file}]
+  (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
+        $icon-size (css :h-5 :w-5)
+        $hover (css  [:hover :bg-smoky-300] [:dark [:hover :bg-smoky-800]])]
+    [:tr
+     [:td {:class (cs (css :whitespace-nowrap :py-4 :pl-4 :pr-3 :text-sm :font-medium  [:sm :pl-6] [:lg :pl-8]
+                           :text-smoky-900
+                           [:dark :text-smoky-300])
+                      (when dir? $hover))}
+      [:button (merge {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
+                      (when dir? {:hx-get "traverse-dir" :hx-target "#file-picker"
+                                  :hx-vals
+                                  {:current-dir current-dir :root-dir root-dir :target-dir abs-path :target-params (pr-str target-params)}}
+                            #_{:hx-post endpoint
+                               :hx-target (or target "#file-picker")
+                               :hx-vals (merge values {:selected-path abs-path})}))
+       ((file-icon-for file) {:class (cs $icon-color $icon-size (css :mr-2))}) name]]
+     [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
+      (when dir?
+        [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+         (icons/play {:class (cs $icon-color $icon-size)})])]]))
+
+(defn file-table [target-params root-dir current-dir files]
+  [:table {:class (css :min-w-full :divide-y :divide-smoky-400)}
+   [:thead {:class (css :text-smoky-900 [:dark :text-smoky-300])}
+    [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
+    [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold)} ""]]
+   [:tbody {:class (css :divide-y :divide-smoky-400)}
+    (map-indexed (partial file-row target-params root-dir current-dir) files)]])
+
+(defn file-breadcrumb [target-params root-dir current-dir]
+  [:nav {:class (css :flex :pl-4 :py-4 [:sm :pl-6]), :aria-label "Breadcrumb"}
+   [:ol {:role "list", :class (css :flex :items-center :space-x-0)}
+    (map-indexed (fn [idx path]
+                   (let [name (browse/basename path)]
+                     [:li
+                      [:div {:class (css :flex :items-center :text-sm :font-medium :text-smoky-900  [:dark :text-smoky-300])}
+                       [:svg {:class (css :h-5 :w-5 :flex-shrink-0 :text-gray-300), :xmlns "http://www.w3.org/2000/svg", :fill "currentColor", :viewbox "0 0 20 20", :aria-hidden "true"}
+                        [:path {:d "M5.555 17.776l8-16 .894.448-8 16-.894-.448z"}]]
+                       (if (browse/validate-base-path root-dir path)
+                         [:button {:hx-get "traverse-dir" :hx-target "#file-picker"
+                                   :hx-vals {:current-dir current-dir :root-dir root-dir :target-dir path :target-params (pr-str target-params)}
+                                   :class (css :ml-0 [:hover :text-smoky-600])} name]
+                         name)]]))
+                 (browse/component-paths current-dir))]])
+
+(defn- file-picker-main
+  [req target-params root-dir current-dir]
+  (let [current-dir-exists? (browse/valid-dir? current-dir)
+        files (if current-dir-exists?
+                (browse/list-contents current-dir)
+                (browse/list-contents root-dir))
+        current-dir (if current-dir-exists? current-dir root-dir)
+        _ (tap> {:current-dir-exists? current-dir-exists? :root-dir root-dir :current-dir current-dir :files files})]
+
+    [:div {:id "file-picker"}
+     (file-breadcrumb target-params root-dir current-dir)
+     (file-table target-params root-dir current-dir files)]))
 
 (defn browse-media-folder [req]
-  (let [folders (browse/list-media-dir)]
-    [:div {:class (cs "fade-in-out" (css :px-4))}
-     [:div
-      [:p {:class (css :text-lg :font-bold)} "Fairybox Audio Folders"]]
-     (file-table "" "" folders)]))
+  [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
+   [:div
+    [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
+   (file-picker-main req
+                     {:endpoint        nil
+                      :values          nil
+                      :target          nil
+                      :cancel-endpoint nil
+                      :cancel-target   nil}
+                     browse/media-dir browse/media-dir)])
 
-(defcomponent ^:endpoint play-folder! [req folder-path]
+(defcomponent ^:endpoint traverse-dir [req root-dir current-dir target-dir ^:edn target-params]
+  (file-picker-main req target-params root-dir (browse/normalize-path target-dir)))
+
+(defcomponent ^:endpoint play-path! [req item-path]
   (let [emitter (:emitter (util/route-data req))]
     (async/put! emitter {:path "/player/commands"
-                         :value {:action :audio/play-folder
-                                 :folder-path folder-path
+                         :value {:action :audio/play-path
+                                 :item-path item-path
                                  :uid nil}})
-    (tap> [folder-path emitter])
+    (tap> [item-path emitter])
     (response/hx-redirect "player-controls?loading=true")))
 
 (defcomponent ^:endpoint browse-audio [req]
@@ -503,11 +562,12 @@
   (let [current-track (audio/current-track!)
         current-playback (audio/current-playback!)
         loading? (and (-> req :params :loading) (empty? current-track))]
-    [:div {:id "active-tab" :hx-get (str "player-controls" (when loading? "?loading=true")) :hx-trigger (when loading? "every 1s")}
+    [:div
+     (merge {:id "active-tab"} (when loading? {:hx-get (str "player-controls?loading=true") :hx-trigger "every 2s"}))
      [:div {:class "fade-in-out"}
       (if loading?
-        [:div {:class (css :text-smoky-700 :w-screen :h-screen :flex :items-center :justify-center)}
-         [:svg {:class (css :w-20 :h-20) :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 24 24"} [:style nil "@keyframes spinner_XVY9{50%{transform:rotate(180deg)}}"] [:circle {:cx "12", :cy "12", :r "3"}] [:g {:style "transform-origin:center;animation:spinner_XVY9 1s cubic-bezier(.36,.6,.31,1) infinite"} [:circle {:cx "4", :cy "12", :r "3"}] [:circle {:cx "20", :cy "12", :r "3"}]]]]
+        [:div {:class (css :text-smoky-700 :max-w-5xl :mt-20 :flex :items-center :justify-center)}
+         [:svg {:class (css :w-20 :h-20) :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 24 24"} [:style nil "@keyframes spinner_XVY9{50%{transform:rotate(180deg)}}"] [:circle {:cx "12", :cy "12", :r "3"}] [:g {:style "transform-origin:center;animation:spinner_XVY9 2s cubic-bezier(.36,.6,.31,1) infinite"} [:circle {:cx "4", :cy "12", :r "3"}] [:circle {:cx "20", :cy "12", :r "3"}]]]]
         (player current-track current-playback))]]))
 
 (defcomponent ^:endpoint player-controls [req]
@@ -517,8 +577,8 @@
       (page-htmx (home-page :controls body)))))
 
 (defcomponent ^:endpoint home [req]
-  rfid-link-folder! rfid-link play-queue player-controls play-queue-item settings browse-audio
-  play-folder!
+  rfid-link-folder! rfid-link play-queue player-controls settings browse-audio
+  play-path! traverse-dir
   (home-page :controls (player-controls-tab req)))
 
 (defn ui-routes [base-path]

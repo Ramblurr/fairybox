@@ -16,7 +16,7 @@
   {:path "/player/events" :value event})
 
 (defn new-id! []
-  (str (java.util.UUID/randomUUID)))
+  (System/nanoTime))
 
 (def ^:private audio-init-state {:play-requests {}
                                  :current-play-request nil
@@ -49,12 +49,14 @@
 (defn current-playback! []
   (-> @audio-state :current-playback))
 
-(defn- release-play-request! [state play-request-id]
-  (let [{:keys [medias media-list]} (get-in state [:play-requests play-request-id])]
-    (when medias
-      (interop/release-medias! medias))
-    (when media-list
-      (interop/release-media-list! media-list))))
+(defn- release-play-request! [{:keys [medias media-list]}]
+  (when medias
+    (interop/release-medias! medias))
+  (when media-list
+    (interop/release-media-list! media-list)))
+
+(defn- release-play-request-by-id! [state play-request-id]
+  (release-play-request! (get-in state [:play-requests play-request-id])))
 
 (defn media-info [^Media media]
   (let [file-info {:mrl (interop/media->mrl media)
@@ -64,27 +66,53 @@
         meta (or (interop/media->meta-map media) {})]
     (merge meta file-info)))
 
-(defn handle-pre-play-parse [{:keys [internal-ch player]} {:keys [media status meta-map play-request-id]}]
-  (let [state @audio-state]
-    (if (not= play-request-id (-> state :current-play-request))
-      (do
-        (release-play-request! state play-request-id)
-        (swap! audio-state m/dissoc-in [:play-requests play-request-id]))
-      (let [parsed-countdown (dec (get-in state [:play-requests play-request-id :parsed-countdown]))]
-        (swap! audio-state assoc-in [:play-requests play-request-id :parsed-countdown] parsed-countdown)
-        (swap! audio-state assoc-in [:play-requests play-request-id :media-info media] (media-info media))
-        (when (= 0 parsed-countdown)
-          (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id play-request-id}))))))
+(defn handle-pre-play-parse [{:keys [internal-ch]} {:keys [media play-request-id]}]
+  (let [state            @audio-state
+        parsed-countdown (dec (get-in state [:play-requests play-request-id :parsed-countdown]))]
+    (swap! audio-state assoc-in [:play-requests play-request-id :parsed-countdown] parsed-countdown)
+    (swap! audio-state assoc-in [:play-requests play-request-id :media-info media] (media-info media))
+    (when (= 0 parsed-countdown)
+      (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id play-request-id}))))
+
+(defn stop-and-release-current! [player {:keys [current-play-request] :as state}]
+  (when current-play-request
+    (interop/stop! player)
+    (release-play-request-by-id! state current-play-request)))
 
 (defn handle-pre-play-parse-finished [{:keys [player]} {:keys [play-request-id]}]
-  (let [state @audio-state]
-    (if (not= play-request-id (-> state :current-play-request))
+  (let [{:keys [current-play-request] :as state} @audio-state
+        current-play-request (or current-play-request -1)]
+    (if (< play-request-id current-play-request)
       (do
-        (release-play-request! state play-request-id)
+        ;; this play request that just finished parsing has been superceded
+        (release-play-request-by-id! state play-request-id)
         (swap! audio-state m/dissoc-in [:play-requests play-request-id]))
       (do
+        ;; this play request that just finished parsing should supercede the current one
+        (stop-and-release-current! player state)
+        (swap! audio-state m/dissoc-in [:play-requests current-play-request])
+        (swap! audio-state assoc :current-play-request play-request-id)
         (interop/set-media-list! player (get-in state [:play-requests play-request-id :media-list]))
         (interop/unpause! player)))))
+
+(defn handle-play-request [{:keys [internal-ch]} {:keys [folder-path track-paths play-request-id]}]
+  (let [medias (interop/make-medias! track-paths)
+        media-list (interop/make-media-list medias)]
+    (swap! audio-state
+           (fn [state]
+             (-> state
+                 #_(assoc :current-play-request play-request-id)
+                 (assoc-in [:play-requests play-request-id] {:id play-request-id  :folder-path folder-path :track-paths track-paths :medias medias :media-list media-list :parsed-countdown (count medias)}))))
+    ;; kick off async parse
+    (interop/parse-medias! (interop/parse-event-listener
+                            (fn [^Media media meta-map status]
+                              ;; this is the parse handler callback
+                              (async/put! internal-ch {:event :internal-player/pre-play-parse
+                                                       :media media
+                                                       :status status
+                                                       :play-request-id play-request-id
+                                                       :meta-map meta-map})))
+                           medias)))
 
 (defn handle-media-changed [{:keys [emitter]} {:keys [media-ref]}]
   (let [media (-> media-ref (.newMedia))]
@@ -107,6 +135,7 @@
     (condp = (:event event)
       :internal-player/pre-play-parse          (handle-pre-play-parse sys event)
       :internal-player/pre-play-parse-finished (handle-pre-play-parse-finished sys event)
+      :internal-player/play-request            (handle-play-request sys event)
       :internal-player/media-changed (handle-media-changed sys event)
       :internal-player/muted (do
                                (swap! audio-state assoc-in [:current-playback :muted?] (:muted? event))
@@ -165,37 +194,29 @@
 
 (defn play-folder!
   "Starts the process to play all media in the given folder-path.
-  Playback will not start right away, first the media has to be parsed."
+  Playback will not start right away, first the media has to be parsed asynchronously"
   [{:keys [internal-ch]} folder-path]
   (let [track-paths  (browse/list-media-file-paths folder-path)
         play-request-id (new-id!)]
     (if (seq track-paths)
-      (do
-        (let [medias (interop/make-medias! track-paths)
-              media-list (interop/make-media-list medias)]
-          (swap! audio-state
-                 (fn [state]
-                   (-> state
-                       (assoc :current-play-request play-request-id)
-                       (assoc-in [:play-requests play-request-id] {:id play-request-id  :folder-path folder-path :track-paths track-paths :medias medias :media-list media-list :parsed-countdown (count medias)}))))
-          (interop/parse-medias! (interop/parse-event-listener
-                                  (fn [^Media media meta-map status]
-                                    (async/put! internal-ch {:event :internal-player/pre-play-parse
-                                                             :media media
-                                                             :status status
-                                                             :play-request-id play-request-id
-                                                             :meta-map meta-map})))
-                                 medias)))
-
+      (async/put! internal-ch {:event :internal-player/play-request
+                               :folder-path folder-path
+                               :track-paths track-paths
+                               :play-request-id play-request-id})
       (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))
+
+(defn play-path! [sys item-path]
+  (condp = (browse/playable-type item-path)
+    :dir (play-folder! sys item-path)
+    nil))
 
 (defn command-handler [{:keys [player] :as sys} {:keys [path value] :as event}]
   (try
     (tap> {:command value})
-    (let [{:keys [action folder-path]} value
+    (let [{:keys [action item-path]} value
           {:keys [config]} @audio-state]
       (condp = action
-        :audio/play-folder (play-folder! sys folder-path)
+        :audio/play-path (play-path! sys item-path)
         :audio/stop (interop/stop! player)
         :audio/play-pause (interop/play-pause! player)
         :audio/next (interop/next! player)
@@ -218,11 +239,8 @@
   (try
     (interop/stop! player)
     (let [state @audio-state]
-      (doseq [{:keys [medias media-list]} (vals (get-in state [:play-requests]))]
-        (when medias
-          (interop/release-medias! medias))
-        (when media-list
-          (interop/release-media-list! media-list))))
+      (doseq [req (vals (get-in state [:play-requests]))]
+        (release-play-request! req)))
     (catch Exception e
       (log/error e "release-all-resources error"))
     (finally
