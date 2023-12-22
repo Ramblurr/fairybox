@@ -54,6 +54,9 @@
 (defn emit-player! [emitter event]
   (async/put! emitter {:path "/player/commands" :value event}))
 
+(defn emit-led! [emitter event]
+  (async/put! emitter {:path "/hardware/output/leds" :value event}))
+
 (defn system-handler [{:keys [emitter]} {:keys [value] :as ev}]
   ;; (tap> {:system ev})
   (let [{:keys [event]} value]
@@ -63,7 +66,10 @@
                             (emit-system! emitter {:event :system/warming-up}))
       :system/warming-up (do
                            (swap! state assoc :system-state :system-state/warming-up)
-                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path (io/resource "sfx/sergequadrado__magic-harp-logo.wav")}))
+                           (emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
+                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path
+                                                  ;; (io/resource "sfx/sergequadrado__magic-harp-logo.wav")
+                                                  (io/resource "sfx/startupsound.mp3")}))
       :system/warmed-up (do
                           (swap! state assoc :system-state :system-state/ready)
                           (emit-system! emitter {:event :system/ready}))

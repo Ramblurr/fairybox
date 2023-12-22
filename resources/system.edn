@@ -22,11 +22,12 @@
                                         {:gpio 6  :action :audio/volume-down}]}
 
  :fairy.box.hardware/leds {:bus #ig/ref :fairy.box.bus/bus
-                           :leds [{:gpio 14 :led-type :led :name :audio/prev}
-                                  {:gpio 7  :led-type :led :name :audio/next}
-                                  {:gpio 12 :led-type :led :name :audio/play-pause}
-                                  {:gpio 13 :led-type :led :name :audio/volume-up}
-                                  {:gpio 15 :led-type :led :name :audio/volume-down}]}
+                           :leds [{:gpio 14 :led-type :pwm :name :audio/prev}
+                                  {:gpio 7  :led-type :pwm :name :audio/next}
+                                  {:gpio 12 :led-type :pwm :name :audio/play-pause}
+                                  {:gpio 13 :led-type :pwm :name :audio/volume-up}
+                                  {:gpio 15 :led-type :pwm :name :audio/volume-down}]
+                           :groups {}}
 
  :fairy.box.mqtt/client {:uri "tcp://10.9.4.3:1883"
                          :opts {}}

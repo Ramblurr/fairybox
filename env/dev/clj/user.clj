@@ -66,7 +66,7 @@
   (async/put! emitter {:path "/system" :value {:event :system/cooling-down}})
   (async/put! emitter {:path "/hardware/output/leds" :value
                        {:action :led/set
-                        :names [:audio/prev :audio/next]
+                        :groups [:all]
                         :value  0.0}})
   (-> player  (.mediaPlayer) (.controls) (.stop))
   (def media1 (-> player  (.mediaPlayer) (.media) (.newMedia)))
