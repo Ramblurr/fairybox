@@ -19,7 +19,9 @@
    [fairy.box.bus]
    [fairy.box.switchboard]
    [fairy.box.audio.system]
-   [fairy.box.hardware])
+   [fairy.box.hardware]
+   [fairy.box.settings]
+   [fairy.box.mqtt])
   (:gen-class))
 
 ;; log uncaught exceptions in threads

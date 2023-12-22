@@ -1,4 +1,5 @@
-{:fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
+{:fairy.box/settings {:fairybox-id "test"}
+ :fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
  :fairy.box.bus/bus {}
  :fairy.box.switchboard/switchboard {:bus #ig/ref :fairy.box.bus/bus
                                      :db-conn #ig/ref :fairy.box.db/db}
@@ -23,6 +24,17 @@
                                   {:gpio 12 :led-type :led :name :audio/play-pause}
                                   {:gpio 13 :led-type :led :name :audio/volume-up}
                                   {:gpio 15 :led-type :led :name :audio/volume-down}]}
+
+ :fairy.box.mqtt/client {:uri "tcp://10.9.4.3:1883"
+                         :opts {}}
+
+ :fairy.box.mqtt/subscriber {:client #ig/ref :fairy.box.mqtt/client
+                             :bus #ig/ref :fairy.box.bus/bus
+                             :qos 2
+                             :settings #ig/ref :fairy.box/settings}
+ :fairy.box.mqtt/publisher {:client #ig/ref :fairy.box.mqtt/client
+                            :bus #ig/ref :fairy.box.bus/bus
+                            :settings #ig/ref :fairy.box/settings}
 
  :system/env
  #profile {:dev :dev

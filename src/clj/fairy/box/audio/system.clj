@@ -155,6 +155,9 @@
                                             (async/put! emitter (player-event {:event :player/position-changed :position (:new-position event)})))
       :internal-player/time-changed (do (swap! audio-state assoc-in [:current-playback :current-time] (:new-time event))
                                         (async/put! emitter (player-event {:event :player/time-changed :time (:new-time event)})))
+      :internal-player/repeat-changed (do
+                                        (swap! audio-state assoc-in [:current-playback :repeat-mode] (:mode event))
+                                        (async/put! emitter (player-event {:event :player/repeat-changed :time (:mode event)})))
       nil)
     (catch Exception e
       (log/error e "internal event error"))))
@@ -210,7 +213,7 @@
     :dir (play-folder! sys item-path)
     nil))
 
-(defn command-handler [{:keys [player] :as sys} {:keys [path value] :as event}]
+(defn command-handler [{:keys [player internal-ch] :as sys} {:keys [path value] :as event}]
   (try
     (tap> {:command value})
     (let [{:keys [action item-path]} value
@@ -229,8 +232,17 @@
         :audio/set-volume (interop/set-volume! player
                                                ;; interop wants [0, 100] integer
                                                (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
+        :audio/set-pause (interop/set-pause! player (:paused? value))
+        :audio/play (interop/set-pause! player false)
+        :audio/pause (interop/set-pause! player true)
+        :audio/set-mute (interop/set-mute! player (:muted? value))
         :audio/toggle-mute (interop/mute! player)
         :audio/play-queue-index (interop/play-index! player (:item-index value))
+        :audio/set-repeat (when (:mode value)
+                            ;; hack alert: vlcj does not expose any events or state around the repeat mode
+                            ;; so we have to track it ourselves
+                            (interop/set-repeat-mode! player (:mode value))
+                            (async/put! internal-ch {:event :internal-player/repeat-changed :mode (:mode value)}))
         nil))
     (catch Exception e
       (log/error e "audio command error"))))

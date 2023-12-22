@@ -99,6 +99,9 @@
 (defn mute! [^AudioListPlayerComponent player]
   (-> player  (.mediaPlayer) (.audio) (.mute)))
 
+(defn set-mute! [^AudioListPlayerComponent player muted?]
+ (-> player  (.mediaPlayer) (.audio) (.setMute muted?)))
+
 (defn muted? [^AudioListPlayerComponent player]
   (-> player  (.mediaPlayer) (.audio) (.isMute)))
 
@@ -152,7 +155,7 @@
 (defn set-repeat-mode!
   "Set whether or not the media player should automatically repeat playing the media when it has finished playing.
 
-   repeat - true to automatically replay the media, otherwise false"
+   mode - :default, :loop, :repeat"
   [^AudioListPlayerComponent player mode]
   (assert (#{:default :loop :repeat} mode))
   (let [playback-mode (case mode
