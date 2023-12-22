@@ -1,8 +1,14 @@
 (ns fairy.box.audio.interop
   "Attempt to confine the VLCJ interop to this namespace."
   (:require
+   [clojure.java.io :as io]
    [clojure.string :as str])
   (:import
+   [uk.co.caprica.vlcj.media.callback.seekable SeekableCallbackMedia]
+   [java.nio.channels FileChannel]
+   [java.nio.file Files Path Paths]
+   [java.nio.file StandardOpenOption]
+   [java.io IOException]
    [uk.co.caprica.vlcj.player.base MediaPlayer]
    [uk.co.caprica.vlcj.player.component  AudioListPlayerComponent]
    [uk.co.caprica.vlcj.factory MediaPlayerFactory]
@@ -17,7 +23,7 @@
   (proxy [AudioListPlayerComponent] []
     (mediaStateChanged [media newState] (player-event-handler! {:event :internal-player/media-state-changed :media media :new-state (munge-enum-name newState)}))
     (timeChanged [_mediaPlayer newTime] (player-event-handler! {:event :internal-player/time-changed :new-time newTime}))
-    (finished [mediaPlayer] (player-event-handler! {:event :internal-player/finished}))
+    (finished [mediaPlayer] (player-event-handler! {:event :internal-player/finished :listener this}))
     (error [mediaPlayer] (player-event-handler! {:event :internal-player/error}))
     (backward [_mediaPlayer] (player-event-handler! {:event :internal-player/backward}))
     (forward [_mediaPlayer] (player-event-handler! {:event :internal-player/forward}))
@@ -100,7 +106,7 @@
   (-> player  (.mediaPlayer) (.audio) (.mute)))
 
 (defn set-mute! [^AudioListPlayerComponent player muted?]
- (-> player  (.mediaPlayer) (.audio) (.setMute muted?)))
+  (-> player  (.mediaPlayer) (.audio) (.setMute muted?)))
 
 (defn muted? [^AudioListPlayerComponent player]
   (-> player  (.mediaPlayer) (.audio) (.isMute)))
@@ -263,3 +269,45 @@
             (set-media-list! player media-list))
           (unpause! player))
         (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))
+
+(defn ->MappedByteBufferCallbackMedia [^java.nio.MappedByteBuffer buf close-fn]
+  (proxy [SeekableCallbackMedia] []
+    (onGetSize [] (.capacity buf))
+    (onOpen []
+      (if (nil? buf)
+        false
+        true))
+    (onRead [buffer bufferSize]
+      (let [remaining (.remaining buf)
+            read (min bufferSize remaining)]
+        (.get buf buffer 0 read)
+        read))
+
+    (onSeek [offset]
+      (let [pos   (.position buf (cast Long (.intValue offset)))
+            pos (.position pos)]
+        (== pos offset)))
+    (onClose []
+      (close-fn))))
+
+(defn ->FileMappedByteBufferCallbackMedia [url]
+  (let [path (.toPath (io/file (.getFile url)))
+        channel (Files/newByteChannel path (into-array StandardOpenOption [StandardOpenOption/READ]))
+        ^java.nio.MappedByteBuffer buf (.map channel java.nio.channels.FileChannel$MapMode/READ_ONLY 0 (.size channel))]
+    (->MappedByteBufferCallbackMedia buf (fn []
+                                           (try
+                                             (.close channel)
+                                             (catch IOException e))))))
+
+(defn play-from-classpath!
+  "Plays a media file from the classpath immediately.
+  resource-url - a URL to a resource on the classpath (use io/resource to get this)
+
+  Returns a reference to the CallbackMedia object. This relies on the use of native callbacks that are implemented in Java
+  code - steps must be taken to prevent instances of implementation classes from being garbage collected otherwise the
+  native code will crash when the Java object disappears.
+  "
+  [^AudioListPlayerComponent player resource-url]
+  (let [callback-media (->FileMappedByteBufferCallbackMedia resource-url)]
+    (-> player (.mediaPlayer) (.media) (.start callback-media nil))
+    callback-media))

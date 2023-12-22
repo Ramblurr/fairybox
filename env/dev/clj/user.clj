@@ -54,12 +54,16 @@
   (ig/halt! state/system [:handler/ring  :server/http :reitit.routes/api :router/routes :router/core :system/env])
   (ig/init state/system [:handler/ring  :server/http :reitit.routes/api :router/routes :router/core :system/env]))
 
+(portal-remote)
+
 (comment
 
   (require '[clojure.core.async :as async])
   (async/go (async/>! (:publisher (:fairy.box.bus/bus state/system)) {:topic :buttons :value {:foo :bar}}))
 
   (def player (:player (:fairy.box.audio.system/player state/system)))
+  (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
+  (async/put! emitter {:path "/system" :value {:event :system/cooling-down}})
   (-> player  (.mediaPlayer) (.controls) (.stop))
   (def media1 (-> player  (.mediaPlayer) (.media) (.newMedia)))
   (-> player  (.mediaPlayer) (.audio) (.setVolume 40))

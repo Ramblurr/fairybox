@@ -680,3 +680,11 @@
               {:license "https://creativecommons.org/licenses/by/3.0/"
                :link "https://thenounproject.com/icon/radio-frequency-identification-4500829/"
                :author "Iconbunny"}])
+
+{:link "https://freesound.org/people/SergeQuadrado/sounds/476714/"
+ :author "SergeQuadrado"
+ :license "https://creativecommons.org/licenses/by-nc/3.0/"}
+
+{:link "https://freesound.org/people/SergeQuadrado/sounds/476709/"
+ :author "SergeQuadrado"
+ :license "https://creativecommons.org/licenses/by-nc/3.0/"}

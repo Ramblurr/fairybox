@@ -158,6 +158,9 @@
       :internal-player/repeat-changed (do
                                         (swap! audio-state assoc-in [:current-playback :repeat-mode] (:mode event))
                                         (async/put! emitter (player-event {:event :player/repeat-changed :time (:mode event)})))
+      :internal-player/one-shot-finished (when-let [player (:player event)]
+                                           (.release player))
+
       nil)
     (catch Exception e
       (log/error e "internal event error"))))
@@ -213,12 +216,22 @@
     :dir (play-folder! sys item-path)
     nil))
 
+(defn play-one-shot! [{:keys [internal-ch emitter]} {:keys [item-path id]}]
+  (letfn [(handler [{:keys [event listener]}]
+            (when (= event :internal-player/finished)
+              (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
+              ;; we can't release the player here because it will crash
+              (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})))]
+    (let [player (interop/init-player! handler)]
+      (interop/play-from-classpath! player item-path))))
+
 (defn command-handler [{:keys [player internal-ch] :as sys} {:keys [path value] :as event}]
   (try
     (tap> {:command value})
     (let [{:keys [action item-path]} value
           {:keys [config]} @audio-state]
       (condp = action
+        :audio/play-one-shot (play-one-shot! sys value)
         :audio/play-path (play-path! sys item-path)
         :audio/stop (interop/stop! player)
         :audio/play-pause (interop/play-pause! player)

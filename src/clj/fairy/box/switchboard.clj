@@ -1,5 +1,6 @@
 (ns fairy.box.switchboard
   (:require
+   [clojure.java.io :as io]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [medley.core :as m]
@@ -8,17 +9,24 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
-  (if (= (:action value) :placed)
-    (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
-      ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+(def ^:private init-state {:system-state :system-state/booting})
+(defonce ^:private state (atom init-state))
 
+(defn system-state! []
+  (:system-state @state))
+
+(defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
+  (when (= :system-state/ready (system-state!))
+    (if (= (:action value) :placed)
+      (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
+        ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+
+        (async/put! emitter {:path "/player/commands"
+                             :value {:action :audio/play-path
+                                     :item-path (browse/absoluteify rel-folder-path)
+                                     :uid (:uid value)}}))
       (async/put! emitter {:path "/player/commands"
-                           :value {:action :audio/play-path
-                                   :item-path (browse/absoluteify rel-folder-path)
-                                   :uid (:uid value)}}))
-    (async/put! emitter {:path "/player/commands"
-                         :value {:action :audio/stop}})))
+                           :value {:action :audio/stop}}))))
 
 (def button-press-event {:audio/play-pause {:path "/player/commands"
                                             :value {:action :audio/play-pause}}
@@ -32,19 +40,65 @@
                                              :value {:action :audio/volume-down}}})
 
 (defn button-handler [{:keys [emitter]} {:keys [value] :as ev}]
-  (tap> {:button ev})
-  (let [{:keys [button-id action]} value]
-    (condp = action
-      :button/single-press (when-let [ev (button-press-event button-id)]
-                             (async/put! emitter ev))
+  (when (= :system-state/ready (system-state!))
+    (tap> {:button ev})
+    (let [{:keys [button-id action]} value]
+      (condp = action
+        :button/single-press (when-let [ev (button-press-event button-id)]
+                               (async/put! emitter ev))
+        nil))))
+
+(defn emit-system! [emitter event]
+  (async/put! emitter {:path "/system" :value event}))
+
+(defn emit-player! [emitter event]
+  (async/put! emitter {:path "/player/commands" :value event}))
+
+(defn system-handler [{:keys [emitter]} {:keys [value] :as ev}]
+  ;; (tap> {:system ev})
+  (let [{:keys [event]} value]
+    (condp = event
+      :system/initialized (do
+                            (swap! state assoc :system-state :system-state/initialized)
+                            (emit-system! emitter {:event :system/warming-up}))
+      :system/warming-up (do
+                           (swap! state assoc :system-state :system-state/warming-up)
+                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path (io/resource "sfx/sergequadrado__magic-harp-logo.wav")}))
+      :system/warmed-up (do
+                          (swap! state assoc :system-state :system-state/ready)
+                          (emit-system! emitter {:event :system/ready}))
+      :system/cooling-down (do
+                             (swap! state assoc :system-state :system-state/cooling-down)
+                             (emit-player! emitter {:action :audio/stop})
+                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound :item-path (io/resource "sfx/sergequadrado__celtic-positive-intro.wav")}))
+      :system/cooled-down (do
+                            (swap! state assoc :system-state :system-state/cooled-down)
+                            (emit-system! emitter {:event :system/shutdown}))
+      :system/shutdown (do
+                         (swap! state assoc :system-state :system-state/shutdown)
+                          ;; todo perform shutdown
+                         )
       nil)))
+
+(defn player-handler [{:keys [emitter]} {:keys [value] :as ev}]
+  (when (#{:system-state/warming-up :system-state/cooling-down} (system-state!))
+    (when (= :player/one-shot-finished (:event value))
+      (condp = (:id value)
+        :startup-sound (emit-system! emitter {:event :system/warmed-up})
+        :shutdown-sound (emit-system! emitter {:event :system/cooled-down})))))
 
 (def ^:private patch-ports {:rfid  {:handler rfid-handler
                                     :name :rfid
                                     :path "/hardware/input/rfid"}
                             :buttons {:handler button-handler
                                       :name :buttons
-                                      :path "/hardware/input/buttons"}})
+                                      :path "/hardware/input/buttons"}
+                            :system {:handler system-handler
+                                     :name :system
+                                     :path "/system"}
+                            :player {:handler player-handler
+                                     :name :player
+                                     :path "/player/events"}})
 
 (defn init-switchboard! [{:keys [bus] :as opts}]
   (let [channels  (m/map-keys (fn [_] (async/chan)) patch-ports)
@@ -74,6 +128,7 @@
 
 (defmethod ig/init-key ::switchboard [_ opts]
   (log/info "\n-=[starting switchboard]=-")
+  (reset! state init-state)
   (init-switchboard! opts))
 
 (defmethod ig/halt-key! ::switchboard [_ opts]

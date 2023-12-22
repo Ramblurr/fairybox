@@ -1,4 +1,7 @@
-{:fairy.box/settings {:fairybox-id "test"}
+{:fairy.box/settings {:fairybox-id "test"
+                      :sfx {:shutdown "classpath:/sfx/sergequadrado__celtic-positive-intro.wav"
+                            :startup "classpath:/sfx/sergequadrado__magic-harp-logo.wav"}}
+
  :fairy.box.db/db {:path #or [#env DB_PATH "db.edn"]}
  :fairy.box.bus/bus {}
  :fairy.box.switchboard/switchboard {:bus #ig/ref :fairy.box.bus/bus
@@ -35,6 +38,14 @@
  :fairy.box.mqtt/publisher {:client #ig/ref :fairy.box.mqtt/client
                             :bus #ig/ref :fairy.box.bus/bus
                             :settings #ig/ref :fairy.box/settings}
+
+ :fairy.box/startup {:leds     #ig/ref :fairy.box.hardware/leds
+                     :bus #ig/ref :fairy.box.bus/bus
+                     :rfid     #ig/ref :fairy.box.hardware/rfid
+                     :player   #ig/ref :fairy.box.audio.system/player
+                     :settings #ig/ref :fairy.box/settings
+                     :switchboard #ig/ref :fairy.box.switchboard/switchboard
+                     :http     #ig/ref :server/http}
 
  :system/env
  #profile {:dev :dev
