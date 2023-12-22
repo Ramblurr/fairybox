@@ -64,6 +64,10 @@
   (def player (:player (:fairy.box.audio.system/player state/system)))
   (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
   (async/put! emitter {:path "/system" :value {:event :system/cooling-down}})
+  (async/put! emitter {:path "/hardware/output/leds" :value
+                       {:action :led/set
+                        :names [:audio/prev :audio/next]
+                        :value  0.0}})
   (-> player  (.mediaPlayer) (.controls) (.stop))
   (def media1 (-> player  (.mediaPlayer) (.media) (.newMedia)))
   (-> player  (.mediaPlayer) (.audio) (.setVolume 40))
