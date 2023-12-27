@@ -41,21 +41,31 @@
 
   ;;
   )
+
+(def mqtt-init-state {:connected? false
+                      :client nil
+                      :subscriber-state nil
+                      :publisher-state nil })
+(defonce ^:private mqtt-state mqtt-init-state)
+
+(defn- mqtt-connected?! [] (:connected? @mqtt-state))
+
 (defn command-handler! [emit! {:keys [action] :as payload}]
-  (condp = action
-    "audio/play-pause" (emit! {:action :audio/play-pause})
-    "audio/play" (emit! {:action :audio/play})
-    "audio/pause" (emit! {:action :audio/pause})
-    "audio/stop" (emit! {:action :audio/stop})
-    "audio/next" (emit! {:action :audio/next})
-    "audio/prev" (emit! {:action :audio/prev})
-    "audio/set-volume" (emit! {:action :audio/set-volume :volume (:volume payload)})
-    "audio/set-mute" (emit! {:action :audio/set-mute :muted? (:muted payload)})
-    "audio/set-time" (emit! {:action :audio/set-time :milliseconds (:milliseconds payload)})
-    "audio/set-repeat" (emit! {:action :audio/set-repeat :mode (get {"off" :default "all" :repeat "one" :loop} (:mode payload))})
-    (do
-      (tap> {:mqtt-unhandled-cmd payload})
-      nil)))
+  (when (mqtt-connected?!)
+    (condp = action
+      "audio/play-pause" (emit! {:action :audio/play-pause})
+      "audio/play" (emit! {:action :audio/play})
+      "audio/pause" (emit! {:action :audio/pause})
+      "audio/stop" (emit! {:action :audio/stop})
+      "audio/next" (emit! {:action :audio/next})
+      "audio/prev" (emit! {:action :audio/prev})
+      "audio/set-volume" (emit! {:action :audio/set-volume :volume (:volume payload)})
+      "audio/set-mute" (emit! {:action :audio/set-mute :muted? (:muted payload)})
+      "audio/set-time" (emit! {:action :audio/set-time :milliseconds (:milliseconds payload)})
+      "audio/set-repeat" (emit! {:action :audio/set-repeat :mode (get {"off" :default "all" :repeat "one" :loop} (:mode payload))})
+      (do
+        (tap> {:mqtt-unhandled-cmd payload})
+        nil))))
 
 (def public-events #{:player/muted
                      :player/volume-changed
@@ -64,8 +74,9 @@
                      :player/time-changed})
 
 (defn events-handler! [{:keys [client topic]} {event :value}]
-  (when (public-events (:event event))
-    (mh/publish client topic (->json event))  event))
+  (when (mqtt-connected?!)
+    (when (public-events (:event event))
+      (mh/publish client topic (->json event))  event)))
 
 (defn start-publish-loop! [opts listener]
   (async/go-loop []
@@ -80,16 +91,9 @@
     (start-publish-loop! (assoc opts :topic topic) listener)
     {:listener listener}))
 
-(defn halt-publisher! [{:keys [listener]}]
-  (async/close! listener))
-
-(defmethod ig/init-key ::publisher [_ opts]
-  (log/info "\n-=[starting mqtt publisher]=-")
-  (init-publisher! opts))
-
-(defmethod ig/halt-key! ::publisher [_ opts]
-  (log/info "\n-=[goodbye mqtt publisher]=-")
-  (halt-publisher! opts))
+(defn halt-publisher! [{:keys [listener] :as opts}]
+  (when opts
+    (async/close! listener)))
 
 (defn emit! [emitter event]
   (async/put! emitter {:path "/player/commands" :value event}))
@@ -106,27 +110,59 @@
      :client client
      :topic topic}))
 
-(defn halt-subscriber! [{:keys [emitter topic client]}]
-  (async/close! emitter)
-  (mh/unsubscribe client topic))
+(defn halt-subscriber! [{:keys [emitter topic client] :as opts}]
+  (when opts
+    (try
+      (async/close! emitter)
+      (mh/unsubscribe client topic)
+      (catch Exception e
+        (log/error e "halting mqtt subscriber error")))))
 
-(defmethod ig/init-key ::subscriber [_ opts]
-  (log/info "\n-=[starting mqtt subscriber]=-")
-  (init-subscriber! opts))
-
-(defmethod ig/halt-key! ::subscriber [_ opts]
-  (log/info "\n-=[goodbye mqtt subscriber]=-")
-  (halt-subscriber! opts))
-
-(defn init-client! [{:keys [uri opts]}]
-  (mh/connect uri opts))
-
-(defn halt-client! [conn]
+(defn- close-client! [client]
   (try
-    (when conn
-      (mh/disconnect conn))
-    (catch Exception e
-      (log/error e "halting mqtt connection error"))))
+    (when client
+      (mh/disconnect-and-close client))
+    (catch Exception _)))
+
+(defn init-client! [{:keys [uri mqtt-opts] :as opts}]
+  (let [exit-ch (async/chan)]
+    (swap! mqtt-state assoc :connected? false)
+    (async/go-loop []
+      (when (not (:connected? @mqtt-state))
+        (log/info "connecting to mqtt broker")
+        (try
+          (mh/connect uri {:opts mqtt-opts
+                           :on-connect-complete (fn [client _ _]
+                                                  (log/info "mqtt connection complete")
+                                                  (let [opts (assoc opts :client client)]
+                                                    (swap! mqtt-state (fn [state]
+                                                                        (-> state
+                                                                            (assoc :client client)
+                                                                            (assoc :connected? true)
+                                                                            (assoc :subscriber-state (init-subscriber! opts))
+                                                                            (assoc :publisher-state (init-publisher! opts)))))))
+
+                           :on-connection-lost (fn [reason]
+                                                 (log/warn reason "mqtt connection lost")
+                                                 (swap! mqtt-state (fn [state]
+                                                                     (-> state
+                                                                         (assoc :connected? false)
+                                                                         (assoc :subscriber-state (halt-subscriber! (:subscriber-state state)))
+                                                                         (assoc :publisher-state (halt-publisher! (:publisher-state state)))))))})
+          (catch Exception e
+            (log/error e "mqtt connection error")))
+        (when (= :timeout (async/alt!
+                       (async/timeout 10000) :timeout
+                       exit-ch :exit))
+          (recur))))
+    {:exit-ch exit-ch}))
+
+(defn halt-client! [{:keys [exit-ch]}]
+  (async/put! exit-ch :exit)
+  (halt-subscriber! (:subscriber-state @mqtt-state))
+  (halt-publisher! (:publisher-state @mqtt-state))
+  (close-client! (:client @mqtt-state))
+  (reset! mqtt-state mqtt-init-state))
 
 (defmethod ig/init-key ::client [_ opts]
   (log/info "\n-=[starting mqtt client]=-")
