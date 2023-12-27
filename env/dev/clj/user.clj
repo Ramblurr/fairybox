@@ -1,5 +1,6 @@
 (ns user
   "Userspace functions you can run by default in your local REPL."
+  (:import [uk.pigpioj PigpioJ])
   (:require
    [portal.api :as inspect]
    [clojure.pprint]
@@ -58,11 +59,12 @@
 
 (comment
 
-  (require '[clojure.core.async :as async])
   (async/go (async/>! (:publisher (:fairy.box.bus/bus state/system)) {:topic :buttons :value {:foo :bar}}))
+  (do
+    (require '[clojure.core.async :as async])
 
-  (def player (:player (:fairy.box.audio.system/player state/system)))
-  (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
+    (def player (:player (:fairy.box.audio.system/player state/system)))
+    (def emitter (:emitter (:fairy.box.audio.system/player state/system)))) ;; rcf
   (async/put! emitter {:path "/system" :value {:event :system/cooling-down}})
   (async/put! emitter {:path "/hardware/output/leds" :value
                        {:action :led/set
@@ -71,6 +73,9 @@
   (-> player  (.mediaPlayer) (.controls) (.stop))
   (def media1 (-> player  (.mediaPlayer) (.media) (.newMedia)))
   (-> player  (.mediaPlayer) (.audio) (.setVolume 40))
+
+  #_(PigpioJ/autoDetectedImplementation)
+
 
   (portal-remote)
   (refresh)
