@@ -51,9 +51,9 @@
           (.on handle)
           (.off handle))))))
 
-(defn apply-tween! [led-handles {:keys [value leds]}]
+(defn apply-tween! [led-handles {:keys [value data]}]
   (when value
-    (doseq [led-name leds]
+    (doseq [led-name data]
       (led-value! (get led-handles led-name) value))))
 
 (comment
@@ -65,25 +65,43 @@
     (def groups (:groups sys))
     (def cancel-ch (async/chan))
     (def finished-ch (async/chan)))
+  ;; rcf
+
+  (.pulse (get-in leds [:audio/prev :handle]) 1 25 1 false)
+  (let [value 1.0
+        fps 25
+        duration 2
+        delta (/ 1 (* fps duration))]
+    (.setValue (get-in leds [:audio/prev :handle]) value)
+    (prn "starting")
+    (doseq [i (range 1 (* fps duration))]
+      (let [value (- value (* i delta))]
+        (prn value)
+        (Thread/sleep (* delta 1000))
+        (.setValue (get-in leds [:audio/prev :handle]) value))))
 
   (do
     (when cancel-ch (async/close! cancel-ch))
-    (when finished-ch (async/close! finished-ch))
-    (reset! cancel-animation true)
-    (reset! cancel-animation false))
-  (anim/animate! (partial apply-tween! leds) [(anim/tween [:audio/prev] :from 0.0 :to 1.0 :duration 1000)
-                                              #_(tween 1.0 0.0 [:audio/prev] 1000 0)
-                                              (anim/tween [:audio/prev] :from 1.0 :to 0.0 :duration 1000 :delay 1000)])
+    (when finished-ch (async/close! finished-ch)))
+  (anim/animate! (partial apply-tween! leds)
+                 [#_(anim/tween [:audio/prev] :from 0.0 :to 1.0 :duration 2000)
+                  (anim/tween [:audio/prev] :from 1.0 :to 0.0 :duration 1000 :delay 200 :repeat-times 3)
+                  #_(anim/tween [:audio/prev] :from 1.0 :to 0.0 :duration 1000 :delay 1000)]
+                 )
 
-  (anim/animate! (partial apply-tween! leds) cancel-ch finished-ch
-                 [(anim/tween [:audio/play-pause] :from 0.0 :to 1.0 :duration 200 :delay 0)
-                  (anim/tween [:audio/play-pause] :from 1.0 :to 0.0 :duration 800 :delay 200)
+  (let [ease-fn anim/ease-in-sine]
+    (anim/animate! (partial apply-tween! leds) [(anim/tween [:audio/play-pause] :from 0.0 :to 1.0 :duration 200 :delay 0 :easing-fn ease-fn)
+                                                (anim/tween [:audio/play-pause] :from 1.0 :to 0.0 :duration 800 :delay 200 :easing-fn ease-fn)
 
-                  (anim/tween [:audio/prev :audio/next] :from 0.0 :to 1.0 :duration 200 :delay 200)
-                  (anim/tween [:audio/prev :audio/next] :from 1.0 :to 0.0 :duration 800 :delay 400)
+                                                (anim/tween [:audio/prev :audio/next] :from 0.0 :to 1.0 :duration 200 :delay 200 :easing-fn ease-fn)
+                                                (anim/tween [:audio/prev :audio/next] :from 1.0 :to 0.0 :duration 800 :delay 400 :easing-fn ease-fn)
 
-                  (anim/tween [:audio/volume-down :audio/volume-up] :from 0.0 :to 1.0 :duration 200 :delay 400)
-                  (anim/tween [:audio/volume-down :audio/volume-up] :from 1.0 :to 0.0 :duration 800 :delay 600)])
+                                                (anim/tween [:audio/volume-down :audio/volume-up] :from 0.0 :to 1.0 :duration 200 :delay 400 :easing-fn ease-fn)
+                                                (anim/tween [:audio/volume-down :audio/volume-up] :from 1.0 :to 0.0 :duration 800 :delay 600 :easing-fn ease-fn)]
+                   :cancel-ch cancel-ch :finished-ch finished-ch :repeat-times 3
+                   ))
+  (async/put! cancel-ch :CANCEL)
+  (async/put! cancel-ch :finish-current)
 
 ;;
   )

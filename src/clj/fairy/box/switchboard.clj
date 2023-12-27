@@ -41,7 +41,7 @@
 
 (defn button-handler [{:keys [emitter]} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
-    (tap> {:button ev})
+    ;; (tap> {:button ev})
     (let [{:keys [button-id action]} value]
       (condp = action
         :button/single-press (when-let [ev (button-press-event button-id)]
