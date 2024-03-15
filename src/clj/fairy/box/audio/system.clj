@@ -238,7 +238,7 @@
         :audio/next (interop/next! player)
         :audio/prev (interop/previous! player)
         :audio/volume-up (interop/adjust-volume! player (get-in config [:volume-up-step]))
-        :audio/volume-down (interop/adjust-volume! player ((get-in config [:volume-down-step])))
+        :audio/volume-down (interop/adjust-volume! player (get-in config [:volume-down-step]))
         :audio/skip-time (interop/skip-time! player (get-in value [:milliseconds]))
         :audio/set-time (interop/set-time! player (get-in value [:milliseconds]))
         :audio/adjust-volume (interop/adjust-volume! player (get-in value [:delta]))
