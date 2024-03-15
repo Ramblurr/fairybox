@@ -2,29 +2,43 @@
 @import "vars.css";
 @import "range.css";
 html {
-    font-family: "Noto Sans", monospace, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-family:
+    "Noto Sans",
+    monospace,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif,
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji";
 }
 body {
-    background: var(--white-rock-100);
-    height: 100%;
+  background: var(--white-rock-100);
+  color: var(--gray-900);
+  height: 100%;
 }
 
 @media (prefers-color-scheme: dark) {
-    body {
-        background: var(--smoky-950);
-        color: white;
-    }
+  body {
+    background: var(--smoky-950);
+    color: white;
+  }
 }
 
-#root, .app {
-    height: 100%;
-    width: 100%;
-    position: relative;
+#root,
+.app {
+  height: 100%;
+  width: 100%;
+  position: relative;
 }
 
 button:focus {
-    outline:none;
-    box-shadow: none;
+  outline: none;
+  box-shadow: none;
 }
 
 input,
@@ -32,14 +46,14 @@ textarea,
 button,
 select,
 a {
-    -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button {
-    -webkit-touch-callout: none; /* iOS Safari */
-    -webkit-user-select: none; /* Safari */
-    -moz-user-select: none; /* Old versions of Firefox */
-    user-select: none; /* Non-prefixed version, currently
+  -webkit-touch-callout: none; /* iOS Safari */
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Old versions of Firefox */
+  user-select: none; /* Non-prefixed version, currently
                                       supported by Chrome, Edge, Opera and Firefox */
 }
 
@@ -64,7 +78,7 @@ button {
 
 @media (prefers-color-scheme: dark) {
   .tab-active {
-   background: var(--smoky-900);
-   color: var(--smoky-400);
+    background: var(--smoky-900);
+    color: var(--smoky-400);
   }
 }

@@ -116,8 +116,8 @@
    [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]
    [:dl {:class ""}
     [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
-     [:dt {:class (css :text-sm :font-medium :leading-6)} "RFID UID"]
-     [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0])} (or rfid-uid "RFID Tag Not Present")]]
+     [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600 [:dark :text-gray-400])} "RFID UID"]
+     [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "RFID Tag Not Present")]]
     (when (and rfid-uid linked-folder)
       [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
        [:dt {:class (css :text-sm :font-medium :leading-6)} "Linked Folder"]
@@ -138,7 +138,7 @@
 (defn rfid-link-form [uid linked-folder]
   [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link" :class (css :px-10)}
    [:div {:class (css   :pb-12)}
-    [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
+    [:h2 {:class (css :text-base :font-semibold :leading-7 )} "RFID Tag Link"]
     [:div
      [:div {:class (css :mt-8 :space-y-10)}
       [:fieldset
