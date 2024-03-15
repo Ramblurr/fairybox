@@ -72,12 +72,13 @@
       exit-chan ([_]
                  nil)
       button-event-chan ([{:keys [event button-id at orig-at]}]
-                         ;; (prn "got" event button-id at)
+                         ;; (tap> [event button-id at])
                          (let [states @button-states
                                [after external-event] (case event
                                                         :press (press-handler button-event-chan states button-id at)
                                                         :release (release-handler states button-id at)
                                                         :check-hold (long-press-handler states button-id at orig-at))]
+                           ;; (tap> [:BUT external-event after])
                            (assert (some? after) (format  "NIL STATE  e=%s " event))
                            (reset! button-states after)
                            (when external-event
@@ -85,12 +86,11 @@
                            (recur))))))
 
 (defn raw-press-handler [raw-button-event-chan button-id nanotime]
-  ;; (prn "raw press")
-  ;;
+  ;; (tap> [button-id :RAW-DOWN])
   (async/put! raw-button-event-chan {:event :press :button-id button-id :at nanotime}))
 
 (defn raw-release-handler [raw-button-event-chan button-id nanotime]
-  ;; (prn "raw release")
+  ;; (tap> [button-id :RAW-UP])
   (async/put! raw-button-event-chan {:event :release :button-id button-id :at nanotime}))
 
 (defn raw-button-listener!
@@ -115,8 +115,8 @@
                                :down GpioPullUpDown/PULL_DOWN))]
     (swap! button-states assoc action {:state :released :at 0})
     (Diozero/registerForShutdown (into-array Button [button]))
-    {:button button :gpio gpio :action action
-     :listener (raw-button-listener! button-event-chan button action)}))
+    (raw-button-listener! button-event-chan button action)
+    {:button button :gpio gpio :action action }))
 
 (defn init-buttons! [{:keys [buttons bus]}]
   (let [exit-chan (async/chan)
