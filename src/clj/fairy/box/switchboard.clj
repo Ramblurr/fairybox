@@ -93,16 +93,16 @@
         :startup-sound (emit-system! emitter {:event :system/warmed-up})
         :shutdown-sound (emit-system! emitter {:event :system/cooled-down})))))
 
-(def ^:private patch-ports {:rfid  {:handler rfid-handler
+(def ^:private patch-ports {:rfid  {:handler #'rfid-handler
                                     :name :rfid
                                     :path "/hardware/input/rfid"}
-                            :buttons {:handler button-handler
+                            :buttons {:handler #'button-handler
                                       :name :buttons
                                       :path "/hardware/input/buttons"}
-                            :system {:handler system-handler
+                            :system {:handler #'system-handler
                                      :name :system
                                      :path "/system"}
-                            :player {:handler player-handler
+                            :player {:handler #'player-handler
                                      :name :player
                                      :path "/player/events"}})
 
