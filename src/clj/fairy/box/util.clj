@@ -10,7 +10,7 @@
             [new-val ch] (async/alts! [timer in] :priority true)]
         (condp = ch
           timer (do
-                  (tap> {:sending val})
+                  ;; (tap> {:sending val})
                   (when-not
                    (async/>! out val)
                     (async/close! in))
@@ -35,3 +35,8 @@
               (async/<! timer)
               (recur))))))
     out))
+
+(defn exception?
+  "returns true if x is an exception"
+  [x]
+  (instance? Throwable x))

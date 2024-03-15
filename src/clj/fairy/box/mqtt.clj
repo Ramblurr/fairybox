@@ -1,5 +1,6 @@
 (ns fairy.box.mqtt
   (:require
+   [fairy.box.util :as util]
    [clojure.core.async :as async]
    [jp.nijohando.event :as ev]
 
@@ -45,8 +46,8 @@
 (def mqtt-init-state {:connected? false
                       :client nil
                       :subscriber-state nil
-                      :publisher-state nil })
-(defonce ^:private mqtt-state mqtt-init-state)
+                      :publisher-state nil})
+(defonce ^:private mqtt-state (atom mqtt-init-state))
 
 (defn- mqtt-connected?! [] (:connected? @mqtt-state))
 
@@ -124,37 +125,48 @@
       (mh/disconnect-and-close client))
     (catch Exception _)))
 
-(defn init-client! [{:keys [uri mqtt-opts] :as opts}]
+(declare try-connect!)
+(defn mqtt-connect! [{:keys [uri mqtt-opts] :as opts}]
+  (mh/connect uri {:opts mqtt-opts
+                   :on-connect-complete (fn [client _ _]
+                                          (log/info "mqtt connection complete")
+                                          (let [opts (assoc opts :client client)]
+                                            (swap! mqtt-state (fn [state]
+                                                                (-> state
+                                                                    (assoc :client client)
+                                                                    (assoc :connected? true)
+                                                                    (assoc :subscriber-state (init-subscriber! opts))
+                                                                    (assoc :publisher-state (init-publisher! opts)))))))
+
+                   :on-connection-lost (fn [reason]
+                                         (log/warn reason "mqtt connection lost")
+                                         (swap! mqtt-state (fn [state]
+                                                             (-> state
+                                                                 (assoc :connected? false)
+                                                                 (assoc :subscriber-state (halt-subscriber! (:subscriber-state state)))
+                                                                 (assoc :publisher-state (halt-publisher! (:publisher-state state))))))
+                                         (try-connect! opts))}))
+
+(defn try-connect!
+  "Attempts repeated retried to re-establish connection."
+  [{:keys [exit-ch] :as opts}]
+  (log/info "Attempting to establish mqtt connection")
+  (async/go-loop [retries 1]
+    (let [retry-timeout (min (* retries 1000) 60000) ;; timeout maxes at 60s
+          conn (try (mqtt-connect! opts)
+                    (catch Exception e e))]
+      (when (util/exception? conn)
+        (log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
+                  "Reported exception: " (ex-message conn))
+        (when (= :timeout (async/alt!
+                            (async/timeout retry-timeout) :timeout
+                            exit-ch :exit))
+          (recur (inc retries)))))))
+
+(defn init-client! [opts]
   (let [exit-ch (async/chan)]
     (swap! mqtt-state assoc :connected? false)
-    (async/go-loop []
-      (when (not (:connected? @mqtt-state))
-        (log/info "connecting to mqtt broker")
-        (try
-          (mh/connect uri {:opts mqtt-opts
-                           :on-connect-complete (fn [client _ _]
-                                                  (log/info "mqtt connection complete")
-                                                  (let [opts (assoc opts :client client)]
-                                                    (swap! mqtt-state (fn [state]
-                                                                        (-> state
-                                                                            (assoc :client client)
-                                                                            (assoc :connected? true)
-                                                                            (assoc :subscriber-state (init-subscriber! opts))
-                                                                            (assoc :publisher-state (init-publisher! opts)))))))
-
-                           :on-connection-lost (fn [reason]
-                                                 (log/warn reason "mqtt connection lost")
-                                                 (swap! mqtt-state (fn [state]
-                                                                     (-> state
-                                                                         (assoc :connected? false)
-                                                                         (assoc :subscriber-state (halt-subscriber! (:subscriber-state state)))
-                                                                         (assoc :publisher-state (halt-publisher! (:publisher-state state)))))))})
-          (catch Exception e
-            (log/error e "mqtt connection error")))
-        (when (= :timeout (async/alt!
-                       (async/timeout 10000) :timeout
-                       exit-ch :exit))
-          (recur))))
+    (try-connect! (assoc opts :exit-ch exit-ch))
     {:exit-ch exit-ch}))
 
 (defn halt-client! [{:keys [exit-ch]}]
