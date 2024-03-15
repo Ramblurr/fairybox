@@ -75,7 +75,7 @@
   (reset! poller-active? true)
   (reset! rfid-state {:at 0 :status :absent :uid nil :poll-delay absent-poll-delay})
   (future
-    (prn "rfid :: poller started")
+    (log/debug "rfid :: poller started")
     (let [{:keys [device get-card-uid-fn]} (->rfid opts)]
       (assert device)
       (assert get-card-uid-fn)
@@ -93,9 +93,13 @@
                     (recur))
                   (do
                     nil)))))
+          (catch java.util.concurrent.CancellationException _e
+            (log/debug "rfid :: poller cancelled"))
+          (catch Exception e
+            (log/error e "rfid poller error"))
           (finally
             (async/close! emitter)
-            (prn "rfid :: poller stopping")))))))
+            (log/debug "rfid :: poller stopping")))))))
 
 (defn init-rfid! [{:keys [rfid-type bus] :as opts}]
   (when-not (SUPPORTED-RFID-TYPES rfid-type)
