@@ -1,10 +1,9 @@
 {:min-bb-version "0.8.156"
 
  :deps  {failjure/failjure       {:mvn/version "2.3.0"}
-         com.thheller/shadow-css {
-                                  ;; :mvn/version "0.4.4"
-                                  :git/url "https://github.com/thheller/shadow-css.git"
-                                  :git/sha "b3c97fe3caf16fab1a90fb93a7baad76fe15aa46"
+         com.thheller/shadow-css {;; :git/url "https://github.com/thheller/shadow-css.git"
+                                  ;; :git/sha "b3c97fe3caf16fab1a90fb93a7baad76fe15aa46"
+                                  :mvn/version "0.4.5"
                                   }}
  :pods  {org.babashka/fswatcher {:version "0.0.5"}}
  :paths ["resources" "scripts"]
