@@ -1,37 +1,87 @@
-# box
 
-Start a [REPL](#repls) in your editor or terminal of choice.
+<div align="center">
 
-Start the server with:
+<img src="https://raw.githubusercontent.com/Ramblurr/fairybox/main/resources/public/img/jukebox-300.png?token=GHSAT0AAAAAACGBSOKLUWXZADODJHH2W37GZPZQARQ" align="center" width="300px" height="300px"/>
 
-```clojure
-(go)
+# Fairybox
+
+_Igniting children's imagination with tactile, screen-less storytelling and music._
+
+</div>
+
+<div align="center">
+
+![License AGPL v3+](https://img.shields.io/github/license/ramblurr/fairybox)
+
+</div>
+
+---
+
+_Fairybox_ is an open-source audio player designed specifically for the Raspberry Pi
+platform, that aims to place the audio and imagination at center stage.
+
+
+Unlike modern devices, _Fairybox_ operates without a screen and is powered by RFID
+cards or tokens, making it an ideal, interactive audio experience for kids.
+
+## Background
+
+In today's digital age, screen time is a significant concern for parents
+worldwide. Excessive use of phones and tablets has been linked to various
+negative impacts on children's development and well-being.
+
+Fairybox offers a delightful alternative, promoting auditory learning and
+imaginative play through a tangible, interactive medium.
+
+By eliminating screens and simplifying controls, Fairybox encourages more
+natural, explorative interaction with technology, nurturing creativity and
+listening skills in young minds.
+
+In my own childhood, the simple joy of playing and listening to stories and
+music on cassette tapes was a formative experience. The tangible interaction of
+inserting a tape, pressing play, and flipping sides to continue the adventure
+engaged both the mind and the senses.
+
+With Fairybox, I've tried to recapture this tactile and auditory experience for
+my children. Just as I once eagerly anticipated the physical flip of a cassette
+to unveil the story's next chapter, my children can experience a similar thrill
+by swapping cards to discover new tales and tunes.
+
+## Technical Info
+
+- **Platform**: Raspberry Pi 4
+- **Features**:
+  - Screen-free interaction
+  - Battery-powered for portability
+  - Simple GPIO button controls for power, playback, and volume
+  - Uses MFRC 522 RFID reader for contactless card or token detection
+  - Operable totally offline, with an optional web interface for parental control
+- **Technology Stack**:
+  - Programmed in Clojure for a robust, all-in-one backend
+  - Deployable via Nix, ensuring a consistent, self-contained environment
+- **Web Interface**: Available for managing playback and settings, enhancing parental control over the content and device usage.
+
+## Photo Gallery
+
+_Photos coming soon._
+
+## Build Instructions
+
+Pre-reqs:
+
+* Java JDK 17+
+* Babashka
+* Clojure
+
+```bash
+bb uberjar
 ```
 
-The default API is available under http://localhost:3000/api
 
-System configuration is available under `resources/system.edn`.
+# License
 
-To reload changes:
+Copyright (C) 2024 Casey Link
 
-```clojure
-(reset)
-```
+Fairybox is licensed under the [GNU Affero General Public License v3.0 or later
+(AGPLv3+)](LICENSE.md).
 
-## REPLs
-
-### Cursive
-
-Configure a [REPL following the Cursive documentation](https://cursive-ide.com/userguide/repl.html). Using the default "Run with IntelliJ project classpath" option will let you select an alias from the ["Clojure deps" aliases selection](https://cursive-ide.com/userguide/deps.html#refreshing-deps-dependencies).
-
-### CIDER
-
-Use the `cider` alias for CIDER nREPL support (run `clj -M:dev:cider`). See the [CIDER docs](https://docs.cider.mx/cider/basics/up_and_running.html) for more help.
-
-Note that this alias runs nREPL during development. To run nREPL in production (typically when the system starts), use the kit-nrepl library through the +nrepl profile as described in [the documentation](https://kit-clj.github.io/docs/profiles.html#profiles).
-
-### Command Line
-
-Run `clj -M:dev:nrepl` or `make repl`.
-
-Note that, just like with [CIDER](#cider), this alias runs nREPL during development. To run nREPL in production (typically when the system starts), use the kit-nrepl library through the +nrepl profile as described in [the documentation](https://kit-clj.github.io/docs/profiles.html#profiles).
