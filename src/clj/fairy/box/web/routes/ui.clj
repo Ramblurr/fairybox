@@ -9,20 +9,23 @@
    [integrant.core :as ig]
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]
-   [clojure.tools.logging :as log]))
+   [clojure.tools.logging :as log]
+   [fairy.box.web.middleware.core :as middleware]))
 
 (defn route-data [opts]
   (merge
    opts
    {:muuntaja   formats/instance
     :middleware
-    [;; Default middleware for ui
-    ;; query-params & form-params
+    [ ;; Default middleware for ui
+     ;; query-params & form-params
      parameters/parameters-middleware
-      ;; encoding response body
+     ;; encoding response body
      muuntaja/format-response-middleware
-      ;; exception handling
-     exception/wrap-exception]}))
+     ;; exception handling
+     exception/wrap-exception
+     ;; inject settings
+     middleware/wrap-settings]}))
 
 (derive :reitit.routes/ui :reitit/routes)
 
@@ -32,7 +35,9 @@
       :as   opts}]
   [base-path (route-data opts) (home/ui-routes base-path)])
 
-(defn ws-events-handler! [{:keys [db-conn position-ch time-ch]} {:keys [path value]}]
+(defn ws-events-handler! [{:keys [settings db-conn position-ch time-ch]} {:keys [path value]}]
+  (assert settings "settings not defined")
+  (assert db-conn "db-conn not defined")
   (try
     (condp = path
       "/player/events" (do (when-not (contains? #{:player/time-changed :player/position-changed}  (:event value))
@@ -44,7 +49,7 @@
 
       "/hardware/input/rfid"
       (let [{:keys [uid action at]} value]
-        (home/broadcast-rfid-change! @db-conn uid action)))
+        (home/broadcast-rfid-change! settings @db-conn uid action)))
     (catch Exception e
       (log/error e "ws-events-handler error"))))
 

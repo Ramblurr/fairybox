@@ -6,6 +6,7 @@
    [integrant.core :as ig]
    [fairy.box.config :as config]
    [fairy.box.env :refer [defaults]]
+   [signal.handler :as signal]
 
    ;; Edges
    [kit.edge.utils.nrepl]
@@ -34,7 +35,7 @@
 
 (defonce system (atom nil))
 
-(defn stop-app []
+(defn stop-app! []
   ((or (:stop defaults) (fn [])))
   (some-> (deref system) (ig/halt!))
   (shutdown-agents))
@@ -46,7 +47,12 @@
        (ig/init)
        (reset! system))
   (Diozero/initialiseShutdownHook)
-  (.addShutdownHook (Runtime/getRuntime) (Thread. stop-app)))
+  (.addShutdownHook (Runtime/getRuntime) (Thread. stop-app!)))
 
 (defn -main [& _]
   (start-app))
+
+(signal/with-handler :term
+  (log/info "caught SIGTERM, quitting")
+  (stop-app!)
+  (log/info "all components shut down"))

@@ -1,14 +1,19 @@
 {:fairy.box/settings {:fairybox-id "test"
-                      :sfx         {:shutdown "classpath:/sfx/sergequadrado__celtic-positive-intro.wav"
-                                    :startup  "classpath:/sfx/sergequadrado__magic-harp-logo.wav"}}
+                      :media       {:media-dir #or [#env MEDIA_DIR "/home/admin/media"]}
+                      :shutdown    {:type :pimoroni-onoff-shim}
+                      :sfx         {:shutdown "sfx/sergequadrado__celtic-positive-intro.wav"
+                                    :startup  "sfx/sergequadrado__magic-harp-logo.wav"}}
 
  :fairy.box.db/db                   {:path #or [#env DB_PATH "db.edn"]}
  :fairy.box.bus/bus                 {}
  :fairy.box.switchboard/switchboard {:bus     #ig/ref :fairy.box.bus/bus
+                                     :settings  #ig/ref :fairy.box/settings
                                      :db-conn #ig/ref :fairy.box.db/db}
- :fairy.box.audio.system/player     {:bus #ig/ref :fairy.box.bus/bus}
- :fairy.box.web.routes.ui/ws-events {:bus     #ig/ref :fairy.box.bus/bus
-                                     :db-conn #ig/ref :fairy.box.db/db}
+ :fairy.box.audio.system/player     {:bus #ig/ref :fairy.box.bus/bus
+                                     :settings  #ig/ref :fairy.box/settings}
+ :fairy.box.web.routes.ui/ws-events {:bus      #ig/ref :fairy.box.bus/bus
+                                     :settings #ig/ref :fairy.box/settings
+                                     :db-conn  #ig/ref :fairy.box.db/db}
  :reitit.routes/bus-emitter         {:bus     #ig/ref :fairy.box.bus/bus
                                      :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.hardware/rfid           {:bus       #ig/ref :fairy.box.bus/bus
@@ -19,22 +24,25 @@
                                                {:gpio 23 :action :audio/next}
                                                {:gpio 27 :action :audio/play-pause}
                                                {:gpio 5 :action :audio/volume-up}
-                                               {:gpio 6 :action :audio/volume-down}]}
+                                               {:gpio 6 :action :audio/volume-down}
+                                               {:gpio 17 :action :system/shutdown}]}
 
  :fairy.box.hardware/leds {:bus    #ig/ref :fairy.box.bus/bus
                            :leds   [{:gpio 14 :led-type :pwm :name :audio/prev}
                                     {:gpio 7 :led-type :pwm :name :audio/next}
                                     {:gpio 12 :led-type :pwm :name :audio/play-pause}
                                     {:gpio 13 :led-type :pwm :name :audio/volume-up}
-                                    {:gpio 15 :led-type :pwm :name :audio/volume-down}]
+                                    {:gpio 15 :led-type :pwm :name :audio/volume-down}
+                                    ;; {:gpio 17 :led-type :led :name :system/power}
+                                    ]
                            :groups {}}
 
- :fairy.box.mqtt/client {:uri  "tcp://10.9.4.3:1883"
-                         :mqtt-opts {:auto-reconnect true
+ :fairy.box.mqtt/client {:uri       "tcp://10.9.4.3:1883"
+                         :mqtt-opts {:auto-reconnect     true
                                      :connection-timeout 5}
-                         :bus      #ig/ref :fairy.box.bus/bus
-                         :settings #ig/ref :fairy.box/settings
-                         :qos      2}
+                         :bus       #ig/ref :fairy.box.bus/bus
+                         :settings  #ig/ref :fairy.box/settings
+                         :qos       2}
 
  :fairy.box/startup {:leds        #ig/ref :fairy.box.hardware/leds
                      :bus         #ig/ref :fairy.box.bus/bus
@@ -96,5 +104,6 @@
  {:routes #ig/ref :router/routes}
  :reitit.routes/ui {:base-path "",
                     :db-conn   #ig/ref :fairy.box.db/db
+                    :settings  #ig/ref :fairy.box/settings
                     :emitter   #ig/ref :reitit.routes/bus-emitter
                     :env       #ig/ref :system/env}}

@@ -1,43 +1,45 @@
-{:paths ["src/clj" "resources"]
- :deps  {org.clojure/clojure                 {:mvn/version "1.11.1"}
-         org.clojure/core.async              {:mvn/version "1.6.681"}
-         ;; RPI
-         com.diozero/diozero-core            { :mvn/version "1.4.0"
-                                              ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
-                                              }
-         com.diozero/diozero-provider-pigpio {:mvn/version "1.4.0"}
-         ;; uk.pigpioj/pigpioj-java             {:mvn/version "2.6.1"}
-         ;; Media
-         uk.co.caprica/vlcj                  {:mvn/version "4.8.2"}
-         ;; Homeassistant integration via MQTT
-         clojurewerkz/machine_head           {:mvn/version "1.0.0"}
-         ;; Database
-         duratom/duratom                     {:mvn/version "0.5.9"}
-         ;; Util
-         medley/medley                       {:mvn/version "1.4.0"}
-         ;; Routing
-         metosin/reitit                      {:mvn/version "0.6.0"}
-         ;; Ring
-         metosin/ring-http-response          {:mvn/version "0.9.3"}
-         ring/ring-core                      {:mvn/version "1.10.0"}
-         ring/ring-defaults                  {:mvn/version "0.4.0"}
-         ;; Logging
-         ch.qos.logback/logback-classic      {:mvn/version "1.4.14"}
-         ;; Data coercion
-         luminus-transit/luminus-transit     {:mvn/version "0.1.6"}
-         metosin/muuntaja                    {:mvn/version "0.6.8"}
-         ;; HTML and CSS
-         com.thheller/shadow-css             {:mvn/version "0.4.5"}
-         simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
-                                              :git/sha "2edfe71d9deaef58d1547dae060215c2bea7a208"}
-         ;; Events
-         jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
-                                              :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
-
-         ;; kit Libs
-         io.github.kit-clj/kit-core     {:mvn/version "1.0.5"}
-         io.github.kit-clj/kit-undertow {:mvn/version "1.0.6"}
-         io.github.kit-clj/kit-nrepl    {:mvn/version "1.0.3"}}
+{:paths   ["src/clj" "resources"]
+ :deps    {org.clojure/clojure                 {:mvn/version "1.11.1"}
+           org.clojure/core.async              {:mvn/version "1.6.681"}
+           ;; RPI
+           com.diozero/diozero-core            { :mvn/version "1.4.0"
+                                                ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
+                                                }
+           com.diozero/diozero-provider-pigpio {:mvn/version "1.4.0"}
+           ;; uk.pigpioj/pigpioj-java             {:mvn/version "2.6.1"}
+           ;; Media
+           uk.co.caprica/vlcj                  {:mvn/version "4.8.2"}
+           ;; Homeassistant integration via MQTT
+           clojurewerkz/machine_head           {:mvn/version "1.0.0"}
+           ;; Database
+           duratom/duratom                     {:mvn/version "0.5.9"}
+           ;; Util
+           medley/medley                       {:mvn/version "1.4.0"}
+           ;; Routing
+           metosin/reitit                      {:mvn/version "0.6.0"}
+           ;; Ring
+           metosin/ring-http-response          {:mvn/version "0.9.3"}
+           ring/ring-core                      {:mvn/version "1.10.0"}
+           ring/ring-defaults                  {:mvn/version "0.4.0"}
+           ;; Logging
+           ch.qos.logback/logback-classic      {:mvn/version "1.4.14"}
+           ;; Data coercion
+           luminus-transit/luminus-transit     {:mvn/version "0.1.6"}
+           metosin/muuntaja                    {:mvn/version "0.6.8"}
+           cheshire/cheshire                   {:mvn/version "5.12.0"}
+           ;; HTML and CSS
+           com.thheller/shadow-css             {:mvn/version "0.4.5"}
+           simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
+                                                :git/sha "2edfe71d9deaef58d1547dae060215c2bea7a208"}
+           ;; Events
+           jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
+                                                :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
+           ;; posix signal handling
+           spootnik/signal                     {:mvn/version "0.2.5"}
+           ;; kit Libs
+           io.github.kit-clj/kit-core          {:mvn/version "1.0.5"}
+           io.github.kit-clj/kit-undertow      {:mvn/version "1.0.6"}
+           io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.3"}}
  :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.9.6"}}
                         :ns-default build}
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.4.44"}

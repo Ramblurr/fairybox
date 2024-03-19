@@ -7,7 +7,7 @@
    [reitit.swagger-ui :as swagger-ui]))
 
 (defmethod ig/init-key :handler/ring
-  [_ {:keys [router api-path] :as opts}]
+  [_ {:keys [router api-path settings] :as opts}]
   (ring/ring-handler
    router
    (ring/routes

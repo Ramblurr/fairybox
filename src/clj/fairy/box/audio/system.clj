@@ -212,7 +212,7 @@
       (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path})))))
 
 (defn play-path! [sys item-path]
-  (condp = (browse/playable-type item-path)
+  (condp = (browse/playable-type (:settings sys) item-path)
     :dir (play-folder! sys item-path)
     nil))
 
@@ -223,7 +223,7 @@
               ;; we can't release the player here because it will crash
               (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})))]
     (let [player (interop/init-player! handler)]
-      (interop/play-from-classpath! player item-path))))
+      (interop/play-mrl! player item-path))))
 
 (defn command-handler [{:keys [player internal-ch] :as sys} {:keys [path value] :as event}]
   (try
@@ -287,7 +287,7 @@
                    (command-handler sys ev)
                    (recur)))))
 
-(defn- init-audio! [{:keys [bus]}]
+(defn- init-audio! [{:keys [bus settings]}]
   (let [emitter (async/chan)
         commands-ch (async/chan)
         internal-ch (async/chan)
@@ -295,6 +295,7 @@
         player (interop/init-player! (fn [ev]
                                        (async/put! internal-ch ev)))
         sys {:emitter emitter
+             :settings settings
              :commands-ch commands-ch
              :internal-ch internal-ch
              :exit-ch exit-ch

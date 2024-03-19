@@ -13,5 +13,8 @@
 (defn req-db [req]
   @(-> (route-data req) :db-conn))
 
+(defn req-settings [req]
+  (-> (route-data req) :settings))
+
 (defn req-db-conn [req]
   (-> (route-data req) :db-conn))

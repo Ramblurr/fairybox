@@ -15,7 +15,7 @@
 (defn system-state! []
   (:system-state @state))
 
-(defn rfid-handler [{:keys [db-conn emitter]} {:keys [value] :as ev}]
+(defn rfid-handler [{:keys [db-conn emitter settings]} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (if (= (:action value) :placed)
       (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
@@ -23,7 +23,7 @@
 
         (async/put! emitter {:path "/player/commands"
                              :value {:action :audio/play-path
-                                     :item-path (browse/absoluteify rel-folder-path)
+                                     :item-path (browse/absoluteify settings rel-folder-path)
                                      :uid (:uid value)}}))
       (async/put! emitter {:path "/player/commands"
                            :value {:action :audio/stop}}))))
@@ -57,7 +57,11 @@
 (defn emit-led! [emitter event]
   (async/put! emitter {:path "/hardware/output/leds" :value event}))
 
-(defn system-handler [{:keys [emitter]} {:keys [value] :as ev}]
+(defn sfx-path [settings key]
+  (let [path (-> settings :sfx key)]
+    (str (browse/media-dir settings) "/" path)))
+
+(defn system-handler [{:keys [emitter settings]} {:keys [value] :as ev}]
   ;; (tap> {:system ev})
   (let [{:keys [event]} value]
     (condp = event
@@ -68,21 +72,21 @@
                            (swap! state assoc :system-state :system-state/warming-up)
                            (emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
                            (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path
-                                                  ;; (io/resource "sfx/sergequadrado__magic-harp-logo.wav")
-                                                  (io/resource "sfx/startupsound.mp3")}))
+                                                  (sfx-path settings :startup)}))
       :system/warmed-up (do
                           (swap! state assoc :system-state :system-state/ready)
                           (emit-system! emitter {:event :system/ready}))
       :system/cooling-down (do
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
-                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound :item-path (io/resource "sfx/sergequadrado__celtic-positive-intro.wav")}))
+                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound :item-path
+                                                    (sfx-path settings :shutdown)}))
       :system/cooled-down (do
                             (swap! state assoc :system-state :system-state/cooled-down)
                             (emit-system! emitter {:event :system/shutdown}))
       :system/shutdown (do
                          (swap! state assoc :system-state :system-state/shutdown)
-                          ;; todo perform shutdown
+                         ;; todo perform shutdown
                          )
       nil)))
 

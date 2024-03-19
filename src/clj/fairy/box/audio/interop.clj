@@ -9,6 +9,7 @@
    [java.nio.file Files Path Paths]
    [java.nio.file StandardOpenOption]
    [java.io IOException]
+   [java.net URL]
    [uk.co.caprica.vlcj.player.base MediaPlayer]
    [uk.co.caprica.vlcj.player.component  AudioListPlayerComponent]
    [uk.co.caprica.vlcj.factory MediaPlayerFactory]
@@ -258,7 +259,7 @@
         (.release list-ref)))))
 
 #_(defn play-folder! [^AudioListPlayerComponent player folder-path]
-    (let [paths (->> (str browse/media-dir "/" folder-path)
+    (let [paths (->> (str (browse/media-dir settings)  "/" folder-path)
                      (browse/list-media-files)
                      (map :abs-path))]
       (if (seq paths)
@@ -290,8 +291,18 @@
     (onClose []
       (close-fn))))
 
+
+(defn fix-jar-path [path]
+  (if (re-find #"^jar:file:" path)
+    (clojure.string/replace path #"^jar:file:" "zip:/")
+    path))
+
+(defn fix-jar-url [^java.net.URL url]
+  (fix-jar-path (.toString url)))
+
 (defn ->FileMappedByteBufferCallbackMedia [url]
   (let [path (.toPath (io/file (.getFile url)))
+        _ (prn "to path for thing" path)
         channel (Files/newByteChannel path (into-array StandardOpenOption [StandardOpenOption/READ]))
         ^java.nio.MappedByteBuffer buf (.map channel java.nio.channels.FileChannel$MapMode/READ_ONLY 0 (.size channel))]
     (->MappedByteBufferCallbackMedia buf (fn []
@@ -299,15 +310,7 @@
                                              (.close channel)
                                              (catch IOException e))))))
 
-(defn play-from-classpath!
-  "Plays a media file from the classpath immediately.
-  resource-url - a URL to a resource on the classpath (use io/resource to get this)
-
-  Returns a reference to the CallbackMedia object. This relies on the use of native callbacks that are implemented in Java
-  code - steps must be taken to prevent instances of implementation classes from being garbage collected otherwise the
-  native code will crash when the Java object disappears.
-  "
-  [^AudioListPlayerComponent player resource-url]
-  (let [callback-media (->FileMappedByteBufferCallbackMedia resource-url)]
-    (-> player (.mediaPlayer) (.media) (.start callback-media nil))
-    callback-media))
+(defn play-mrl!
+  "Plays an MRL directly"
+  [^AudioListPlayerComponent player mrl]
+  (-> player (.mediaPlayer) (.media) (.start mrl nil)))

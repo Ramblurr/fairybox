@@ -11,3 +11,11 @@
       (cond-> ((:middleware env/defaults) handler opts)
         true (defaults/wrap-defaults
               (assoc-in site-defaults-config [:session :store] cookie-store))))))
+
+(def wrap-settings
+  {:name ::env
+   :description "Middleware for injecting settings into request"
+   :compile (fn [{:keys [settings] :as _route-data} _route-opts]
+              (fn [handler]
+                (fn [request]
+                  (handler (assoc request :settings settings)))))})

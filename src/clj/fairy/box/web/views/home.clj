@@ -48,12 +48,12 @@
 (declare volume-icon)
 (declare play-queue-list)
 
-(defn broadcast-rfid-change! [db uid action]
+(defn broadcast-rfid-change! [settings db uid action]
   (reset! rfid-cache {:uid uid :action action})
   (broadcast! (partial-htmx
                (if (= action :placed)
-                 (rfid-link-form uid (db/linked-folder db uid))
-                 (rfid-link-form nil nil)))))
+                 (rfid-link-form settings uid (db/linked-folder db uid))
+                 (rfid-link-form settings nil nil)))))
 
 (defn broadcast-player-event! [event]
   ;; (tap> {:event event})
@@ -131,11 +131,11 @@
             :value name}]
    [:label {:for (str idx name), :class (css :block :text-sm :font-medium :leading-6 :text-gray-900 [:dark :text-gray-300])} name]])
 
-(defn audio-folder-select [selected-path]
+(defn audio-folder-select [settings selected-path]
   [:div {:id "audio-folder-select" :class (css :mt-6 :space-y-2)}
-   (map-indexed (partial folder-list selected-path)  (browse/list-media-dir))])
+   (map-indexed (partial folder-list selected-path)  (browse/list-media-dir settings))])
 
-(defn rfid-link-form [uid linked-folder]
+(defn rfid-link-form [settings uid linked-folder]
   [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link" :class (css :px-10)}
    [:div {:class (css   :pb-12)}
     [:h2 {:class (css :text-base :font-semibold :leading-7 )} "RFID Tag Link"]
@@ -150,7 +150,7 @@
       [:fieldset
        [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
        [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
-       (audio-folder-select linked-folder)]]
+       (audio-folder-select settings linked-folder)]]
 
      [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
       [:button {:type "button" :class (css :text-sm :font-semibold :leading-6 :text-gray-900
@@ -278,6 +278,7 @@
 
 (defn volume-icon
   ([volume muted?]
+   (assert volume "volume-icon volume value is null!")
    (let [icon (cond
                 (or (== 0 volume) (and (boolean? muted?) muted?)) :muted
                 (< volume 0.5) :quiet
@@ -309,7 +310,7 @@
                            [:lg :py-0 :w-1of3])}
          [:img {:class (css :object-cover :w-64 :h-64)
                 :style "transform: translateZ(0)"
-                :src "/img/fairy.png"}]]
+                :src "/img/jukebox.png"}]]
        ;; 2nd col
         [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
         ;; meta wrapper
@@ -492,7 +493,7 @@
 
 (defn- file-picker-main
   [req target-params root-dir current-dir]
-  (let [current-dir-exists? (browse/valid-dir? current-dir)
+  (let [current-dir-exists? (browse/valid-dir? (util/req-settings req) current-dir)
         files (if current-dir-exists?
                 (browse/list-contents current-dir)
                 (browse/list-contents root-dir))
@@ -504,16 +505,17 @@
      (file-table target-params root-dir current-dir files)]))
 
 (defn browse-media-folder [req]
-  [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
-   [:div
-    [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
-   (file-picker-main req
-                     {:endpoint        nil
-                      :values          nil
-                      :target          nil
-                      :cancel-endpoint nil
-                      :cancel-target   nil}
-                     browse/media-dir browse/media-dir)])
+  (let [media-base-path (browse/media-dir (util/req-settings req))]
+    [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
+     [:div
+      [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
+     (file-picker-main req
+                       {:endpoint        nil
+                        :values          nil
+                        :target          nil
+                        :cancel-endpoint nil
+                        :cancel-target   nil}
+                       media-base-path media-base-path)]))
 
 (defcomponent ^:endpoint traverse-dir [req root-dir current-dir target-dir ^:edn target-params]
   (file-picker-main req target-params root-dir (browse/normalize-path target-dir)))
@@ -537,9 +539,10 @@
 (defcomponent ^:endpoint rfid-link [req]
   (let [{:keys [uid action]} @rfid-cache
         linked-folder (db/linked-folder (util/req-db req) uid)
+        settings (util/req-settings req)
         body [:div {:id "active-tab"} (if (= action :placed)
-                                        (rfid-link-form uid linked-folder)
-                                        (rfid-link-form nil nil))]]
+                                        (rfid-link-form settings uid linked-folder)
+                                        (rfid-link-form settings nil nil))]]
     (if (htmx? req)
       body
       (page-htmx (home-page :settings body)))))

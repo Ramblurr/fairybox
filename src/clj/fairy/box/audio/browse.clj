@@ -4,7 +4,10 @@
    [clojure.string :as str]
    [clojure.java.io :as io]))
 
-(def media-dir "/home/admin/audio")
+(defn media-dir [settings]
+  (assert settings "settings not defined")
+  (assert (-> settings :media :media-dir) "media-dir not defined")
+ (-> settings :media :media-dir))
 
 (defn validate-base-path
   "Helper to prevent path traversal attacks. If full-path is not contained inside base-path, will return false, otherwise true"
@@ -22,9 +25,9 @@
 
 (defn playable-type
   "Returns :dir if the path is a playable directory, returns :file if it is a playable file. Returns nil otherwise"
-  [abs-path]
+  [settings abs-path]
   (let [file (io/file abs-path)]
-    (when (and (validate-base-path media-dir abs-path) (.exists file))
+    (when (and (validate-base-path (media-dir settings) abs-path) (.exists file))
       (let [{:keys [dir? file?]} (dir-item nil file)]
         (cond
           dir? :dir
@@ -55,12 +58,13 @@
    (->> (list-contents (str root "/" path))
         (filter :dir?))))
 
-(defn list-media-dir []
-  (list-dirs media-dir))
 
-(defn valid-dir? [folder-path]
+(defn list-media-dir [settings]
+  (list-dirs (media-dir settings)))
+
+(defn valid-dir? [settings folder-path]
   (and
-   (validate-base-path media-dir folder-path)
+    (validate-base-path (media-dir settings) folder-path)
    (.isDirectory (io/file folder-path))))
 
 (defn normalize-path
@@ -97,13 +101,13 @@
 
 (defn absoluteify
   "Given a relative path inside the media dir, return the absolute path"
-  [rel-path]
-  (str (Paths/get media-dir (into-array [rel-path]))))
+  [settings rel-path]
+  (str (Paths/get (media-dir settings) (into-array [rel-path]))))
 
 (comment
-  (list-media-files (str  media-dir "/WinnieThePooh"))
+  (list-media-files (str (media-dir nil) "/WinnieThePooh"))
   (list-dirs media-dir)
-  (absoluteify "WinnieThe")
+  (absoluteify nil "WinnieThe")
 
   ;; rcf
   ;;
