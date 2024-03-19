@@ -20,3 +20,5 @@ modules/
 
 resources/public/css/generated.css
 resources/public/css/tailwind.css
+archive
+.enrich-classpath-deps-repl

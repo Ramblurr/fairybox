@@ -10,7 +10,9 @@
  :tasks {:requires   ([babashka.fs :as fs]
                       [babashka.tasks :refer [shell]])
          remote-repl {:doc  "Start nREPL for remote development"
-                      :task (clojure {:dir "."} "-M:dev:remote-dev")
+                      :task (clojure {:extra-env {"NREPL_HOST" "0.0.0.0"
+                                                  "LD_LIBRARY_PATH" "/nix/store/32bnkg0ac2g3mzc2mn9w0kvxwl3lg7k4-vlc-3.0.20/lib:/nix/store/zz0idbln84l44gk44bnq1m7vlw4h2nj2-pigpio-79/lib"}
+                                      :dir "."} "-M:dev:remote-dev")
                       ;; :task (shell {:dir "."} "make deps-repl")
                       }
          run         {:doc  "starts the app"

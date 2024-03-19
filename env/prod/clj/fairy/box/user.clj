@@ -1,19 +1,18 @@
 (ns fairy.box.user
   (:import
-   [java.net URL] [java.io File] [java.util.zip ZipInputStream])
+    [java.io File] [java.util.zip ZipInputStream])
   (:require
+   [portal.api :as inspect]
    [clojure.string :as string]
    [fairy.box.audio.interop :as interop]
    [clojure.java.io :as io]
    [fairy.box.core :as main]))
 
-(defn fix-jar-path [path]
-  (if (re-find #"^jar:file:" path)
-    (clojure.string/replace path #"^jar:file:" "zip:/")
-    path))
-
-(defn fix-jar-url [^java.net.URL url]
-  (fix-jar-path (.toString url)))
+(defn portal-remote []
+  (inspect/open {:theme :portal.colors/gruvbox
+                 :portal.launcher/host "0.0.0.0"
+                 :portal.launcher/port  7001})
+  (add-tap portal.api/submit))
 
 (defn extract
   ([zip-path dest-dir]
@@ -34,23 +33,19 @@
          (recur (.getNextEntry stream)))))))
 
 (comment
-
-  (def path "jar:file:/home/ramblurr/box-standalone.jar!/sfx/startupsound.mp3")
-  (fix-jar-path path)
-  (fix-jar-url (java.net.URL. path))
-
   (keys @main/system)
+
+  (portal-remote)
 
   (do
     (require '[clojure.core.async :as async])
-
     (def player (:player (:fairy.box.audio.system/player @main/system)))
     (def emitter (:emitter (:fairy.box.audio.system/player @main/system)))) ;; rcf
 
-  (-> player  (.mediaPlayer) (.media) (.start (fix-jar-path path) nil))
   (-> player  (.mediaPlayer) (.media) (.start (.toString (io/resource "sfx/startupsound.mp3")) nil))
   (-> player  (.mediaPlayer) (.media) (.start "/home/ramblurr/tmp2/sfx/startupsound.mp3" nil))
   (io/as-file "/home/ramblurr/box-standalone.jar")
   (extract  "/home/ramblurr/box-standalone.jar" "/home/ramblurr/tmp2" (fn [entry]
                                                                         (string/starts-with? (.getName entry) "sfx")))
-  1)
+  ;;
+  )

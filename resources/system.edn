@@ -1,10 +1,10 @@
 {:fairy.box/settings {:fairybox-id "test"
-                      :media       {:media-dir #or [#env MEDIA_DIR "/home/admin/media"]}
+                      :media       {:media-dir #or [#env MEDIA_DIR "/home/ramblurr/media"]}
                       :shutdown    {:type :pimoroni-onoff-shim}
                       :sfx         {:shutdown "sfx/sergequadrado__celtic-positive-intro.wav"
                                     :startup  "sfx/sergequadrado__magic-harp-logo.wav"}}
 
- :fairy.box.db/db                   {:path #or [#env DB_PATH "db.edn"]}
+ :fairy.box.db/db                   {:path #or [#env DB_PATH "/var/lib/fairybox/db.edn"]}
  :fairy.box.bus/bus                 {}
  :fairy.box.switchboard/switchboard {:bus     #ig/ref :fairy.box.bus/bus
                                      :settings  #ig/ref :fairy.box/settings

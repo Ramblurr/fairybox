@@ -292,14 +292,6 @@
       (close-fn))))
 
 
-(defn fix-jar-path [path]
-  (if (re-find #"^jar:file:" path)
-    (clojure.string/replace path #"^jar:file:" "zip:/")
-    path))
-
-(defn fix-jar-url [^java.net.URL url]
-  (fix-jar-path (.toString url)))
-
 (defn ->FileMappedByteBufferCallbackMedia [url]
   (let [path (.toPath (io/file (.getFile url)))
         _ (prn "to path for thing" path)

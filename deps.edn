@@ -2,7 +2,7 @@
  :deps    {org.clojure/clojure                 {:mvn/version "1.11.1"}
            org.clojure/core.async              {:mvn/version "1.6.681"}
            ;; RPI
-           com.diozero/diozero-core            { :mvn/version "1.4.0"
+           com.diozero/diozero-core            {:mvn/version "1.4.0"
                                                 ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
                                                 }
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.0"}
@@ -39,7 +39,9 @@
            ;; kit Libs
            io.github.kit-clj/kit-core          {:mvn/version "1.0.5"}
            io.github.kit-clj/kit-undertow      {:mvn/version "1.0.6"}
-           io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.3"}}
+           io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.3"}
+           ;; troubleshoot in prod
+           djblue/portal                       {:mvn/version "0.51.0"}}
  :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.9.6"}}
                         :ns-default build}
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.4.44"}
@@ -52,8 +54,7 @@
                                       ring/ring-mock                  {:mvn/version "0.4.0"}
                                       io.github.kit-clj/kit-generator {:mvn/version "0.1.8"}
                                       org.clojure/tools.namespace     {:mvn/version "1.4.4"}
-                                      com.clojure-goes-fast/virgil    {:mvn/version "0.2.0"}
-                                      djblue/portal                   {:mvn/version "0.51.0"}}
+                                      com.clojure-goes-fast/virgil    {:mvn/version "0.2.0"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
                         :jvm-opts    ["-XX:-OmitStackTraceInFastThrow" "-DPIGPIOD_HOST=127.0.0.1"]}
            :nrepl      {:extra-deps {nrepl/nrepl {:mvn/version "1.1.0"}}

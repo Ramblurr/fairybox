@@ -57,8 +57,8 @@
 
 (portal-remote)
 
-(comment
 
+(comment
   (async/go (async/>! (:publisher (:fairy.box.bus/bus state/system)) {:topic :buttons :value {:foo :bar}}))
   (do
     (require '[clojure.core.async :as async])
