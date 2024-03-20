@@ -1,6 +1,7 @@
 (ns fairy.box.audio.browse
   (:import [java.nio.file Paths])
   (:require
+   [fairy.box.util.natural-sorting :as natsort]
    [clojure.string :as str]
    [clojure.java.io :as io]))
 
@@ -39,7 +40,8 @@
     (->>
      (seq (.listFiles root))
      (map (partial dir-item (.toPath root)))
-     (sort-by (juxt :file? :name)))))
+     ;; (natsort/sort-by (juxt :file? :name))
+     (natsort/sort-by :name))))
 
 (defn list-media-files [path]
   (->> (list-contents path)
