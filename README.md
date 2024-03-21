@@ -1,7 +1,7 @@
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/Ramblurr/fairybox/main/resources/public/img/jukebox-300.png?token=GHSAT0AAAAAACGBSOKLUWXZADODJHH2W37GZPZQARQ" align="center" width="300px" height="300px"/>
+![fairybox logo](./resources/public/img/jukebox-300.png)
 
 # Fairybox
 
