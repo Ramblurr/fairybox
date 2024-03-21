@@ -1,8 +1,11 @@
 (ns fairy.box.web.routes.api
+  (:import [java.io FileInputStream File]
+           [java.net URL URLDecoder])
   (:require
-
+   [clojure.java.io :as io]
    [clojure.core.async :as async]
    [jp.nijohando.event :as ev]
+   [fairy.box.audio :as audio]
    [fairy.box.web.views.home :as home]
    [fairy.box.web.controllers.health :as health]
    [fairy.box.web.middleware.exception :as exception]
@@ -12,7 +15,8 @@
    [reitit.ring.coercion :as coercion]
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]
-   [reitit.swagger :as swagger]))
+   [reitit.swagger :as swagger]
+   [clojure.string :as str]))
 
 (def route-data
   {:coercion   malli/coercion
@@ -35,6 +39,33 @@
                   ;; exception handling
                 exception/wrap-exception]})
 
+(defn get-current-artwork-path! []
+  (when-let [url (:artwork-url (audio/current-track!))]
+    (->
+     (URL. url)
+     (.getPath)
+     (URLDecoder/decode "UTF-8"))))
+
+(defn img-response [img-file img-type]
+  {:status  200
+   :headers {"Content-Type" (str "image/" img-type)
+             "Cache-Control" "no-cache, no-store, must-revalidate"
+             "Pragma" "no-cache"
+             "Expires" "0"}
+   :body    (FileInputStream. img-file)})
+
+(defn default-artwork [req]
+  (img-response (io/file (io/resource "public/img/jukebox.png"))  "png"))
+
+(defn current-artwork [req]
+  (if-let [image-path (get-current-artwork-path!)]
+    (let [img-file (File. image-path)
+          img-type (str/lower-case (subs image-path (inc (.lastIndexOf image-path "."))))]
+      (if (.exists img-file)
+        (img-response img-file img-type)
+        (default-artwork req)))
+    (default-artwork req)))
+
 ;; Routes
 (defn api-routes [{:keys [emitter] :as opts}]
   [["/swagger.json"
@@ -43,6 +74,11 @@
            :handler (swagger/create-swagger-handler)}}]
    ["/health"
     {:get health/healthcheck!}]
+
+   ["/current-artwork"
+    (fn [request]
+      (current-artwork request))]
+
    ["/ws" (fn [request]
             {:undertow/websocket
              {:on-open (fn [{:keys [channel]}]

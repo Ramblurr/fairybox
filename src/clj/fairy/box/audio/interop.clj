@@ -10,7 +10,6 @@
    [java.nio.file Files Path Paths]
    [java.nio.file StandardOpenOption]
    [java.io IOException]
-   [java.net URL]
    [uk.co.caprica.vlcj.player.base MediaPlayer]
    [uk.co.caprica.vlcj.player.component  AudioListPlayerComponent]
    [uk.co.caprica.vlcj.factory MediaPlayerFactory]

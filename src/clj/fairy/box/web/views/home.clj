@@ -44,6 +44,7 @@
 (declare time-left)
 (declare play-pause-button)
 (declare current-meta)
+(declare current-artwork)
 (declare volume-bar)
 (declare volume-icon)
 (declare play-queue-list)
@@ -68,6 +69,7 @@
                                         (volume-bar (:volume event))))
     :player/media-changed (broadcast! (partial-htmx
                                        (play-queue-list)
+                                       (current-artwork)
                                        (current-meta (:info event))))
     :player/state-changed (broadcast! (partial-htmx (play-pause-button (:state event))))
     :player/time-changed (let [{:keys [current-time current-position]} (audio/current-playback!)
@@ -265,6 +267,11 @@
       album? album
       :else nil)))
 
+(defn current-artwork []
+  [:img {:id "current-artwork" :class (css :object-cover :w-64 :h-64)
+         :style "transform: translateZ(0)"
+         :src "/api/current-artwork"}])
+
 (defn current-meta [{:keys [artist album title]}]
   [:div {:id "current-meta" :class (css  :flex :flex-col)}
    [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
@@ -314,9 +321,7 @@
         [:div {:class (css :px-6 :flex :flex-col :items-center :justify-center
                            :py-6
                            [:lg :py-0 :w-1of3])}
-         [:img {:class (css :object-cover :w-64 :h-64)
-                :style "transform: translateZ(0)"
-                :src "/img/jukebox.png"}]]
+         (current-artwork)]
        ;; 2nd col
         [:div {:class (css :px-6 :flex :flex-col [:lg :w-half])}
         ;; meta wrapper
