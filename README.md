@@ -89,5 +89,25 @@ Fairybox is licensed under the [GNU Affero General Public License v3.0 or later
 
 This project uses several assets (sound effects, etc) that are licensed differently than the rest of the codebase.
 
-* [Celtic Positive Intro by SergeQuadrado](https://freesound.org/s/476709/). License: Attribution NonCommercial 3.0
-* [Magic Harp Logo by SergeQuadrado](https://freesound.org/s/476714/). License: Attribution NonCommercial 3.0
+<!--START CREDITS-->
+* https://thenounproject.com/icon/repeat-play-2447134/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/repeat-one-2447137/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/album-cover-1433586/ by Astonish. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/back-step-2506788/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/next-step-2506791/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/volume-mute-2506797/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/pause-2506789/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/play-2506787/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/fast-forward-2506785/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/rewind-2506784/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/middle-volume-2506798/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/volume-down-2506806/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/volume-up-2506805/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/download-2506781/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/play-list-2506807/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/new-3190873/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/disable-3190864/ by Yoyon Pujiyono. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* https://thenounproject.com/icon/radio-frequency-identification-4500829/ by Iconbunny. License: [CC BY 3.0 DEED](https://creativecommons.org/licenses/by/3.0/)
+* [Magic Harp Logo](https://freesound.org/people/SergeQuadrado/sounds/476714/) by SergeQuadrado. License: [CC BY-NC 3.0 DEED](https://creativecommons.org/licenses/by-nc/3.0/)
+* [Celtic Positive Intro](https://freesound.org/people/SergeQuadrado/sounds/476709/) by SergeQuadrado. License: [CC BY-NC 3.0 DEED](https://creativecommons.org/licenses/by-nc/3.0/)
+<!--END CREDITS-->

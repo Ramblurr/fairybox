@@ -36,4 +36,5 @@
                       :task     (exec 'watch/dev-watch)}
          sync        {:task (exec 'sync/do-sync!)}
          css-dev {:task (exec 'css/css-dev)}
-         css-release {:task (exec 'css/css-release)}}}
+         css-release {:task (exec 'css/css-release)}
+         credits {:task (exec 'credits/build-attribution)}}}
