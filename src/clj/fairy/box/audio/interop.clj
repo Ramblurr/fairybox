@@ -1,6 +1,7 @@
 (ns fairy.box.audio.interop
   "Attempt to confine the VLCJ interop to this namespace."
   (:require
+   [clojure.tools.logging :as log]
    [clojure.java.io :as io]
    [clojure.string :as str])
   (:import
@@ -54,7 +55,8 @@
     ))
 
 (defn release-player! [^AudioListPlayerComponent player]
-  (.release player))
+  (when player
+    (.release player)))
 
 (defn metadata->map [^MetaData metadata]
   (->> (.values metadata)
@@ -223,7 +225,8 @@
     media-list))
 
 (defn release-media-list! [^MediaList media-list]
-  (.release media-list))
+  (when media-list
+    (.release media-list)))
 
 (defn parse-event-listener ^MediaEventAdapter [callback]
   (proxy [MediaEventAdapter] []
@@ -233,21 +236,16 @@
         (finally
           (-> media (.events) (.removeMediaEventListener this)))))))
 
-(defn parse-medias!
+(defn parse-medias-async!
   [^MediaEventListener event-listener  medias]
   (doseq [^Media media medias]
     (-> media (.events) (.addMediaEventListener event-listener))
     (-> media (.parsing) (.parse))))
 
-(defn parse-media-list!
-  "Parse"
-  [^MediaEventListener event-listener ^MediaList list]
+(defn medias-from-medialist [^MediaList list]
   (let [n-tracks (-> list (.media) (.count))]
-    (tap> {:parsing n-tracks})
-    (doseq [i (range n-tracks)]
-      (let [media (-> list (.media) (.newMedia i))]
-        (-> media (.events) (.addMediaEventListener event-listener))
-        (-> media (.parsing) (.parse))))))
+    (for [i (range n-tracks)]
+      (-> list (.media) (.newMedia i)))))
 
 (defn set-media-list!
   "Set a new media list. The media list will be released."
@@ -291,8 +289,9 @@
     (onClose []
       (close-fn))))
 
-
-(defn ->FileMappedByteBufferCallbackMedia [url]
+(defn ->FileMappedByteBufferCallbackMedia
+  "This is an example of how to play media from a byte buffer"
+  [url]
   (let [path (.toPath (io/file (.getFile url)))
         _ (prn "to path for thing" path)
         channel (Files/newByteChannel path (into-array StandardOpenOption [StandardOpenOption/READ]))
@@ -306,3 +305,17 @@
   "Plays an MRL directly"
   [^AudioListPlayerComponent player mrl]
   (-> player (.mediaPlayer) (.media) (.start mrl nil)))
+
+(defn run-on-player-thread
+  "Runs the function on the player thread."
+  [^AudioListPlayerComponent player fn]
+  (-> player (.mediaListPlayer) (.submit fn)))
+
+(defn release-later
+  "Releases each releaseable (Media, MediaList, etc.) on the player thread."
+  [^AudioListPlayerComponent player releaseables]
+  (run-on-player-thread player
+                        (fn []
+                          (doseq [releaseable releaseables]
+                            (when releaseable
+                              (.release releaseable))))))

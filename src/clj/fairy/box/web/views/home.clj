@@ -56,7 +56,9 @@
                  (rfid-link-form settings nil nil)))))
 
 (defn broadcast-player-event! [event]
-  ;; (tap> {:event event})
+  (if (and (not= (:event event) :player/time-changed)
+           (not= (:event event) :player/position-changed))
+    (tap> {:event event}))
   (condp = (:event event)
     ;; :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
     :player/muted (broadcast! (partial-htmx (volume-icon (-> (audio/current-playback!) :current-volume) (:muted? event))))
@@ -278,15 +280,15 @@
 
 (defn volume-icon
   ([volume muted?]
-   (assert volume "volume-icon volume value is null!")
-   (let [icon (cond
-                (or (== 0 volume) (and (boolean? muted?) muted?)) :muted
-                (< volume 0.5) :quiet
-                :else :loud)]
-     (icon
-      {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
-       :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
-       :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]}))))
+   (when volume
+     (let [icon (cond
+                  (or (== 0 volume) (and (boolean? muted?) muted?)) :muted
+                  (< volume 0.5) :quiet
+                  :else :loud)]
+       (icon
+         {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
+          :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+          :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]})))))
 
 (defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?] :as playback}]
   (let [$button-base (css :transition-all :duration-500
@@ -406,7 +408,7 @@
 (defn play-queue-item [idx {:keys [meta current?] :as t}]
   (let [{:keys [title album artist]} meta
         $base (css :flex  :items-center :justify-between :gap-x-6 :gap-y-2 :py-2 :pl-2 :rounded-lg :shadow)
-        $current (css :bg-white-rock-100 [:dark :bg-smoky-900])]
+        $current (css :bg-smoky-300 [:dark :bg-smoky-900])]
     [:li {:class (cs $base (when current? $current))}
      [:button {:type :submit :name "item-index" :value idx :class (css :text-left)}
       [:div {:class (css :flex :flex-row :gap-x-2)}
@@ -420,14 +422,15 @@
 
 (defn play-queue-list []
   (let
-   [{:keys [tracks folder-path]} (audio/current-play-queue!)]
+   [{:keys [tracks source-type source-path]} (audio/current-play-queue!)]
     [:form {:id "play-queue" :class "fade-in-out" :ws-send true :hx-vals {:action "play-queue-item"}}
      [:div {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800 [:dark :text-smoky-300])}
       [:div
-       [:p {:class (css :text-lg :font-bold)} "Current Folder"]
-       [:p {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])} folder-path]]
+       [:p {:class (css :text-lg :font-bold)}
+        (if (= source-type :playlist) "Playlist" "Folder")]
+       [:p {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])} source-path]]
       [:div
-       [:p {:class (css :text-lg :font-bold)} "Folder Audio"]]
+       [:p {:class (css :text-lg :font-bold)} "Tracks"]]
       [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
        (map-indexed play-queue-item tracks)]]]))
 
@@ -445,7 +448,7 @@
     media-file? icons/file-audio
     :else icons/file-solid))
 
-(defn file-row [{:keys [endpoint target values] :as target-params} root-dir current-dir idx {:keys [name abs-path dir? media-file?] :as file}]
+(defn file-row [req {:keys [endpoint target values] :as target-params} root-dir current-dir idx {:keys [name abs-path dir? media-file?] :as file}]
   (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
         $icon-size (css :h-5 :w-5)
         $hover (css  [:hover :bg-smoky-300] [:dark [:hover :bg-smoky-800]])]
@@ -463,17 +466,17 @@
                                :hx-vals (merge values {:selected-path abs-path})}))
        ((file-icon-for file) {:class (cs $icon-color $icon-size (css :mr-2))}) name]]
      [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
-      (when dir?
-        [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
-         (icons/play {:class (cs $icon-color $icon-size)})])]]))
+      (when (browse/playable-type (util/req-settings req) abs-path)
+          [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+           (icons/play {:class (cs $icon-color $icon-size)})])]]))
 
-(defn file-table [target-params root-dir current-dir files]
+(defn file-table [req target-params root-dir current-dir files]
   [:table {:class (css :min-w-full :divide-y :divide-smoky-400)}
    [:thead {:class (css :text-smoky-900 [:dark :text-smoky-300])}
     [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
     [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold)} ""]]
    [:tbody {:class (css :divide-y :divide-smoky-400)}
-    (map-indexed (partial file-row target-params root-dir current-dir) files)]])
+    (map-indexed (partial file-row req target-params root-dir current-dir) files)]])
 
 (defn file-breadcrumb [target-params root-dir current-dir]
   [:nav {:class (css :flex :pl-4 :py-4 [:sm :pl-6]), :aria-label "Breadcrumb"}
@@ -502,7 +505,7 @@
 
     [:div {:id "file-picker"}
      (file-breadcrumb target-params root-dir current-dir)
-     (file-table target-params root-dir current-dir files)]))
+     (file-table req target-params root-dir current-dir files)]))
 
 (defn browse-media-folder [req]
   (let [media-base-path (browse/media-dir (util/req-settings req))]
@@ -569,6 +572,7 @@
   (let [current-track (audio/current-track!)
         current-playback (audio/current-playback!)
         loading? (and (-> req :params :loading) (empty? current-track))]
+    (tap> {:current-track current-track :current-playback current-playback :loading? loading?})
     [:div
      (merge {:id "active-tab"} (when loading? {:hx-get (str "player-controls?loading=true") :hx-trigger "every 2s"}))
      [:div {:class "fade-in-out"}

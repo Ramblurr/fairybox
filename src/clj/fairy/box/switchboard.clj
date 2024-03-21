@@ -18,13 +18,15 @@
 (defn rfid-handler [{:keys [db-conn emitter settings]} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (if (= (:action value) :placed)
-      (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
-        ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+      (do (prn value)
+          (prn (db/linked-folder @db-conn (:uid value)))
+          (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
+            ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
 
-        (async/put! emitter {:path "/player/commands"
-                             :value {:action :audio/play-path
-                                     :item-path (browse/absoluteify settings rel-folder-path)
-                                     :uid (:uid value)}}))
+            (async/put! emitter {:path "/player/commands"
+                                 :value {:action :audio/play-path
+                                         :item-path (browse/absoluteify settings rel-folder-path)
+                                         :uid (:uid value)}})))
       (async/put! emitter {:path "/player/commands"
                            :value {:action :audio/stop}}))))
 
@@ -41,7 +43,6 @@
 
 (defn button-handler [{:keys [emitter]} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
-    ;; (tap> {:button ev})
     (let [{:keys [button-id action]} value]
       (condp = action
         :button/single-press (when-let [ev (button-press-event button-id)]
@@ -92,6 +93,7 @@
 
 (defn player-handler [{:keys [emitter]} {:keys [value] :as ev}]
   (when (#{:system-state/warming-up :system-state/cooling-down} (system-state!))
+    ;; (prn "player-handler " ev)
     (when (= :player/one-shot-finished (:event value))
       (condp = (:id value)
         :startup-sound (emit-system! emitter {:event :system/warmed-up})

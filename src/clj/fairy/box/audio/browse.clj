@@ -24,16 +24,11 @@
    :file? (.isFile f)
    :media-file? (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac)$" (.getName f))})
 
-(defn playable-type
-  "Returns :dir if the path is a playable directory, returns :file if it is a playable file. Returns nil otherwise"
-  [settings abs-path]
-  (let [file (io/file abs-path)]
-    (when (and (validate-base-path (media-dir settings) abs-path) (.exists file))
-      (let [{:keys [dir? file?]} (dir-item nil file)]
-        (cond
-          dir? :dir
-          file? :file
-          :else nil)))))
+(defn m3u?
+  "Returns true if the file is a playlist"
+  [abs-path]
+  (some? (re-find #"(?i)\.m3u$" abs-path)))
+
 
 (defn list-contents [path]
   (let [root (io/file path)]
@@ -51,6 +46,18 @@
   (->> folder-path
        (list-media-files)
        (map :abs-path)))
+
+(defn playable-type
+  "Returns :dir, :playlist, or :file if the path is a playable media path, otherwise nil."
+  [settings abs-path]
+  (let [file (io/file abs-path)]
+    (when (and (validate-base-path (media-dir settings) abs-path) (.exists file))
+      (let [{:keys [dir? file?]} (dir-item nil file)]
+        (cond
+          (and dir? (not-empty (list-media-files file))) :dir
+          (m3u? abs-path) :playlist
+          file? :file
+          :else nil)))))
 
 (defn list-dirs
   ([path]

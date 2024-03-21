@@ -69,6 +69,7 @@
         [rfid-state external-event] (if-let [uid (get-card-uid-fn device)]
                                       (rfid-uid-detected status state now uid)
                                       (rfid-uid-not-detected status state now uid))]
+    ;; (prn external-event)
     [rfid-state external-event]))
 
 (defn start-poller! [{:keys [bus] :as opts} publisher]
