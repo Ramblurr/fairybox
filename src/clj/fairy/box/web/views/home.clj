@@ -49,11 +49,12 @@
 (declare play-queue-list)
 
 (defn broadcast-rfid-change! [settings db uid action]
-  (reset! rfid-cache {:uid uid :action action})
-  (broadcast! (partial-htmx
-               (if (= action :placed)
-                 (rfid-link-form settings uid (db/linked-folder db uid))
-                 (rfid-link-form settings nil nil)))))
+  (let [req (util/fake-req settings)]
+    (reset! rfid-cache {:uid uid :action action})
+    (broadcast! (partial-htmx
+                 (if (= action :placed)
+                   (rfid-link-form req uid (db/linked-folder db uid))
+                   (rfid-link-form req nil nil))))))
 
 (defn broadcast-player-event! [event]
   (if (and (not= (:event event) :player/time-changed)
@@ -116,10 +117,10 @@
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
    [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]
-   [:dl {:class ""}
+   [:dl {:class (css :max-w-2xl)}
     [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
      [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600 [:dark :text-gray-400])} "RFID UID"]
-     [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "RFID Tag Not Present")]]
+     [:dd {:class (css :mt-1 :text-sm :leading-6 [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "RFID Tag Not Present")]]
     (when (and rfid-uid linked-folder)
       [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
        [:dt {:class (css :text-sm :font-medium :leading-6)} "Linked Folder"]
@@ -137,10 +138,11 @@
   [:div {:id "audio-folder-select" :class (css :mt-6 :space-y-2)}
    (map-indexed (partial folder-list selected-path)  (browse/list-media-dir settings))])
 
-(defn rfid-link-form [settings uid linked-folder]
+(declare browse-media-folder)
+(defn rfid-link-form [req uid linked-folder]
   [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link" :class (css :px-10)}
    [:div {:class (css   :pb-12)}
-    [:h2 {:class (css :text-base :font-semibold :leading-7 )} "RFID Tag Link"]
+    [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
     [:div
      [:div {:class (css :mt-8 :space-y-10)}
       [:fieldset
@@ -148,11 +150,13 @@
        [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Place an RFID tag on your Fairybox, and the ID number will appear here."]
        [:div {:class (css :mt-6 :space-y-2)}
         (current-rfid uid linked-folder)]]]
-     [:div {:class (css :mt-8 :space-y-10)}
+     [:div {:class (css :mt-2 :space-y-2)}
       [:fieldset
-       [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
-       [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
-       (audio-folder-select settings linked-folder)]]
+       ;; [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
+
+       ;; [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
+       (browse-media-folder req {:mode :choose :active-value linked-folder})
+       #_(audio-folder-select settings linked-folder)]]
 
      [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
       [:button {:type "button" :class (css :text-sm :font-semibold :leading-6 :text-gray-900
@@ -286,9 +290,9 @@
                   (< volume 0.5) :quiet
                   :else :loud)]
        (icon
-         {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
-          :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
-          :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]})))))
+        {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
+         :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+         :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]})))))
 
 (defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?] :as playback}]
   (let [$button-base (css :transition-all :duration-500
@@ -448,7 +452,7 @@
     media-file? icons/file-audio
     :else icons/file-solid))
 
-(defn file-row [req {:keys [endpoint target values] :as target-params} root-dir current-dir idx {:keys [name abs-path dir? media-file?] :as file}]
+(defn file-row [req {:keys [mode active-value] :as target-params} root-dir current-dir idx {:keys [name rel-path abs-path dir? media-file?] :as file}]
   (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
         $icon-size (css :h-5 :w-5)
         $hover (css  [:hover :bg-smoky-300] [:dark [:hover :bg-smoky-800]])]
@@ -457,20 +461,32 @@
                            :text-smoky-900
                            [:dark :text-smoky-300])
                       (when dir? $hover))}
-      [:button (merge {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
-                      (when dir? {:hx-get "traverse-dir" :hx-target "#file-picker"
-                                  :hx-vals
-                                  {:current-dir current-dir :root-dir root-dir :target-dir abs-path :target-params (pr-str target-params)}}
-                            #_{:hx-post endpoint
-                               :hx-target (or target "#file-picker")
-                               :hx-vals (merge values {:selected-path abs-path})}))
+      [(if dir? :button :div) (merge {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
+                                     (when dir? {:hx-get "traverse-dir" :hx-target "#file-picker"
+                                                 :hx-vals
+                                                 {:current-dir current-dir :root-dir root-dir :target-dir abs-path :target-params (pr-str target-params)}}
+                                           #_{:hx-post endpoint
+                                              :hx-target (or target "#file-picker")
+                                              :hx-vals (merge values {:selected-path abs-path})}))
        ((file-icon-for file) {:class (cs $icon-color $icon-size (css :mr-2))}) name]]
-     [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
-      (when (browse/playable-type (util/req-settings req) abs-path)
-          [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
-           (icons/play {:class (cs $icon-color $icon-size)})])]]))
 
-(defn file-table [req target-params root-dir current-dir files]
+     [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
+      (condp = mode
+        :play (when (browse/playable-type (util/req-settings req) abs-path)
+                [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+                 (icons/play {:class (cs $icon-color $icon-size)})])
+
+        :choose  (when (browse/playable-type (util/req-settings req) abs-path)
+                   (tap> {:active-value active-value :rel-path rel-path})
+                   [:input {:id       (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
+                            :required true
+                            :checked  (= active-value rel-path)
+                            :value    rel-path}]
+
+                   #_[:button {:hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+                      "CHOOSE"]))]]))
+
+(defn file-table [req  target-params root-dir current-dir files]
   [:table {:class (css :min-w-full :divide-y :divide-smoky-400)}
    [:thead {:class (css :text-smoky-900 [:dark :text-smoky-300])}
     [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
@@ -479,7 +495,7 @@
     (map-indexed (partial file-row req target-params root-dir current-dir) files)]])
 
 (defn file-breadcrumb [target-params root-dir current-dir]
-  [:nav {:class (css :flex :pl-4 :py-4 [:sm :pl-6]), :aria-label "Breadcrumb"}
+  [:nav {:class (css :flex :pl-4 :py-2 [:sm :pl-6]), :aria-label "Breadcrumb"}
    [:ol {:role "list", :class (css :flex :items-center :space-x-0)}
     (map-indexed (fn [idx path]
                    (let [name (browse/basename path)]
@@ -498,8 +514,8 @@
   [req target-params root-dir current-dir]
   (let [current-dir-exists? (browse/valid-dir? (util/req-settings req) current-dir)
         files (if current-dir-exists?
-                (browse/list-contents current-dir)
-                (browse/list-contents root-dir))
+                (browse/list-contents root-dir current-dir)
+                (browse/list-contents root-dir root-dir))
         current-dir (if current-dir-exists? current-dir root-dir)
         _ (tap> {:current-dir-exists? current-dir-exists? :root-dir root-dir :current-dir current-dir :files files})]
 
@@ -507,18 +523,16 @@
      (file-breadcrumb target-params root-dir current-dir)
      (file-table req target-params root-dir current-dir files)]))
 
-(defn browse-media-folder [req]
+(defn browse-media-folder [req target-params]
   (let [media-base-path (browse/media-dir (util/req-settings req))]
-    [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
-     [:div
-      [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
-     (file-picker-main req
-                       {:endpoint        nil
-                        :values          nil
-                        :target          nil
-                        :cancel-endpoint nil
-                        :cancel-target   nil}
-                       media-base-path media-base-path)]))
+    (file-picker-main req
+                      (merge {:endpoint        nil
+                              :values          nil
+                              :mode            :play
+                              :target          nil
+                              :cancel-endpoint nil
+                              :cancel-target   nil} target-params)
+                      media-base-path media-base-path)))
 
 (defcomponent ^:endpoint traverse-dir [req root-dir current-dir target-dir ^:edn target-params]
   (file-picker-main req target-params root-dir (browse/normalize-path target-dir)))
@@ -534,7 +548,10 @@
 
 (defcomponent ^:endpoint browse-audio [req]
   (let [{:keys [uid action]} @rfid-cache
-        body [:div {:id "active-tab"} (browse-media-folder req)]]
+        body [:div {:id "active-tab"}
+              [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
+               [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
+               (browse-media-folder req {:mode :play})]]]
     (if (htmx? req)
       body
       (page-htmx (home-page :settings body)))))
@@ -542,10 +559,9 @@
 (defcomponent ^:endpoint rfid-link [req]
   (let [{:keys [uid action]} @rfid-cache
         linked-folder (db/linked-folder (util/req-db req) uid)
-        settings (util/req-settings req)
         body [:div {:id "active-tab"} (if (= action :placed)
-                                        (rfid-link-form settings uid linked-folder)
-                                        (rfid-link-form settings nil nil))]]
+                                        (rfid-link-form req uid linked-folder)
+                                        (rfid-link-form req nil nil))]]
     (if (htmx? req)
       body
       (page-htmx (home-page :settings body)))))

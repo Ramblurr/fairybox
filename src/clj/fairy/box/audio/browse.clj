@@ -8,7 +8,7 @@
 (defn media-dir [settings]
   (assert settings "settings not defined")
   (assert (-> settings :media :media-dir) "media-dir not defined")
- (-> settings :media :media-dir))
+  (-> settings :media :media-dir))
 
 (defn validate-base-path
   "Helper to prevent path traversal attacks. If full-path is not contained inside base-path, will return false, otherwise true"
@@ -29,14 +29,17 @@
   [abs-path]
   (some? (re-find #"(?i)\.m3u$" abs-path)))
 
-
-(defn list-contents [path]
-  (let [root (io/file path)]
-    (->>
-     (seq (.listFiles root))
-     (map (partial dir-item (.toPath root)))
-     ;; (natsort/sort-by (juxt :file? :name))
-     (natsort/sort-by :name))))
+(defn list-contents
+  "List contents of a directory, sorted by filename. If root is provided, :rel-path will be relative to root"
+  ([root path]
+   (let [path-f (io/file path)]
+     (->>
+      (seq (.listFiles path-f))
+      (map (partial dir-item (.toPath (io/file root))))
+       ;; (natsort/sort-by (juxt :file? :name))
+      (natsort/sort-by :name))))
+  ([path]
+   (list-contents path path)))
 
 (defn list-media-files [path]
   (->> (list-contents path)
@@ -50,9 +53,10 @@
 (defn playable-type
   "Returns :dir, :playlist, or :file if the path is a playable media path, otherwise nil."
   [settings abs-path]
-  (let [file (io/file abs-path)]
-    (when (and (validate-base-path (media-dir settings) abs-path) (.exists file))
-      (let [{:keys [dir? file?]} (dir-item nil file)]
+  (let [file (io/file abs-path)
+        media-base (media-dir settings)]
+    (when (and (validate-base-path media-base abs-path) (.exists file))
+      (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) file)]
         (cond
           (and dir? (not-empty (list-media-files file))) :dir
           (m3u? abs-path) :playlist
@@ -67,13 +71,12 @@
    (->> (list-contents (str root "/" path))
         (filter :dir?))))
 
-
 (defn list-media-dir [settings]
   (list-dirs (media-dir settings)))
 
 (defn valid-dir? [settings folder-path]
   (and
-    (validate-base-path (media-dir settings) folder-path)
+   (validate-base-path (media-dir settings) folder-path)
    (.isDirectory (io/file folder-path))))
 
 (defn normalize-path

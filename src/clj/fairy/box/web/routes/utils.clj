@@ -2,6 +2,9 @@
 
 (def route-data-path [:reitit.core/match :data])
 
+(defn fake-req [settings]
+  {:reitit.core/match {:data {:settings settings}}})
+
 (defn route-data
   [req]
   (get-in req route-data-path))
