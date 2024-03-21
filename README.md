@@ -16,7 +16,6 @@ _Igniting children's imagination with tactile, screen-less storytelling and musi
 </div>
 
 ---
-
 _Fairybox_ is an open-source audio player designed specifically for the Raspberry Pi
 platform, that aims to place the audio and imagination at center stage.
 
