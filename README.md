@@ -84,3 +84,10 @@ Copyright (C) 2024 Casey Link
 Fairybox is licensed under the [GNU Affero General Public License v3.0 or later
 (AGPLv3+)](LICENSE.md).
 
+
+### Asset Attribution
+
+This project uses several assets (sound effects, etc) that are licensed differently than the rest of the codebase.
+
+* [Celtic Positive Intro by SergeQuadrado](https://freesound.org/s/476709/). License: Attribution NonCommercial 3.0
+* [Magic Harp Logo by SergeQuadrado](https://freesound.org/s/476714/). License: Attribution NonCommercial 3.0
