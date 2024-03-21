@@ -2,35 +2,33 @@ let backendSocket = null;
 let progressDragging = false;
 
 function formatDuration(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds - (hours * 3600)) / 60);
-    const seconds = totalSeconds - (hours * 3600) - (minutes * 60);
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds - hours * 3600) / 60);
+  const seconds = totalSeconds - hours * 3600 - minutes * 60;
 
-    const paddedMinutes = minutes.toString().padStart(2, '0');
-    const paddedSeconds = seconds.toString().padStart(2, '0');
+  const paddedMinutes = minutes.toString().padStart(2, "0");
+  const paddedSeconds = seconds.toString().padStart(2, "0");
 
-    if (hours > 0) {
-        return `${hours}:${paddedMinutes}:${paddedSeconds}`;
-    } else {
-        return `${paddedMinutes}:${paddedSeconds}`;
-    }
+  if (hours > 0) {
+    return `${hours}:${paddedMinutes}:${paddedSeconds}`;
+  } else {
+    return `${paddedMinutes}:${paddedSeconds}`;
+  }
 }
 function initRange(progressBar) {
-  if(!progressBar) {
+  if (!progressBar) {
     console.error("No progress bar found", progressBar);
     return;
   }
-  console.log("PROG", progressBar)
   //const progressBar = document.getElementById("progress-bar");
   const progressBarPoint = document.getElementById("progress-bar-point");
   const progressBarVal = document.getElementById("progress-bar-val");
   const currentTimeEl = document.getElementById("current-time");
   const currentLengthEl = document.getElementById("current-length");
-  const totalLengthMs = parseFloat(currentLengthEl.getAttribute("data-length"))
+  const totalLengthMs = parseFloat(currentLengthEl.getAttribute("data-length"));
 
   let chosenMs = null;
-
 
   function calculatePercentage(x) {
     const bounds = progressBar.getBoundingClientRect();
@@ -41,20 +39,23 @@ function initRange(progressBar) {
 
   function sendPosition(milliseconds) {
     if (backendSocket) {
-      backendSocket.sendImmediately(JSON.stringify({
-        action: "set-time",
-        milliseconds: milliseconds
-      }))
+      backendSocket.sendImmediately(
+        JSON.stringify({
+          action: "set-time",
+          milliseconds: milliseconds,
+        }),
+      );
     }
   }
 
   function updatePosition(percentage) {
     //console.log(`Setting position to ${percentage}%`);
-    progressBarVal.setAttribute("style", `width: ${percentage}%`)
-    progressBarPoint.setAttribute("style", `left: ${percentage}%`)
+    progressBarVal.setAttribute("style", `width: ${percentage}%`);
+    progressBarPoint.setAttribute("style", `left: ${percentage}%`);
     currentTimeMs = totalLengthMs * (percentage / 100);
-    currentTimeEl.innerHTML = formatDuration(currentTimeMs)
-    currentLengthEl.innerHTML = "-" + formatDuration(totalLengthMs - currentTimeMs)
+    currentTimeEl.innerHTML = formatDuration(currentTimeMs);
+    currentLengthEl.innerHTML =
+      "-" + formatDuration(totalLengthMs - currentTimeMs);
     chosenMs = currentTimeMs;
   }
 
@@ -68,13 +69,17 @@ function initRange(progressBar) {
       updatePosition(percentage);
     }
 
-    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener("mousemove", onMouseMove);
 
-    document.addEventListener('mouseup', function() {
-      progressDragging = false;
-      sendPosition(chosenMs);
-      document.removeEventListener('mousemove', onMouseMove);
-    }, { once: true });
+    document.addEventListener(
+      "mouseup",
+      function () {
+        progressDragging = false;
+        sendPosition(chosenMs);
+        document.removeEventListener("mousemove", onMouseMove);
+      },
+      { once: true },
+    );
   }
 
   function downListenerTouch(event) {
@@ -93,69 +98,67 @@ function initRange(progressBar) {
     function handleEnd() {
       progressDragging = false;
       sendPosition(chosenMs);
-      document.removeEventListener('touchmove', handleMove);
-      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener("touchmove", handleMove);
+      document.removeEventListener("touchend", handleEnd);
     }
 
-    document.addEventListener('touchmove', handleMove);
-    document.addEventListener('touchend', handleEnd, { once: true });
-
+    document.addEventListener("touchmove", handleMove);
+    document.addEventListener("touchend", handleEnd, { once: true });
   }
 
-  progressBar.addEventListener('mousedown', downListener);
-  progressBarPoint.addEventListener('mousedown', downListener);
+  progressBar.addEventListener("mousedown", downListener);
+  progressBarPoint.addEventListener("mousedown", downListener);
 
-  progressBar.addEventListener('touchstart', downListenerTouch);
-  progressBarPoint.addEventListener('touchstart', downListenerTouch);
-
+  progressBar.addEventListener("touchstart", downListenerTouch);
+  progressBarPoint.addEventListener("touchstart", downListenerTouch);
 }
 
 function initWidgets(evt) {
   let pb = null;
-  if(evt) {
+  if (evt) {
     //pb = evt.target.querySelector("#progress-bar");
   } else {
-    pb = document.querySelector("#progress-bar")
   }
-  if(pb) {
+  pb = document.querySelector("#progress-bar");
+  if (pb) {
     initRange(pb);
   }
 }
 
-htmx.onLoad(function(content) {
-});
+htmx.onLoad(function (content) {});
 
 document.addEventListener("htmx:wsOpen", function (evt) {
   backendSocket = evt.detail.socketWrapper;
-}),
+});
 
 document.addEventListener("htmx:wsClose", function (evt) {
   backendSocket = null;
-}),
+});
 
-document.body.addEventListener("htmx:afterSettle", function(evt) {
+document.body.addEventListener("htmx:afterSettle", function (evt) {
   initWidgets(evt);
-})
+});
 
-document.body.addEventListener("htmx:oobAfterSwap", function(evt) {
+document.body.addEventListener("htmx:oobAfterSwap", function (evt) {
   initWidgets(evt);
-})
-
+});
 
 document.addEventListener("htmx:oobBeforeSwap", function (evt) {
   const targetId = evt.detail.target.getAttribute("id");
-  if(targetId == "progress-bar" || targetId == "current-time" || targetId == "current-length") {
-    if(progressDragging) {
+  if (
+    targetId == "progress-bar" ||
+    targetId == "current-time" ||
+    targetId == "current-length"
+  ) {
+    if (progressDragging) {
       event.preventDefault();
       return false;
     }
   }
 }),
-
-
-document.addEventListener("DOMContentLoaded", function() {
-  initWidgets();
-});
+  document.addEventListener("DOMContentLoaded", function () {
+    initWidgets();
+  });
 
 function getTabByName(name) {
   const tabs = document.querySelectorAll("#player-tabs [data-tab-name]");
@@ -172,7 +175,7 @@ function getAllTabs() {
   return tabs;
 }
 
-document.body.addEventListener("tab-change", function(evt){
+document.body.addEventListener("tab-change", function (evt) {
   const $tab = getTabByName(evt.detail.activeTab);
   if (!$tab) return;
   $tab.classList.add("tab-active");
@@ -182,6 +185,6 @@ document.body.addEventListener("tab-change", function(evt){
       tab.classList.remove("tab-active");
     }
   }
-})
+});
 
-htmx.config.defaultSwapStyle = 'outerHTML';
+htmx.config.defaultSwapStyle = "outerHTML";
