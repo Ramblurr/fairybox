@@ -287,9 +287,6 @@
 
 (defn play-one-shot! [{:keys [internal-ch emitter db-conn]} {:keys [item-path id]}]
   (letfn [(handler [{:keys [event listener]}]
-            (prn "one-shot-handler event" event)
-            (prn "one-shot-handler itempath" item-path)
-            (prn "one-shot-handler id" id)
             (when (= event :internal-player/finished)
               (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
               ;; we can't release the player here because it will crash

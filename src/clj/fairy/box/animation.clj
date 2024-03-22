@@ -322,7 +322,7 @@
                      animation will terminate after the current iteration is complete. any other value taken will
                      immediately terminate the animation
        - :repeat-times  - (default 1) the number of times to run the animation
-  "
+  Returns a channel that will be closed when the animation is finished or canceled."
   ([apply-fn! tweens & {:keys [repeat-times finished-ch cancel-ch]
                         :or   {repeat-times 1
                                cancel-ch nil

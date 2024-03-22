@@ -6,6 +6,7 @@
    [clojure.string :as string]
    [fairy.box.audio.interop :as interop]
    [clojure.java.io :as io]
+   [fairy.box.switchboard :as switchboard]
    [fairy.box.core :as main]))
 
 (defn portal-remote []
@@ -41,6 +42,10 @@
     (require '[clojure.core.async :as async])
     (def player (:player (:fairy.box.audio.system/player @main/system)))
     (def emitter (:emitter (:fairy.box.audio.system/player @main/system)))) ;; rcf
+
+  (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
+
+  (switchboard/emit-led! emitter {:action :led/pulse :names [:audio/prev] :after-set 1.0})
 
   (-> player  (.mediaPlayer) (.media) (.start (.toString (io/resource "sfx/startupsound.mp3")) nil))
   (-> player  (.mediaPlayer) (.media) (.start "/home/ramblurr/tmp2/sfx/startupsound.mp3" nil))

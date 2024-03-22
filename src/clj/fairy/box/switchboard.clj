@@ -15,20 +15,6 @@
 (defn system-state! []
   (:system-state @state))
 
-(defn rfid-handler [{:keys [db-conn emitter settings]} {:keys [value] :as ev}]
-  (when (= :system-state/ready (system-state!))
-    (if (= (:action value) :placed)
-      (do (prn value)
-          (prn (db/linked-folder @db-conn (:uid value)))
-          (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
-            ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
-
-            (async/put! emitter {:path "/player/commands"
-                                 :value {:action :audio/play-path
-                                         :item-path (browse/absoluteify settings rel-folder-path)
-                                         :uid (:uid value)}})))
-      (async/put! emitter {:path "/player/commands"
-                           :value {:action :audio/stop}}))))
 
 (def button-press-event {:audio/play-pause {:path "/player/commands"
                                             :value {:action :audio/play-pause}}
@@ -61,6 +47,22 @@
 (defn sfx-path [settings key]
   (let [path (-> settings :sfx key)]
     (str (browse/media-dir settings) "/" path)))
+
+(defn rfid-handler [{:keys [db-conn emitter settings]} {:keys [value] :as ev}]
+  (when (= :system-state/ready (system-state!))
+    (if (= (:action value) :placed)
+      (do (prn value)
+          (prn (db/linked-folder @db-conn (:uid value)))
+          (emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
+          (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
+            ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+
+            (async/put! emitter (doto  {:path "/player/commands"
+                                        :value {:action :audio/play-path
+                                                :item-path (browse/absoluteify settings rel-folder-path)
+                                                :uid (:uid value)}} prn))))
+      (async/put! emitter {:path "/player/commands"
+                           :value {:action :audio/stop}}))))
 
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as ev}]
   ;; (tap> {:system ev})
