@@ -295,7 +295,7 @@
                             (when @player-atom
                               (interop/stop! @player-atom)
                               (Thread/sleep 500)
-                              (.release @player-atom))
+                              (interop/release-player! @player-atom))
                             (catch Exception e
                               (log/error e "one-shot cleanup error"))))))
 
@@ -401,9 +401,7 @@
   (async/close! commands-ch)
   (async/close! internal-ch)
   (async/close! emitter)
-  (async/close! audio-loop)
-  (Thread/sleep 200)
-  (.release player))
+  (async/close! audio-loop))
 
 (defmethod ig/init-key ::player [_ opts]
   (log/info "\n-=[starting audio]=-")
