@@ -555,7 +555,6 @@
                          :value {:action :audio/play-path
                                  :item-path item-path
                                  :uid nil}})
-    (tap> [item-path emitter])
     (response/hx-redirect "player-controls?loading=true")))
 
 (defn playback-settings-form [req {:keys [min-volume max-volume]}]

@@ -115,8 +115,7 @@
 
 (defn set-volume!
   "Set the volume in a range of 0 to 200.
-  The volume is actually a percentage of full volume, setting a volume over 100 may cause audible distortion.
-  "
+  The volume is actually a percentage of full volume, setting a volume over 100 may cause audible distortion."
   [^AudioListPlayerComponent player volume]
   (assert (<= 0 volume 200))
   (-> player  (.mediaPlayer) (.audio) (.setVolume volume)))

@@ -1,6 +1,7 @@
 (ns fairy.box.web.routes.api
-  (:import [java.io FileInputStream File]
-           [java.net URL URLDecoder])
+  (:import [java.io FileInputStream]
+           [java.nio.file Paths]
+           [java.net URL URLDecoder MalformedURLException])
   (:require
    [clojure.java.io :as io]
    [clojure.core.async :as async]
@@ -39,12 +40,40 @@
                   ;; exception handling
                 exception/wrap-exception]})
 
-(defn get-current-artwork-path! []
-  (when-let [url (:artwork-url (audio/current-track!))]
+(def ART_DIR (str (Paths/get (System/getProperty "user.home") (into-array String [".cache/vlc/art"]))))
+
+(defn determine-extension [path]
+  (let [possible-extensions [".png" ".jpg" ".jpeg" ".gif" ".PNG" ".JPG" ".JPEG" ".GIF"]]
+    (some->> possible-extensions
+             (map (fn [ext] (str path ext)))
+             (map io/file)
+             (filter #(.exists %))
+             first
+             str)))
+
+(defn artwork-attachment-to-path [{:keys [album album-artist artist]}]
+  (if (or (str/blank? artist) (str/blank? album))
+    ;; If artist or album are missing, it was cached by title MD5 hash
+    nil
+    (determine-extension (str (Paths/get ART_DIR (into-array String ["artistalbum" artist album "art"]))))))
+
+(defn artwork-file-url-to-path [url]
+  (try
     (->
      (URL. url)
      (.getPath)
-     (URLDecoder/decode "UTF-8"))))
+     (URLDecoder/decode "UTF-8"))
+    (catch MalformedURLException e
+      (tap> {:invalid-artwork-url url :error e})
+      nil)))
+
+(defn get-current-artwork-path! []
+  (when-let [{:keys [artwork-url] :as current-track} (audio/current-track!)]
+    (doto
+     (cond
+       (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path current-track)
+       (str/starts-with? artwork-url "file://") (artwork-file-url-to-path artwork-url)
+       :else nil) tap>)))
 
 (defn img-response [img-file img-type]
   {:status  200
@@ -59,7 +88,7 @@
 
 (defn current-artwork [req]
   (if-let [image-path (get-current-artwork-path!)]
-    (let [img-file (File. image-path)
+    (let [img-file (io/file image-path)
           img-type (str/lower-case (subs image-path (inc (.lastIndexOf image-path "."))))]
       (if (.exists img-file)
         (img-response img-file img-type)
