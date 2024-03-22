@@ -20,12 +20,16 @@
 ;; this needs to be an atom cause we use it to communicate across threads
 (defonce poller-active? (atom false))
 
-(defn mfrc522-test [^com.diozero.devices.MFRC522 rfid]
+(defn mfrc522-test
+  "Test function to check if the RFID device is working.
+  Returns :ok if the device is working, otherwise a map with :msg key and optionally other data"
+  [^com.diozero.devices.MFRC522 rfid]
   (let [version (.getVersion rfid)]
     ;; When 0x00 or 0xFF is returned, communication probably failed
     (if (or (= version 0x00) (= version 0xff))
       {:msg "Communication with MFRC522 failed" :version version}
       :ok)))
+
 (defn mfrc522-get-card-uid [^com.diozero.devices.MFRC522 rfid]
   (when (.isNewCardPresent rfid)
     (when-let [uid (.readCardSerial rfid)]
@@ -46,9 +50,13 @@
                   :test-fn mfrc522-test
                   :get-card-uid-fn mfrc522-get-card-uid}))))
 
-(defn rfid-event [uid action at]
-  {:path "/hardware/input/rfid"
-   :value {:uid uid :action action :at at}})
+(defn rfid-event
+  ([uid action at error]
+   {:path "/hardware/input/rfid"
+    :value {:uid uid :action action :at at :error error}})
+  ([uid action at]
+   {:path "/hardware/input/rfid"
+    :value {:uid uid :action action :at at}}))
 
 (defn rfid-uid-detected [status state now uid]
   (condp = status
@@ -70,7 +78,7 @@
               (rfid-event old-uid :removed now)]
     :absent [state nil]))
 
-(defn rfid-device-error [status state now test-result]
+(defn rfid-device-error [state now test-result]
   (let [errored-at (:error-at state 0)
         raise-new-error? (> (- now errored-at) 10000000000)]
     [(-> state
@@ -79,7 +87,7 @@
          (assoc :error-at (if raise-new-error? now errored-at))
          (assoc :at now))
      (when raise-new-error?
-       (rfid-event nil :error now))]))
+       (rfid-event nil :error now test-result))]))
 
 (defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn test-fn]
   (SleepUtil/sleepMillis poll-delay)
@@ -89,9 +97,9 @@
       (if-let [uid (get-card-uid-fn device)]
         (rfid-uid-detected status state now uid)
         (rfid-uid-not-detected status state now uid))
-      (rfid-device-error status state now test-result))))
+      (rfid-device-error state now test-result))))
 
-(defn start-poller! [{:keys [bus] :as opts} publisher]
+(defn start-poller! [{:keys [bus] :as opts}]
   (reset! poller-active? true)
   (reset! rfid-state {:at 0 :status :absent :uid nil :poll-delay absent-poll-delay})
   (future
@@ -121,7 +129,7 @@
 (defn init-rfid! [{:keys [rfid-type bus] :as opts}]
   (when-not (SUPPORTED-RFID-TYPES rfid-type)
     (throw (Exception. (format "Unsupported RFID type: %s" rfid-type))))
-  {:poller-future (start-poller! opts (:publisher bus))})
+  {:poller-future (start-poller! opts)})
 
 (defn release-rfid! [{:keys [poller-future]}]
   (reset! poller-active? false)
