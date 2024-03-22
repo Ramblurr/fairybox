@@ -61,6 +61,7 @@
 (defn rfid-uid-detected [status state now uid]
   (condp = status
     :present [state nil]
+    :error [state nil]
     :absent [(-> state
                  (assoc :uid uid)
                  (assoc :status :present)
@@ -76,6 +77,7 @@
                   (assoc :poll-delay absent-poll-delay)
                   (assoc :at now))
               (rfid-event old-uid :removed now)]
+    :error [state nil]
     :absent [state nil]))
 
 (defn rfid-device-error [state now test-result]

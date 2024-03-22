@@ -60,7 +60,7 @@
                                                 :value {:action :audio/play-path
                                                         :item-path (browse/absoluteify settings rel-folder-path)
                                                         :uid (:uid value)}} prn))))
-      :absent (async/put! emitter {:path "/player/commands"
+      :removed (async/put! emitter {:path "/player/commands"
                                    :value {:action :audio/stop}})
       :error (do
                (log/error "RFID error" (:error value))
