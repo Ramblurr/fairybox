@@ -69,11 +69,10 @@
 
 (defn get-current-artwork-path! []
   (when-let [{:keys [artwork-url] :as current-track} (audio/current-track!)]
-    (doto
-     (cond
-       (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path current-track)
-       (str/starts-with? artwork-url "file://") (artwork-file-url-to-path artwork-url)
-       :else nil) tap>)))
+    (cond
+      (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path current-track)
+      (str/starts-with? artwork-url "file://") (artwork-file-url-to-path artwork-url)
+      :else nil)))
 
 (defn img-response [img-file img-type]
   {:status  200

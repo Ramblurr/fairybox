@@ -22,7 +22,8 @@
    :rel-path (when root (-> root (.relativize (.toPath f)) (.toString)))
    :dir? (.isDirectory f)
    :file? (.isFile f)
-   :media-file? (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac)$" (.getName f))})
+   :playlist-file? (re-find #"(?i)\.(m3u)$" (.getName f))
+   :media-file? (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac|m3u)$" (.getName f))})
 
 (defn m3u?
   "Returns true if the file is a playlist"

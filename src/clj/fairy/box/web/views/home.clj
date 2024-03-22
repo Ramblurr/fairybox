@@ -275,10 +275,10 @@
          :src "/api/current-artwork"}])
 
 (defn current-meta [{:keys [artist album title]}]
-  [:div {:id "current-meta" :class (css  :flex :flex-col)}
-   [:div {:class (css :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
-   [:div {:class (css :flex :items-center :gap-x-1 :text-base :text-smoky-800 :font-semibold [:dark :text-gray-500])}
-    (artist-dot-album artist album)]])
+  [:div {:id "current-meta" :class (css  :flex :flex-col :gap-y-1)}
+   [:div {:class (css :text-center :text-xl :text-smoky-800 :font-bold [:dark :text-white])} title]
+   [:div {:class (css :text-center :text-lg :text-smoky-800 :font-semibold [:dark :text-gray-500])} album]
+   [:div {:class (css :text-center :text-sm :text-smoky-800 :font-semibold [:dark :text-gray-500])} artist]])
 
 (defn volume-bar [volume]
   [:input {:id "volume-slider" :type :range
@@ -398,7 +398,7 @@
      [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
       (settings-option "RFID Tags" icons/radio-frequency "rfid-link")
       (settings-option "Browse Audio" icons/file-audio "browse-audio")
-      (settings-option "Listening History" icons/clock-rotate-left "rfid-link")
+      ;; (settings-option "Listening History" icons/clock-rotate-left "rfid-link")
       (settings-option "Playback" icons/play "playback-settings")]]]])
 
 (defn tab [name comp label active-tab extra-css]
@@ -464,9 +464,10 @@
    (player-tabs active-tab)
    content])
 
-(defn file-icon-for [{:keys [dir? media-file?]}]
+(defn file-icon-for [{:keys [dir? media-file? playlist-file?]}]
   (cond
     dir? icons/folder-solid
+    playlist-file? icons/file-audio
     media-file? icons/file-audio
     :else icons/file-solid))
 
@@ -475,7 +476,7 @@
         $icon-size (css :h-5 :w-5)
         $hover (css  [:hover :bg-smoky-300] [:dark [:hover :bg-smoky-800]])]
     [:tr
-     [:td {:class (cs (css :whitespace-nowrap :py-4 :pl-4 :pr-3 :text-sm :font-medium  [:sm :pl-6] [:lg :pl-8]
+     [:td {:class (cs (css :py-4 :pl-0 :pr-3 :text-sm :font-medium  [:sm :pl-6] [:lg :pl-8]
                            :text-smoky-900
                            [:dark :text-smoky-300])
                       (when dir? $hover))}
@@ -507,13 +508,13 @@
 (defn file-table [req  target-params root-dir current-dir files]
   [:table {:class (css :min-w-full :divide-y :divide-smoky-400)}
    [:thead {:class (css :text-smoky-900 [:dark :text-smoky-300])}
-    [:th {:class (css :py-3.5 :pl-4 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
+    [:th {:class (css :py-3.5 :pl-0 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
     [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold)} ""]]
    [:tbody {:class (css :divide-y :divide-smoky-400)}
     (map-indexed (partial file-row req target-params root-dir current-dir) files)]])
 
 (defn file-breadcrumb [target-params root-dir current-dir]
-  [:nav {:class (css :flex :pl-4 :py-2 [:sm :pl-6]), :aria-label "Breadcrumb"}
+  [:nav {:class (css :flex :pl-0 :py-2 [:sm :pl-6]), :aria-label "Breadcrumb"}
    [:ol {:role "list", :class (css :flex :items-center :space-x-0)}
     (map-indexed (fn [idx path]
                    (let [name (browse/basename path)]
@@ -569,21 +570,21 @@
    [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Playback Settings"]]
    [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
     [:div {:class (css [:sm :col-span-4])}
-     [:label {:for "minvolume" :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Min Volume"]
+     [:label {:for "minvolume" :class (css :block :text-sm :font-medium :leading-6)} "Min Volume"]
      [:div {:class (css :mt-2)}
       [:div {:class (css :flex [:sm :max-w-md])}
        [:input {:type  "number" :min 0 :max 100 :step 1 :name "minvolume" :id "minvolume" :autocomplete "minvolume"
                 :value min-volume
                 :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                            :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:placeholder :text-gray-400] [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]
+                            :bg-transparent :py-1.5 :pl-1  [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]
     [:div {:class (css [:sm :col-span-4])}
-     [:label {:for "maxvolume" :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Max Volume"]
+     [:label {:for "maxvolume" :class (css :block :text-sm :font-medium :leading-6)} "Max Volume"]
      [:div {:class (css :mt-2)}
       [:div {:class (css :flex [:sm :max-w-md])}
        [:input {:type  "number" :min 0 :max 100 :step 1 :name "maxvolume" :id "maxvolume" :autocomplete "maxvolume"
                 :value max-volume
                 :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                            :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:placeholder :text-gray-400] [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]]
+                            :bg-transparent :py-1.5 :pl-1   [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]]
 
    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
     [:button {:type   "button"   :class     (css :text-sm :font-semibold :leading-6 :text-gray-900
@@ -615,7 +616,7 @@
 (defcomponent ^:endpoint browse-audio [req]
   (let [{:keys [uid action]} @rfid-cache
         body [:div {:id "active-tab"}
-              [:div {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))}
+              [:div {:class (cs "fade-in-out" (css :px-1 [:sm :px-4] :max-w-5xl))}
                [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
                (browse-media-folder req {:mode :play})]]]
     (if (htmx? req)
