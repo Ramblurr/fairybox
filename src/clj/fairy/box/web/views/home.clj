@@ -5,6 +5,7 @@
    [clojure.core.async :as async]
    [fairy.box.db :as db]
    [fairy.box.audio :as audio]
+   [fairy.box.switchboard :as switchboard]
    [fairy.box.web.routes.utils :as util]
    [fairy.box.util :refer [remove-nils]]
    [ring.adapter.undertow.websocket :as ws]
@@ -308,7 +309,8 @@
         [:p (volume-human volume)]]))))
 
 (defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?] :as playback}]
-  (let [$button-base (css :transition-all :duration-500
+  (let [ready? (= (switchboard/system-state!) :system-state/ready)
+        $button-base (css :transition-all :duration-500
                           :text-smoky-800
                           [:hover-mouse [:hover :scale-110]]
                           [:pointer-fine [:active :text-smoky-950 :scale-105]]
@@ -368,10 +370,14 @@
        [:div
         [:div {:class (css :flex :justify-center :items-center :mt-10)}
          [:div {:class (css :outline-dotted :p-6 :rounded-lg :outline-smoky-400 :text-smoky-900 [:dark :text-smoky-300])}
-          [:p {:class (css :text-lg)} "Nothing is playing."]
-          [:p {:class (css :text-sm :mt-2 :underline :decoration-inherit)}
-           [:a {:href "settings" :hx-boost true}
-            "Goto settings"]]]]])]))
+          [:p {:class (css :text-lg)}
+           (if ready?
+             "Nothing is playing."
+             "Fairybox is getting ready...")]
+          (when ready?
+            [:p {:class (css :text-sm :mt-2 :underline :decoration-inherit)}
+             [:a {:href "settings" :hx-boost true}
+              "Goto settings"]])]]])]))
 
 (defn settings-option [label icon hx-get]
   [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"
@@ -555,7 +561,7 @@
                          :value {:action :audio/play-path
                                  :item-path item-path
                                  :uid nil}})
-    (response/hx-redirect "player-controls?loading=true")))
+    (response/hx-redirect "player-controls")))
 
 (defn playback-settings-form [req {:keys [min-volume max-volume]}]
   [:form {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))
@@ -647,15 +653,12 @@
 (defn player-controls-tab [req]
   (let [current-track (audio/current-track!)
         current-playback (audio/current-playback!)
-        loading? (and (-> req :params :loading) (empty? current-track))]
-    (tap> {:current-track current-track :current-playback current-playback :loading? loading?})
+        playing? (empty? current-track)]
+    (tap> {:current-track current-track :current-playback current-playback :loading? playing?})
     [:div
-     (merge {:id "active-tab"} (when loading? {:hx-get (str "player-controls?loading=true") :hx-trigger "every 2s"}))
+     (merge {:id "active-tab"} (when playing? {:hx-get (str "player-controls") :hx-trigger "every 1s"}))
      [:div {:class "fade-in-out"}
-      (if loading?
-        [:div {:class (css :text-smoky-700 :max-w-5xl :mt-20 :flex :items-center :justify-center)}
-         [:svg {:class (css :w-20 :h-20) :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 24 24"} [:style nil "@keyframes spinner_XVY9{50%{transform:rotate(180deg)}}"] [:circle {:cx "12", :cy "12", :r "3"}] [:g {:style "transform-origin:center;animation:spinner_XVY9 2s cubic-bezier(.36,.6,.31,1) infinite"} [:circle {:cx "4", :cy "12", :r "3"}] [:circle {:cx "20", :cy "12", :r "3"}]]]]
-        (player current-track current-playback))]]))
+      (player current-track current-playback)]]))
 
 (defcomponent ^:endpoint player-controls [req]
   (let [body  (player-controls-tab req)]
