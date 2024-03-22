@@ -215,9 +215,6 @@
       :internal-player/repeat-changed          (do
                                                  (swap! audio-state assoc-in [:current-playback :repeat-mode] (:mode event))
                                                  (async/put! emitter (player-event {:event :player/repeat-changed :time (:mode event)})))
-      :internal-player/one-shot-finished       (when-let [player (:player event)]
-                                                 (.release player))
-
       nil)
     (catch Exception e
       (log/error e "internal event error"))))
@@ -285,16 +282,23 @@
     (interop/set-volume! player (db/max-volume db))
     player))
 
-(defn play-one-shot! [{:keys [internal-ch emitter db-conn]} {:keys [item-path id]}]
+(defn play-one-shot! [{:keys [emitter db-conn]} {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
   ;; we do this because we want to handle the events separate from the normal player
   (let [player-atom (atom nil)
-        handler     (fn [{:keys [event listener]}]
+        handler     (fn [{:keys [event]}]
                       (when (= event :internal-player/finished)
                         (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
-                        (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})
-                        (when @player-atom
-                          (interop/release-later @player-atom [@player-atom]))))
+                        (future
+                          (try
+                            (Thread/sleep 500)
+                            (when @player-atom
+                              (interop/stop! @player-atom)
+                              (Thread/sleep 500)
+                              (.release @player-atom))
+                            (catch Exception e
+                              (log/error e "one-shot cleanup error"))))))
+
         player      (new-player! @db-conn handler)]
     (interop/play-mrl! player item-path)
     (reset! player-atom player)))
@@ -315,7 +319,6 @@
 
 (defn command-handler [{:keys [player internal-ch] :as sys} {:keys [path value] :as event}]
   (try
-    (tap> {:command value})
     (let [{:keys [action item-path]} value
           {:keys [config]} @audio-state]
       (condp = action
@@ -393,12 +396,14 @@
     (ev/emitize bus emitter)
     (assoc sys :audio-loop (audio-loop sys))))
 
-(defn- halt-player! [{:keys [internal-ch exit-ch commands-ch emitter audio-loop]}]
+(defn- halt-player! [{:keys [internal-ch exit-ch commands-ch emitter audio-loop player]}]
   (async/put! exit-ch true)
   (async/close! commands-ch)
   (async/close! internal-ch)
   (async/close! emitter)
-  (async/close! audio-loop))
+  (async/close! audio-loop)
+  (Thread/sleep 200)
+  (.release player))
 
 (defmethod ig/init-key ::player [_ opts]
   (log/info "\n-=[starting audio]=-")
