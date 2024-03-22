@@ -77,6 +77,42 @@ bb uberjar
 ```
 
 
+# Development
+
+Running and developing fairybox requires a raspberry pi.
+
+But we don't want to edit on the raspberry pi, so we use a remote nrepl and a sync script.
+
+On your raspberry pi clone this repo, then start the remote repl with:
+
+``` bash
+bb remote-repl
+```
+
+This will load up (it takes awhile) and expose an nrepl port on port `7002`. Using your editor of choice, connect to `RASPBERRYPI_IP_ADDRESS:7002`, and you're connected.
+
+Once connected open the [`env/dev/clj/user.clj`](./env/dev/clj/user.clj) file, and start the server with:
+
+```clojure
+(go)
+```
+
+System configuration is available under `resources/system.edn`.
+
+To reload changes:
+
+```clojure
+(reset)
+```
+
+Editing using a remote repl makes code changes easy, but to change css, js, and other non-clojure resources we use a sync script:
+
+``` bash
+bb watch
+```
+
+Run this in a different terminal window on your *workstation* (not the raspberry pi), it will watch for changes and rsync them to the pi. Your `~/.ssh/config` must have a `fairybox` entry.
+
 # License
 
 Copyright (C) 2024 Casey Link
