@@ -156,7 +156,7 @@
           conn (try (mqtt-connect! opts)
                     (catch Exception e e))]
       (when (util/exception? conn)
-        (log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
+        #_(log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
                   "Reported exception: " (ex-message conn))
         (when (= :timeout (async/alt!
                             (async/timeout retry-timeout) :timeout
