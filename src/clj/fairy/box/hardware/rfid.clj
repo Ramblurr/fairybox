@@ -20,6 +20,12 @@
 ;; this needs to be an atom cause we use it to communicate across threads
 (defonce poller-active? (atom false))
 
+(defn mfrc522-test [^com.diozero.devices.MFRC522 rfid]
+  (let [version (.getVersion rfid)]
+    ;; When 0x00 or 0xFF is returned, communication probably failed
+    (if (or (= version 0x00) (= version 0xff))
+      {:msg "Communication with MFRC522 failed" :version version}
+      :ok)))
 (defn mfrc522-get-card-uid [^com.diozero.devices.MFRC522 rfid]
   (when (.isNewCardPresent rfid)
     (when-let [uid (.readCardSerial rfid)]
@@ -37,6 +43,7 @@
                  {:device rfid
                   :rfid-type rfid-type
                   :config config
+                  :test-fn mfrc522-test
                   :get-card-uid-fn mfrc522-get-card-uid}))))
 
 (defn rfid-event [uid action at]
@@ -63,21 +70,33 @@
               (rfid-event old-uid :removed now)]
     :absent [state nil]))
 
-(defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn]
+(defn rfid-device-error [status state now test-result]
+  (let [errored-at (:error-at state 0)
+        raise-new-error? (> (- now errored-at) 10000000000)]
+    [(-> state
+         (assoc :status :error)
+         (assoc :error test-result)
+         (assoc :error-at (if raise-new-error? now errored-at))
+         (assoc :at now))
+     (when raise-new-error?
+       (rfid-event nil :error now))]))
+
+(defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn test-fn]
   (SleepUtil/sleepMillis poll-delay)
   (let [now (System/nanoTime)
-        [rfid-state external-event] (if-let [uid (get-card-uid-fn device)]
-                                      (rfid-uid-detected status state now uid)
-                                      (rfid-uid-not-detected status state now uid))]
-    ;; (prn external-event)
-    [rfid-state external-event]))
+        test-result (test-fn device)]
+    (if (= :ok test-result)
+      (if-let [uid (get-card-uid-fn device)]
+        (rfid-uid-detected status state now uid)
+        (rfid-uid-not-detected status state now uid))
+      (rfid-device-error status state now test-result))))
 
 (defn start-poller! [{:keys [bus] :as opts} publisher]
   (reset! poller-active? true)
   (reset! rfid-state {:at 0 :status :absent :uid nil :poll-delay absent-poll-delay})
   (future
     (log/debug "rfid :: poller started")
-    (let [{:keys [device get-card-uid-fn]} (->rfid opts)]
+    (let [{:keys [device test-fn get-card-uid-fn]} (->rfid opts)]
       (assert device)
       (assert get-card-uid-fn)
       (let [emitter (async/chan)]
@@ -85,15 +104,12 @@
           (ev/emitize bus emitter)
           (with-open [device device]
             (loop []
-              (let [[new-state external-event] (poller-loop @rfid-state device get-card-uid-fn)]
-                (if @poller-active?
-                  (do
-                    (reset! rfid-state new-state)
-                    (when external-event
-                      (async/put! emitter external-event))
-                    (recur))
-                  (do
-                    nil)))))
+              (let [[new-state external-event] (poller-loop @rfid-state device get-card-uid-fn test-fn)]
+                (when @poller-active?
+                  (reset! rfid-state new-state)
+                  (when external-event
+                    (async/put! emitter external-event))
+                  (recur)))))
           (catch java.util.concurrent.CancellationException _e
             (log/debug "rfid :: poller cancelled"))
           (catch Exception e
@@ -108,7 +124,6 @@
   {:poller-future (start-poller! opts (:publisher bus))})
 
 (defn release-rfid! [{:keys [poller-future]}]
-  (prn "releasing rfid")
   (reset! poller-active? false)
   (SleepUtil/sleepMillis absent-poll-delay)
   (try

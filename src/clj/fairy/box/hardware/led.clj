@@ -136,7 +136,7 @@
   (set (distinct (reduce into names (map groups affected-groups)))))
 
 (defn events-handler! [{:keys [groups leds]} {:keys [value] :as ev}]
-  (tap> [:LEDS ev groups leds])
+  ;; (tap> [:LEDS ev groups leds])
   (condp = (:action value)
     :led/pulse (let [{:keys [names after-set repeat-times]
                       :or {repeat-times 1
@@ -148,7 +148,7 @@
                        (led-value! (get leds name) after-set)))))
     :led/set (let [{names :names value :value affected-groups :groups :keys [names value] :or {names [] affected-groups []}} value
                    led-names (set (distinct (reduce into names (map groups affected-groups))))]
-               (tap> {:got-names led-names
+               #_(tap> {:got-names led-names
                       :affected-groups affected-groups
                       :names names})
                (doseq [name led-names]

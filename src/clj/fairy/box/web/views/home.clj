@@ -53,11 +53,12 @@
 
 (defn broadcast-rfid-change! [settings db uid action]
   (let [req (util/fake-req settings)]
-    (reset! rfid-cache {:uid uid :action action})
-    (broadcast! (partial-htmx
-                 (if (= action :placed)
-                   (rfid-link-form req uid (db/linked-folder db uid))
-                   (rfid-link-form req nil nil))))))
+    (when (not= action :error)
+      (reset! rfid-cache {:uid uid :action action})
+      (broadcast! (partial-htmx
+                   (if (= action :placed)
+                     (rfid-link-form req uid (db/linked-folder db uid))
+                     (rfid-link-form req nil nil)))))))
 
 (defn broadcast-player-event! [event]
   (if (and (not= (:event event) :player/time-changed)

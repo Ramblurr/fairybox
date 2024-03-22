@@ -47,8 +47,17 @@
 
   (switchboard/emit-led! emitter {:action :led/pulse :names [:audio/prev] :after-set 1.0})
 
+
+  (interop/stop! player)
+  (-> player  (.mediaPlayer) (.media) (.start "/home/ramblurr/media/sfx/startupsound.mp3" nil))
+  (-> player (.mediaPlayer) (.audio) (.setOutputDevice "pipewire" "pipewire"))
+  (-> player (.mediaPlayer) (.audio) (.setOutput "pipewire"))
+  (-> player (.mediaPlayer) (.audio) (.outputDevice))
+  (tap> (-> player (.mediaPlayer) (.audio) (.outputDevices)))
+
+  (-> player (.mediaPlayer) (.mediaPlayer) (.audio) (.outputDevices))
+
   (-> player  (.mediaPlayer) (.media) (.start (.toString (io/resource "sfx/startupsound.mp3")) nil))
-  (-> player  (.mediaPlayer) (.media) (.start "/home/ramblurr/tmp2/sfx/startupsound.mp3" nil))
   (io/as-file "/home/ramblurr/box-standalone.jar")
   (extract  "/home/ramblurr/box-standalone.jar" "/home/ramblurr/tmp2" (fn [entry]
                                                                         (string/starts-with? (.getName entry) "sfx")))
