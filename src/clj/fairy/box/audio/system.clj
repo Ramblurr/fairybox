@@ -286,13 +286,18 @@
     player))
 
 (defn play-one-shot! [{:keys [internal-ch emitter db-conn]} {:keys [item-path id]}]
-  (letfn [(handler [{:keys [event listener]}]
-            (when (= event :internal-player/finished)
-              (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
-              ;; we can't release the player here because it will crash
-              (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})))]
-    (let [player (new-player! @db-conn handler)]
-      (interop/play-mrl! player item-path))))
+  ;; this one-shot function creates a new player, plays the item, and then releases the player
+  ;; we do this because we want to handle the events separate from the normal player
+  (let [player-atom (atom nil)
+        handler     (fn [{:keys [event listener]}]
+                      (when (= event :internal-player/finished)
+                        (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
+                        (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})
+                        (when @player-atom
+                          (interop/release-later @player-atom [@player-atom]))))
+        player      (new-player! @db-conn handler)]
+    (interop/play-mrl! player item-path)
+    (reset! player-atom player)))
 
 (defn wrap-volume [db-conn new-volume]
   (let [db @db-conn

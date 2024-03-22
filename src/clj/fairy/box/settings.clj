@@ -11,6 +11,7 @@
 
 (defn startup! [{:keys [bus]}]
   (let [emitter (async/chan)]
+    (Thread/sleep 1000)
     (ev/emitize bus emitter)
     (async/put! emitter {:path "/system" :value {:event :system/initialized}})
     {:emitter emitter}))

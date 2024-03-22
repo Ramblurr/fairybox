@@ -2,11 +2,13 @@
   (:import
    [com.diozero.util Diozero])
   (:require
+   [clojure.core.async :as async]
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
    [fairy.box.config :as config]
    [fairy.box.env :refer [defaults]]
    [signal.handler :as signal]
+   [jp.nijohando.event :as ev]
 
    ;; Edges
    [kit.edge.utils.nrepl]
@@ -18,7 +20,7 @@
    [fairy.box.web.routes.ui]
    [fairy.box.db]
    [fairy.box.bus]
-   [fairy.box.switchboard]
+   [fairy.box.switchboard :as switchboard]
    [fairy.box.audio.system]
    [fairy.box.hardware]
    [fairy.box.settings]
@@ -49,10 +51,35 @@
   (Diozero/initialiseShutdownHook)
   (.addShutdownHook (Runtime/getRuntime) (Thread. stop-app!)))
 
+(defn shutdown-loop [{:keys [value] :as event}]
+  (if (= :system/shutdown (:event value))
+    (do
+      (try
+        (log/info "system shutdown ready")
+        (stop-app!)
+        (Thread/sleep 5000)
+        (finally
+          (System/exit 0)))
+      nil)
+    :recur))
+
+(defn initiate-shutdown! [emitter bus]
+  (let [listener (async/chan)]
+    (prn "starting shutdown")
+    (ev/listen bus "/system" listener)
+    (async/go-loop []
+      (if (shutdown-loop (async/<! listener))
+        (recur)
+        (prn "shutdown-loop done")))
+    (switchboard/initiate-shutdown! emitter)))
+
 (defn -main [& _]
   (start-app))
 
 (signal/with-handler :term
   (log/info "caught SIGTERM, quitting")
-  (stop-app!)
-  (log/info "all components shut down"))
+  (initiate-shutdown!
+   (:emitter (:fairy.box.audio.system/player @system))
+   (:fairy.box.bus/bus @system))
+  #_(stop-app!)
+  #_(log/info "all components shut down"))

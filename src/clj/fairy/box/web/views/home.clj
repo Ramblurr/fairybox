@@ -656,7 +656,6 @@
   (let [current-track (audio/current-track!)
         current-playback (audio/current-playback!)
         playing? (empty? current-track)]
-    (tap> {:current-track current-track :current-playback current-playback :loading? playing?})
     [:div
      (merge {:id "active-tab"} (when playing? {:hx-get (str "player-controls") :hx-trigger "every 1s"}))
      [:div {:class "fade-in-out"}

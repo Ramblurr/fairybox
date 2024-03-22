@@ -17,7 +17,8 @@
    [fairy.box.audio.browse :as browse]
    [fairy.box.audio.interop :as interop]
    [fairy.box.audio.system :as audio-sys]
-   [fairy.box.core :refer [start-app]]))
+   [fairy.box.core :refer [start-app initiate-shutdown!]]
+   [fairy.box.switchboard :as switchboard]))
 
 ;; uncomment to enable hot loading for deps
 (watch-deps/start! {:aliases [:dev :test]})
@@ -67,7 +68,11 @@
     (require '[clojure.core.async :as async])
     (def settings (:fairy.box/settings state/system))
     (def player (:player (:fairy.box.audio.system/player state/system)))
-    (def emitter (:emitter (:fairy.box.audio.system/player state/system)))) ;; rcf
+    (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
+    (def bus (:fairy.box.bus/bus state/system))) ;; rcf
+
+  (initiate-shutdown! emitter bus)
+  (switchboard/emit-system! emitter {:event :system/shutdown})
   (async/put! emitter {:path "/system" :value {:event :system/cooling-down}})
   (async/put! emitter {:path "/hardware/output/leds" :value
                        {:action :led/set
@@ -94,7 +99,6 @@
                                :item-path (browse/absoluteify settings "playlists/LibbyDish1.m3u")
                                :uid       nil}})
 
-
   (audio-sys/media-info (first medias))
   (-> (first medias)  (.info) (.type))
   (def playlist-media-list (-> (first medias) (.subitems) (.newMediaList)))
@@ -104,12 +108,12 @@
   (interop/media->meta-map (first medias))
   (interop/media->meta-map item-0)
   (interop/parse-medias-async! (interop/parse-event-listener
-                                 (fn [^Media media meta-map status]
+                                (fn [^Media media meta-map status]
                                    ;; this is the parse handler callback
-                                   (tap> {:event    :internal-player/pre-play-parse
-                                          :media    media
-                                          :status   status
-                                          :meta-map meta-map})))
+                                  (tap> {:event    :internal-player/pre-play-parse
+                                         :media    media
+                                         :status   status
+                                         :meta-map meta-map})))
                                [item-0])
 
   (.release playlist-media-list)
@@ -143,6 +147,5 @@
   (reset)
   (reset-all)
   (reset-web)
-  1
   ;;
   )

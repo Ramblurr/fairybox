@@ -66,6 +66,9 @@
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))
 
+(defn initiate-shutdown! [emitter]
+  (emit-system! emitter {:event :system/cooling-down}))
+
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as ev}]
   ;; (tap> {:system ev})
   (let [{:keys [event]} value]
@@ -76,19 +79,16 @@
       :system/warming-up (do
                            (swap! state assoc :system-state :system-state/warming-up)
                            (emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
-                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path
-                                                  (sfx-path settings :startup)}))
+                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound
+                                                  :item-path (sfx-path settings :startup)}))
       :system/warmed-up (do
                           (swap! state assoc :system-state :system-state/ready)
                           (emit-system! emitter {:event :system/ready}))
       :system/cooling-down (do
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
-                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound :item-path
-                                                    (sfx-path settings :shutdown)}))
-      :system/cooled-down (do
-                            (swap! state assoc :system-state :system-state/cooled-down)
-                            (emit-system! emitter {:event :system/shutdown}))
+                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound
+                                                    :item-path (sfx-path settings :shutdown)}))
       :system/shutdown (do
                          (swap! state assoc :system-state :system-state/shutdown)
                          ;; todo perform shutdown
@@ -100,8 +100,8 @@
     ;; (prn "player-handler " ev)
     (when (= :player/one-shot-finished (:event value))
       (condp = (:id value)
-        :startup-sound (emit-system! emitter {:event :system/warmed-up})
-        :shutdown-sound (emit-system! emitter {:event :system/cooled-down})))))
+        :startup-sound  (emit-system! emitter {:event :system/warmed-up})
+        :shutdown-sound (emit-system! emitter {:event :system/shutdown})))))
 
 (def ^:private patch-ports {:rfid  {:handler #'rfid-handler
                                     :name :rfid

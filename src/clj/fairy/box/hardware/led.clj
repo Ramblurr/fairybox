@@ -45,11 +45,14 @@
   (let [value (max 0.0 (min 1.0 value))
         {:keys [led-type handle]} led]
     (when handle
-      (if (= led-type :pwm)
-        (.setValue handle (float value))
-        (if (> value 0.0)
-          (.on handle)
-          (.off handle))))))
+      (try
+        (if (= led-type :pwm)
+          (.setValue handle (float value))
+          (if (> value 0.0)
+            (.on handle)
+            (.off handle)))
+        (catch Exception e
+          (log/error e "Error setting LED value" {:led led :value value}))))))
 
 (defn apply-tween! [led-handles {:keys [value data]}]
   (when value
