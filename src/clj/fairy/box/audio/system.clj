@@ -280,13 +280,21 @@
     :playlist (play-playlist! sys item-path)
     nil))
 
-(defn play-one-shot! [{:keys [internal-ch emitter]} {:keys [item-path id]}]
+(defn new-player! [db handler]
+  (let [player (interop/init-player! handler)]
+    (interop/set-volume! player (db/max-volume db))
+    player))
+
+(defn play-one-shot! [{:keys [internal-ch emitter db-conn]} {:keys [item-path id]}]
   (letfn [(handler [{:keys [event listener]}]
+            (prn "one-shot-handler event" event)
+            (prn "one-shot-handler itempath" item-path)
+            (prn "one-shot-handler id" id)
             (when (= event :internal-player/finished)
               (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
               ;; we can't release the player here because it will crash
               (async/put! internal-ch {:event :internal-player/one-shot-finished :player listener})))]
-    (let [player (interop/init-player! handler)]
+    (let [player (new-player! @db-conn handler)]
       (interop/play-mrl! player item-path))))
 
 (defn wrap-volume [db-conn new-volume]
@@ -370,7 +378,7 @@
         commands-ch (async/chan)
         internal-ch (async/chan)
         exit-ch (async/chan)
-        player (interop/init-player! (fn [ev]
+        player (new-player! @db-conn (fn [ev]
                                        (async/put! internal-ch ev)))
         sys {:emitter emitter
              :settings settings

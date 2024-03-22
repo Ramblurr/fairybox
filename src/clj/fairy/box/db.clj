@@ -5,14 +5,16 @@
    [integrant.core :as ig]
    [duratom.core :as duratom]))
 
+(def DEFAULT_MAX_VOLUME 80)
+
 (defmethod ig/init-key ::db [_ {:keys [path]}]
   (log/info "\n-=[starting db]=-")
   (duratom/duratom
-   :local-file
-   :file-path path
-   :init {:_version 1
-          :linked-tags {}
-          :settings {:audio {:max-volume 80}}}))
+    :local-file
+    :file-path path
+    :init {:_version 1
+           :linked-tags {}
+           :settings {:audio {:max-volume DEFAULT_MAX_VOLUME}}}))
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)
@@ -31,7 +33,7 @@
   (get-in db [:settings :audio]))
 
 (defn max-volume [db]
-  (get-in db [:settings :audio :max-volume] 100))
+  (get-in db [:settings :audio :max-volume] DEFAULT_MAX_VOLUME))
 
 (defn min-volume [db]
   (get-in db [:settings :audio :min-volume] 0))
