@@ -169,13 +169,11 @@
       ;; kick off async parse
       (interop/parse-medias-async! (parse-handler sys play-request-id) medias))))
 
-
 (defn handle-media-changed [{:keys [player emitter]} {:keys [media-ref]}]
   (let [media (-> media-ref (.newMedia))]
     (try
       (let [info (media-info media)]
         (swap! audio-state assoc :current-track info)
-        (swap! audio-state assoc-in [:current-playback :current-volume] (float (/ 1 (interop/volume player))))
         ;; (tap> {:meta info :media media :active (current-play-request!)})
         (async/put! emitter (player-event {:event :player/media-changed :info info})))
       (finally
@@ -185,7 +183,7 @@
                        :internal-player/position-changed
                        :internal-player/time-changed})
 
-(defn internal-event-handler [{:keys [emitter] :as sys} event]
+(defn internal-event-handler [{:keys [emitter player] :as sys} event]
   (try
     (when-not (contains? not-interesting (:event event))
       (tap> {(:event event) event}))
@@ -197,10 +195,12 @@
       :internal-player/muted                   (do
                                                  (swap! audio-state assoc-in [:current-playback :muted?] (:muted? event))
                                                  (async/put! emitter (player-event {:event :player/muted :muted? (:muted? event)})))
-      :internal-player/volume-changed          (do
-                                                 (swap! audio-state assoc-in [:current-playback :current-volume] (:new-volume event))
-                                                 (async/put! emitter (player-event {:event :player/volume-changed :volume (:new-volume event)})))
+      :internal-player/volume-changed          (let [new-volume (max 0 (:new-volume event))]
+                                                 ;; sometimes vlc will send -1
+                                                 (swap! audio-state assoc-in [:current-playback :current-volume] new-volume)
+                                                 (async/put! emitter (player-event {:event :player/volume-changed :volume new-volume})))
       :internal-player/playing                 (do (swap! audio-state assoc-in [:current-playback :state] :playing)
+                                                   (swap! audio-state assoc-in [:current-playback :current-volume] (float (/ (interop/volume player) 100)))
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :playing})))
       :internal-player/paused                  (do (swap! audio-state assoc-in [:current-playback :state] :paused)
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :paused})))

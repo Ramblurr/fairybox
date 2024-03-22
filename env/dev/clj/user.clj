@@ -77,6 +77,8 @@
   (def media1 (-> player  (.mediaPlayer) (.media) (.newMedia)))
   (-> player  (.mediaPlayer) (.audio) (.setVolume 40))
 
+  (interop/volume player)
+
   (def playlist "/home/ramblurr/media/playlists/LibbyDish1.m3u")
 
   (browse/m3u? playlist)
@@ -102,13 +104,13 @@
   (interop/media->meta-map (first medias))
   (interop/media->meta-map item-0)
   (interop/parse-medias-async! (interop/parse-event-listener
-                          (fn [^Media media meta-map status]
-                             ;; this is the parse handler callback
-                            (tap> {:event    :internal-player/pre-play-parse
-                                   :media    media
-                                   :status   status
-                                   :meta-map meta-map})))
-                         [item-0])
+                                 (fn [^Media media meta-map status]
+                                   ;; this is the parse handler callback
+                                   (tap> {:event    :internal-player/pre-play-parse
+                                          :media    media
+                                          :status   status
+                                          :meta-map meta-map})))
+                               [item-0])
 
   (.release playlist-media-list)
 
@@ -121,6 +123,7 @@
 
   (interop/set-media-list! player media-list)
   (interop/unpause! player)
+  (interop/volume player)
 
   (-> media-list (.media) (.count))
 
