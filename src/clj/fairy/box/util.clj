@@ -40,3 +40,17 @@
   "returns true if x is an exception"
   [x]
   (instance? Throwable x))
+
+(defn remove-nils
+  "Returns the list/vec/map less any keys that have nil values"
+  [m]
+  (cond (map? m)
+        (into {} (filter #(not (nil? (val %))) m))
+        (list? m)
+        (remove #(nil? %) m)
+        (vector? m)
+        (filterv #(some? %) m)
+        (sequential? m)
+        (remove #(nil? %) m)
+        :else
+        (throw "remove-nils: Not implemented")))

@@ -8,7 +8,8 @@
    [clojure.core.async :as async]
    [fairy.box.audio.interop :as interop]
    [clojure.tools.logging :as log]
-   [integrant.core :as ig]))
+   [integrant.core :as ig]
+   [fairy.box.db :as db]))
 
 (defn- player-event
   "Constructs a valid event map for a player event"
@@ -63,21 +64,21 @@
         meta (or (interop/media->meta-map media) {})]
     (merge meta file-info)))
 
-(defn parse-handler [{:keys [player internal-ch] } play-request-id]
+(defn parse-handler [{:keys [player internal-ch]} play-request-id]
   (interop/parse-event-listener
     ;; this is the parse handler callback
-    (fn [^Media media meta-map status]
-      (try
-        (async/put! internal-ch {:event           :internal-player/pre-play-parse
-                                 :media-info      (media-info media)
-                                 :status          status
-                                 :play-request-id play-request-id
-                                 :meta-map        meta-map})
-        (catch Exception e
-          (log/error e "parse media error")
-          (tap> {:parse-error e}))
-        (finally
-          (interop/release-later player [media]))))))
+   (fn [^Media media meta-map status]
+     (try
+       (async/put! internal-ch {:event           :internal-player/pre-play-parse
+                                :media-info      (media-info media)
+                                :status          status
+                                :play-request-id play-request-id
+                                :meta-map        meta-map})
+       (catch Exception e
+         (log/error e "parse media error")
+         (tap> {:parse-error e}))
+       (finally
+         (interop/release-later player [media]))))))
 
 (defn pre-play-parse-playlist-items! [{:keys [player] :as sys} {:keys [id media-list] :as play-request}]
   (let [playlist-media (-> media-list (.media) (.newMedia 0))
@@ -157,8 +158,6 @@
       :playlist-items-parsed false
       :media-list media-list
       :parsed-countdown (count medias)}]))
-
-
 
 (defn handle-play-request! [sys {:keys [source-type play-request-id] :as req}]
   (when-let [[medias new-play-request] (condp = source-type
@@ -288,6 +287,20 @@
     (let [player (interop/init-player! handler)]
       (interop/play-mrl! player item-path))))
 
+(defn wrap-volume [db-conn new-volume]
+  (let [db @db-conn
+        minv (db/min-volume db)
+        maxv (db/max-volume db)]
+    (max minv (min maxv new-volume))))
+
+(defn adjust-volume! [{:keys [player db-conn] :as sys} delta]
+  (let [current (interop/volume player)
+        new-volume (wrap-volume db-conn  (+ current delta))]
+    (interop/set-volume! player new-volume)))
+
+(defn set-volume! [{:keys [player db-conn] :as sys} v]
+  (interop/set-volume! player (wrap-volume db-conn v)))
+
 (defn command-handler [{:keys [player internal-ch] :as sys} {:keys [path value] :as event}]
   (try
     (tap> {:command value})
@@ -300,14 +313,14 @@
         :audio/play-pause (interop/play-pause! player)
         :audio/next (interop/next! player)
         :audio/prev (interop/previous! player)
-        :audio/volume-up (interop/adjust-volume! player (get-in config [:volume-up-step]))
-        :audio/volume-down (interop/adjust-volume! player (get-in config [:volume-down-step]))
+        :audio/volume-up (adjust-volume! sys (get-in config [:volume-up-step]))
+        :audio/volume-down (adjust-volume! sys (get-in config [:volume-down-step]))
         :audio/skip-time (interop/skip-time! player (get-in value [:milliseconds]))
         :audio/set-time (interop/set-time! player (get-in value [:milliseconds]))
-        :audio/adjust-volume (interop/adjust-volume! player (get-in value [:delta]))
-        :audio/set-volume (interop/set-volume! player
-                                               ;; interop wants [0, 100] integer
-                                               (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
+        :audio/adjust-volume (adjust-volume! sys (get-in value [:delta]))
+        :audio/set-volume (set-volume! sys
+                                       ;; interop wants [0, 100] integer
+                                       (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
         :audio/set-pause (interop/set-pause! player (:paused? value))
         :audio/play (interop/set-pause! player false)
         :audio/pause (interop/set-pause! player true)
@@ -350,7 +363,7 @@
                    (command-handler sys ev)
                    (recur)))))
 
-(defn- init-audio! [{:keys [bus settings]}]
+(defn- init-audio! [{:keys [bus settings db-conn]}]
   (let [emitter (async/chan)
         commands-ch (async/chan)
         internal-ch (async/chan)
@@ -359,6 +372,7 @@
                                        (async/put! internal-ch ev)))
         sys {:emitter emitter
              :settings settings
+             :db-conn db-conn
              :commands-ch commands-ch
              :internal-ch internal-ch
              :exit-ch exit-ch

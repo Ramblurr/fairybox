@@ -10,7 +10,9 @@
                                      :settings  #ig/ref :fairy.box/settings
                                      :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.audio.system/player     {:bus #ig/ref :fairy.box.bus/bus
-                                     :settings  #ig/ref :fairy.box/settings}
+                                     :settings  #ig/ref :fairy.box/settings
+                                     :db-conn #ig/ref :fairy.box.db/db
+                                     }
  :fairy.box.web.routes.ui/ws-events {:bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}

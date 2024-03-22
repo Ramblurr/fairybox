@@ -6,6 +6,7 @@
    [fairy.box.db :as db]
    [fairy.box.audio :as audio]
    [fairy.box.web.routes.utils :as util]
+   [fairy.box.util :refer [remove-nils]]
    [ring.adapter.undertow.websocket :as ws]
    [cheshire.core :as cheshire]
    [fairy.box.audio.browse :as browse]
@@ -289,6 +290,9 @@
            :class (cs "range-sm" (css :w-full :h-1 :rounded-lg  :appearance-none :cursor-pointer
                                       :bg-smoky-900 [:dark :bg-gray-700]))}])
 
+(defn volume-human [volume]
+  (str (int (* 100 volume)) "%"))
+
 (defn volume-icon
   ([volume muted?]
    (when volume
@@ -296,10 +300,12 @@
                   (or (== 0 volume) (and (boolean? muted?) muted?)) :muted
                   (< volume 0.5) :quiet
                   :else :loud)]
-       (icon
-        {:muted [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
-         :quiet [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
-         :loud [:svg {:id "volume-icon" :width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]})))))
+       [:div {:id "volume-icon"}
+        (icon
+         {:muted [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
+          :quiet [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+          :loud [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]})
+        [:p (volume-human volume)]]))))
 
 (defn player [{:keys [duration mrl track-number repeat-mode] :as current-track} {:keys [current-position current-volume current-time state muted?] :as playback}]
   (let [$button-base (css :transition-all :duration-500
@@ -386,7 +392,8 @@
      [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
       (settings-option "RFID Tags" icons/radio-frequency "rfid-link")
       (settings-option "Browse Audio" icons/file-audio "browse-audio")
-      (settings-option "Listening History" icons/clock-rotate-left "rfid-link")]]]])
+      (settings-option "Listening History" icons/clock-rotate-left "rfid-link")
+      (settings-option "Playback" icons/play "playback-settings")]]]])
 
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
@@ -551,6 +558,55 @@
     (tap> [item-path emitter])
     (response/hx-redirect "player-controls?loading=true")))
 
+(defn playback-settings-form [req {:keys [min-volume max-volume]}]
+  [:form {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))
+          :hx-target "#playback-settings" :hx-post "playback-settings!" :id "playback-settings"}
+   [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Playback Settings"]]
+   [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
+    [:div {:class (css [:sm :col-span-4])}
+     [:label {:for "minvolume" :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Min Volume"]
+     [:div {:class (css :mt-2)}
+      [:div {:class (css :flex [:sm :max-w-md])}
+       [:input {:type  "number" :min 0 :max 100 :step 1 :name "minvolume" :id "minvolume" :autocomplete "minvolume"
+                :value min-volume
+                :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
+                            :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:placeholder :text-gray-400] [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]
+    [:div {:class (css [:sm :col-span-4])}
+     [:label {:for "maxvolume" :class (css :block :text-sm :font-medium :leading-6 :text-gray-900)} "Max Volume"]
+     [:div {:class (css :mt-2)}
+      [:div {:class (css :flex [:sm :max-w-md])}
+       [:input {:type  "number" :min 0 :max 100 :step 1 :name "maxvolume" :id "maxvolume" :autocomplete "maxvolume"
+                :value max-volume
+                :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
+                            :bg-transparent :py-1.5 :pl-1 :text-gray-900 [:placeholder :text-gray-400] [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]]
+
+   [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
+    [:button {:type   "button"   :class     (css :text-sm :font-semibold :leading-6 :text-gray-900
+                                                 [:dark :text-smoky-300])
+              :hx-get "settings" :hx-target "#active-tab"}
+     "Cancel"]
+    [:button {:type  "submit"
+              :class (css :rounded-md :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
+                          [:disabled :bg-gray-400 :text-gray-300]
+                          :bg-smoky-600
+                          [:dark :bg-cloud-burst-600])}
+     "Save"]]])
+
+(defcomponent ^:endpoint playback-settings [req]
+  (let [body [:div {:id "active-tab"}
+              (playback-settings-form req (db/audio-settings (util/req-db req)))]]
+    (if (htmx? req)
+      body
+      (page-htmx (home-page :settings body)))))
+
+(defcomponent ^:endpoint playback-settings! [req ^:long-option minvolume ^:long-option maxvolume]
+  (tap> {:settings {:minvolume minvolume :maxvolume maxvolume}})
+  (let [audio (remove-nils {:min-volume minvolume
+                            :max-volume maxvolume})]
+
+    (db/upsert-audio-settings! (util/req-db-conn req) audio)
+    (playback-settings-form req audio)))
+
 (defcomponent ^:endpoint browse-audio [req]
   (let [{:keys [uid action]} @rfid-cache
         body [:div {:id "active-tab"}
@@ -574,7 +630,7 @@
 (defcomponent ^:endpoint rfid-link-folder! [req folder-item rfid-uid]
   ;; (tap> {:rfid rfid-uid :folder folder-item})
   (when (and (seq rfid-uid) (seq folder-item))
-    (db/link-rfid-tag! (:db-conn (util/route-data req)) rfid-uid folder-item))
+    (db/link-rfid-tag! (util/req-db-conn req) rfid-uid folder-item))
   (rfid-link req))
 
 (defcomponent ^:endpoint play-queue [req]
@@ -609,7 +665,7 @@
       (page-htmx (home-page :controls body)))))
 
 (defcomponent ^:endpoint home [req]
-  rfid-link-folder! rfid-link play-queue player-controls settings browse-audio
+  rfid-link-folder! rfid-link play-queue player-controls settings browse-audio playback-settings playback-settings!
   play-path! traverse-dir
   (home-page :controls (player-controls-tab req)))
 

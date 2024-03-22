@@ -24,6 +24,24 @@
   (when tag-uid
     (get-in db [:linked-tags tag-uid :folder])))
 
+(defn settings [db]
+  (get-in db [:settings]))
+
+(defn audio-settings [db]
+  (get-in db [:settings :audio]))
+
+(defn max-volume [db]
+  (get-in db [:settings :audio :max-volume] 100))
+
+(defn min-volume [db]
+  (get-in db [:settings :audio :min-volume] 0))
+
+(defn upsert-settings! [conn settings]
+  (swap! conn assoc :settings settings))
+
+(defn upsert-audio-settings! [conn audio-settings]
+  (swap! conn assoc-in [:settings :audio] audio-settings))
+
 (comment
   (do
     (require '[integrant.repl.state :as state])
