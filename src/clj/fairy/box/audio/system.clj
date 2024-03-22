@@ -169,11 +169,13 @@
       ;; kick off async parse
       (interop/parse-medias-async! (parse-handler sys play-request-id) medias))))
 
-(defn handle-media-changed [{:keys [emitter]} {:keys [media-ref]}]
+
+(defn handle-media-changed [{:keys [player emitter]} {:keys [media-ref]}]
   (let [media (-> media-ref (.newMedia))]
     (try
       (let [info (media-info media)]
         (swap! audio-state assoc :current-track info)
+        (swap! audio-state assoc-in [:current-playback :current-volume] (float (/ 1 (interop/volume player))))
         ;; (tap> {:meta info :media media :active (current-play-request!)})
         (async/put! emitter (player-event {:event :player/media-changed :info info})))
       (finally
