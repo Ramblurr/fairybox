@@ -287,17 +287,20 @@
   ;; we do this because we want to handle the events separate from the normal player
   (let [player-atom (atom nil)
         handler     (fn [{:keys [event]}]
-                      (when (= event :internal-player/finished)
-                        (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
-                        (future
-                          (try
-                            (Thread/sleep 500)
-                            (when @player-atom
-                              (interop/stop! @player-atom)
+                      (try
+                        (when (= event :internal-player/finished)
+                          (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
+                          (future
+                            (try
                               (Thread/sleep 500)
-                              (interop/release-player! @player-atom))
-                            (catch Exception e
-                              (log/error e "one-shot cleanup error"))))))
+                              (when @player-atom
+                                (interop/stop! @player-atom)
+                                (Thread/sleep 500)
+                                (interop/release-player! @player-atom))
+                              (catch Exception e
+                                (log/error e "one-shot cleanup error")))))
+                        (catch Exception e
+                          (log/error e "one-shot event error"))))
 
         player      (new-player! @db-conn handler)]
     (interop/play-mrl! player item-path)
@@ -380,11 +383,14 @@
 
 (defn- init-audio! [{:keys [bus settings db-conn]}]
   (let [emitter (async/chan)
-        commands-ch (async/chan)
-        internal-ch (async/chan)
+        commands-ch (async/chan (async/sliding-buffer 2048))
+        internal-ch (async/chan (async/sliding-buffer 2048))
         exit-ch (async/chan)
         player (new-player! @db-conn (fn [ev]
-                                       (async/put! internal-ch ev)))
+                                       (try
+                                         (async/put! internal-ch ev)
+                                         (catch Exception e
+                                           (log/error e "player put internal-ch error")))))
         sys {:emitter emitter
              :settings settings
              :db-conn db-conn

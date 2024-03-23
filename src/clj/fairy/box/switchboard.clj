@@ -61,7 +61,7 @@
                                                         :item-path (browse/absoluteify settings rel-folder-path)
                                                         :uid (:uid value)}} prn))))
       :removed (async/put! emitter {:path "/player/commands"
-                                   :value {:action :audio/stop}})
+                                    :value {:action :audio/stop}})
       :error (do
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))
@@ -129,9 +129,12 @@
           (do
             (async/close! exit-ch)
             nil)
-          (let [{:keys [handler]} (channels channel)]
+          (let [{:keys [handler name]} (channels channel)]
             (when event
-              (handler (assoc  opts :emitter emitter) event))
+              (try
+                (handler (assoc  opts :emitter emitter) event)
+                (catch Exception e
+                  (log/error e "Switchboard event handler error" {:event event :handler name}))))
             (recur)))))
     {:channels channels
      :emitter emitter
