@@ -1,8 +1,8 @@
 (ns fairy.box.web.routes.api
-  (:import [java.io FileInputStream]
-           [java.nio.file Paths]
+  (:import [java.nio.file Paths]
            [java.net URL URLDecoder MalformedURLException])
   (:require
+   [clojure.tools.logging :as log]
    [clojure.java.io :as io]
    [clojure.core.async :as async]
    [jp.nijohando.event :as ev]
@@ -73,27 +73,34 @@
       (cond
         (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path current-track)
         (str/starts-with? artwork-url "file://") (artwork-file-url-to-path artwork-url)
-        :else nil))))
+        :else (do (log/error "Unhandled VLC artwork path type" {:url artwork-url})
+                  nil)))))
 
-(defn img-response [img-file img-type]
+(defn img-response [input-stream img-type]
   {:status  200
    :headers {"Content-Type" (str "image/" img-type)
              "Cache-Control" "no-cache, no-store, must-revalidate"
              "Pragma" "no-cache"
              "Expires" "0"}
-   :body    (FileInputStream. img-file)})
+   :body    input-stream})
 
-(defn default-artwork [req]
-  (img-response (io/file (io/resource "public/img/jukebox.png"))  "png"))
+(defn default-artwork
+  "Returns a resource pointing to the default artwork image in the classpath."
+  []
+  [(io/resource "public/img/jukebox.png") "png"])
 
-(defn current-artwork [req]
-  (if-let [image-path (get-current-artwork-path!)]
+(defn actual-artwork
+  "Returns [file img-type] if the artwork exists, otherwise nil."
+  []
+  (when-let [image-path (get-current-artwork-path!)]
     (let [img-file (io/file image-path)
           img-type (str/lower-case (subs image-path (inc (.lastIndexOf image-path "."))))]
-      (if (.exists img-file)
-        (img-response img-file img-type)
-        (default-artwork req)))
-    (default-artwork req)))
+      (when (.exists img-file)
+        [img-file img-type]))))
+
+(defn current-artwork [req]
+  (let [[img-file img-type] (or (actual-artwork) (default-artwork))]
+    (img-response (io/input-stream img-file) img-type)))
 
 ;; Routes
 (defn api-routes [{:keys [emitter] :as opts}]
