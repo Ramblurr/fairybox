@@ -1,0 +1,403 @@
+---
+- name: Configure fairybox # from a fresh rpi os 64 bit lite install
+  hosts: fairybox
+  become: false
+  vars:
+    user_uid: 1000
+    azul_jdk_name: zulu17.50.19-ca-jdk17.0.11-linux_aarch64
+    babashka_version: "1.3.191"
+  tasks:
+    - name: Install SSH key
+      ansible.builtin.copy:
+        src: /home/ramblurr/.ssh/casey-all.pub
+        dest: /home/ramblurr/.ssh/authorized_keys
+        mode: "0640"
+
+    - name: Create keyrings directory
+      become: true
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      become: true
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.gpga
+        checksum: "sha256:1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+      register: docker_gpg
+
+    - name: Convert Docker GPG key to keyring format
+      become: true
+      ansible.builtin.command: gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg /etc/apt/keyrings/docker.gpga
+      when: docker_gpg is changed
+
+    - name: Set permissions for Docker GPG keyring
+      become: true
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker repository
+      become: true
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_lsb.codename }} stable"
+        filename: docker
+        update_cache: true
+
+    - name: Add Azul GPG key
+      become: true
+      ansible.builtin.apt_key:
+        url: https://repos.azul.com/azul-repo.key
+        state: present
+        keyring: /etc/apt/keyrings/azul.gpg
+
+    - name: Add Azul repository
+      become: true
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/azul.gpg] https://repos.azul.com/zulu/deb stable main"
+        filename: zulu
+        update_cache: true
+
+    - name: Add backports repository
+      become: true
+      ansible.builtin.apt_repository:
+        repo: "deb http://deb.debian.org/debian bookworm-backports main"
+        filename: bookworm-backports
+        update_cache: true
+
+    - name: Remove default packages
+      become: true
+      ansible.builtin.apt:
+        name:
+          - python3-rpi.gpio
+        state: absent
+        update_cache: false
+
+    - name: Install packages
+      become: true
+      ansible.builtin.apt:
+        default_release: bookworm-backports
+        name:
+          # from debian or debian backports
+          - authbind
+          - borgmatic
+          - ca-certificates
+          - curl
+          - git
+          - gnupg
+          - htop
+          - kitty-terminfo
+          - lsof
+          - ncdu
+          - pigpio
+          - pigpiod
+          - pigpio-tools
+          - pipewire
+          - pipewire-alsa
+          - python3-rpi-lgpio
+          - rsync
+          - tmux
+          - vim-tiny
+          - vlc-bin
+          - vlc-plugin-base
+          - wireplumber
+          # from azul repo
+          - zulu17-ca-jdk-headless
+          # from docker repo
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Get bb version
+      ansible.builtin.shell: /usr/local/bin/bb --version | grep -q {{ babashka_version }}
+      register: bb_version
+      failed_when: false
+      changed_when: false
+
+    - name: Install babashka
+      become: true
+      args:
+        creates: /usr/local/bin/bb
+        chdir: /tmp
+      ansible.builtin.shell: |
+        set -xe
+        curl --fail -OL https://github.com/babashka/babashka/releases/download/v{{ babashka_version }}/babashka-{{ babashka_version }}-linux-aarch64-static.tar.gz
+        tar -xzf babashka-{{ babashka_version }}-linux-aarch64-static.tar.gz
+        rm -rf babashka-{{ babashka_version }}-linux-aarch64-static.tar.gz
+        mv ./bb /usr/local/bin/bb
+      when:
+        - bb_version.rc != 0
+
+    - name: Ensure dtoverlay=hifiberry-dac exists
+      become: true
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/config.txt
+        regexp: "^dtparam=hifiberry-dac"
+        line: dtoverlay=hifiberry-dac
+        state: present
+
+    - name: Ensure dtoverlay=spi0-1cs,cs0_pin=8 exists
+      become: true
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/config.txt
+        line: dtoverlay=spi0-1cs,cs0_pin=8
+        state: present
+
+    - name: Ensure dtparam=audio=on does NOT exist
+      become: true
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/config.txt
+        regexp: "^dtparam=audio.*"
+        state: absent
+
+    - name: Modify dtoverlay=vc4-kms-v3d to dtoverlay=vc4-kms-v3d,noaudio
+      become: true
+      ansible.builtin.lineinfile:
+        path: /boot/firmware/config.txt
+        regexp: "^dtoverlay=vc4-kms-v3d.*"
+        line: dtoverlay=vc4-kms-v3d,noaudio
+
+    - name: Ensure pigpiod.service directory exists for overrides
+      become: true
+      ansible.builtin.file:
+        path: /etc/systemd/system/pigpiod.service.d
+        state: directory
+
+    - name: Create override.conf for pigpiod.service
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pigpiod.service.d/override.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/pigpiod -l -n 127.0.0.1 -t0
+      notify: restart pigpiod
+
+    - name: Enable pigpiod
+      become: true
+      ansible.builtin.systemd_service:
+        name: pigpiod.service
+        state: started
+        enabled: true
+
+    - name: Udev rules
+      become: true
+      ansible.builtin.copy:
+        content: |
+          SUBSYSTEM=="bcm2835-gpiomem", KERNEL=="gpiomem", GROUP="gpio",MODE="0660"
+          SUBSYSTEM=="bcm2711-gpiomem", KERNEL=="gpiomem", GROUP="gpio",MODE="0660"
+          SUBSYSTEM=="gpio", KERNEL=="gpiochip*", ACTION=="add", RUN+="/usr/bin/bash -c 'chown root:gpio  /sys/class/gpio/export /sys/class/gpio/unexport ; chmod 220 /sys/class/gpio/export /sys/class/gpio/unexport'"
+          SUBSYSTEM=="gpio", KERNEL=="gpio*", ACTION=="add",RUN+="/usr/bin/bash -c 'chown root:gpio /sys%p/active_low /sys%p/direction /sys%p/edge /sys%p/value ; chmod 660 /sys%p/active_low /sys%p/direction /sys%p/edge /sys%p/value'"
+          SUBSYSTEM=="i2c-dev", GROUP="i2c",  MODE="0666"
+          SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"
+        dest: /etc/udev/rules.d/50-fairybox.rules
+        owner: root
+        group: root
+        mode: 0755
+      notify: reload udev
+
+    - name: Create /var/lib/fairybox directory
+      become: true
+      ansible.builtin.file:
+        path: /var/lib/fairybox
+        state: directory
+        owner: ramblurr
+        group: ramblurr
+        mode: "0750"
+
+    - name: Create /srv/media directory
+      become: true
+      ansible.builtin.file:
+        path: /srv/media
+        state: directory
+        owner: ramblurr
+        group: ramblurr
+        mode: "0750"
+
+    - name: Enable systemd lingering for ramblurr
+      become: true
+      ansible.builtin.command:
+        cmd: loginctl enable-linger ramblurr
+      args:
+        creates: /var/lib/systemd/linger/ramblurr
+
+    - name: Ensure ramblurr is added to groups
+      become: true
+      ansible.builtin.user:
+        name: ramblurr
+        groups: gpio,spi,i2c,audio
+        append: true
+
+    - name: Configure authbind
+      become: true
+      ansible.builtin.file:
+        path: /etc/authbind/byport/80
+        state: touch
+        owner: ramblurr
+        group: root
+        mode: "0755"
+
+    - name: Create ~/.config/systemd/user/ directory
+      tags: [app]
+      ansible.builtin.file:
+        path: /home/ramblurr/.config/systemd/user
+        recurse: true
+        state: directory
+        owner: ramblurr
+        group: ramblurr
+        mode: "0750"
+
+    - name: Create fairybox.service systemd unit file
+      tags: [app]
+      ansible.builtin.copy:
+        dest: /home/ramblurr/.config/systemd/user/fairybox.service
+        content: |
+          [Unit]
+          Description=fairybox
+          Wants=pipewire.service
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/var/lib/fairybox
+          ExecStart=authbind --deep /usr/bin/java -XX:-OmitStackTraceInFastThrow -DPIGPIOD_HOST=127.0.0.1 -jar /var/lib/fairybox/box-standalone.jar
+          Environment="NREPL_HOST=0.0.0.0"
+          Environment="PORT=80"
+          Environment="DB_PATH=/var/lib/fairybox/db.edn"
+          Environment="MEDIA_DIR=/srv/media"
+          Restart=on-failure
+          TimeoutStopSec=60
+
+          [Install]
+          WantedBy=default.target
+      notify: restart fairybox
+
+    - name: Enable and start fairybox service
+      tags: [app]
+      ansible.builtin.systemd_service:
+        scope: user
+        name: fairybox
+        enabled: true
+        state: started
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+
+    - name: Install gpio-shutoff
+      become: true
+      tags: [onoff]
+      ansible.builtin.copy:
+        content: |
+          #!/usr/bin/bash
+          set -e
+          poweroff_pin="4"
+          if [ "$1" = "poweroff" ]; then
+            /usr/bin/pinctrl set "$poweroff_pin" op dl
+          fi
+        dest: /usr/lib/systemd/system-shutdown/gpio-shutoff
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Install onoff-shim-trigger
+      become: true
+      tags: [onoff]
+      ansible.builtin.copy:
+        content: |
+          #!/usr/bin/bash
+          set -e
+          trigger_pin="17"
+          led_pin="17"
+          /usr/bin/pinctrl set "$trigger_pin" ip
+          power=$(/usr/bin/pinctrl get "$trigger_pin" | awk '{print $5}')
+          if [ "$power" = "hi" ]; then
+            switchtype="lo" # Momentary button
+          elif [ "$power" = "lo" ]; then
+            switchtype="hi" # Not a momentary button
+          else
+            echo "Failed getting trigger_pin=$trigger_pin value (got: '$power')"
+            exit 1
+          fi
+          until [ "$power" = "$switchtype" ]; do
+            power=$(/usr/bin/pinctrl get "$trigger_pin" | awk '{print $5}')
+            sleep 1
+          done
+          /usr/bin/pinctrl set "$led_pin" op
+          # Blink the LED
+          for iteration in 1 2 3 5 6 7 8; do
+            /usr/bin/pinctrl set "$led_pin" dl
+            sleep 0.2
+            /usr/bin/pinctrl set "$led_pin" dh
+            sleep 0.2
+          done
+          echo "Powering Off!"
+          /usr/bin/systemctl poweroff
+        dest: /usr/local/bin/onoff-shim-trigger
+        owner: root
+        group: root
+        mode: 0755
+      notify: restart onoff-trigger
+
+    - name: Create onoff-trigger.service systemd unit file
+      become: true
+      tags: [onoff]
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/onoff-trigger.service
+        content: |
+          [Unit]
+          Description=OnOff SHIM daemon
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/onoff-shim-trigger
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart onoff-trigger
+
+    - name: Enable and start onoff-trigger service
+      become: true
+      tags: [onoff]
+      ansible.builtin.systemd_service:
+        name: onoff-trigger
+        enabled: true
+        state: started
+
+  handlers:
+    - name: restart pigpiod
+      become: true
+      ansible.builtin.systemd_service:
+        name: pigpiod.service
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
+    - name: restart fairybox
+      ansible.builtin.systemd_service:
+        name: fairybox.service
+        state: restarted
+        daemon_reload: true
+        enabled: true
+        scope: user
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
+
+    - name: restart onoff-trigger
+      become: true
+      tags: [onoff]
+      ansible.builtin.systemd_service:
+        name: onoff-trigger.service
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
+    - name: reload udev
+      become: true
+      ansible.builtin.shell: udevadm control --reload-rules && udevadm trigger
