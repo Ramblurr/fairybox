@@ -1,5 +1,6 @@
 (ns fairy.box.web.views.home
   (:require
+   [fairy.box.web.views.ui :as ui]
    [fairy.box.web.views.icon :as icons]
    [clojure.string :as str]
    [clojure.core.async :as async]
@@ -164,17 +165,12 @@
        #_(audio-folder-select settings linked-folder)]]
 
      [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-      [:button {:type "button" :class (css :text-sm :font-semibold :leading-6 :text-gray-900
-                                           [:dark :text-smoky-300])
-                :hx-get "settings" :hx-target "#active-tab"}
-       "Cancel"]
-      [:button {:type "submit"
-                :disabled (nil? uid)
-                :class (css :rounded-md  :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
-                            [:disabled :bg-gray-400 :text-gray-300]
-                            :bg-smoky-600
-                            [:dark :bg-cloud-burst-600])}
-       "Link To Folder"]]]]])
+      (ui/button :priority :link :label "Back"
+                 :hx-get "settings" :hx-target "#active-tab"
+                 :hx-push-url "settings")
+      (ui/button :type :submit :priority :primary
+                 :disabled? (nil? uid)
+                 :label "Link To Folder")]]]])
 
 (defn duration-data
   [^long duration-in-millis]
@@ -382,18 +378,14 @@
 
 (defn settings-option [label icon hx-get]
   [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"
-   [:a {:hx-get hx-get :hx-target "#active-tab" :hx-push-url hx-get
-        :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold
-                    :cursor-pointer :text-smoky-800
-                    [:hover-mouse [:hover :bg-smoky-300]]
-                    [:dark :text-smoky-400
-                     [:hover-mouse [:hover :bg-smoky-800]]])}
-    (icon {:class (css :h-6 :w-6 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])})
-    label]])
+   (ui/button :priority :link :label label  :hx-get hx-get :hx-target "#active-tab" :hx-push-url hx-get
+              :icon icon :icon-class (css :h-8 :w-8 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])
+              :centered? true
+              :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold))])
 
 (defn settings-view [req]
   [:div {:class (cs "fade-in-out" (css :px-10 :max-w-5xl))}
-   [:h1 {:class (css :text-2xl)} "Settings"]
+   [:h1 {:class (css :text-2xl :mb-2)} "Settings"]
    [:div
     [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
      [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
@@ -404,7 +396,7 @@
 
 (defn tab [name comp label active-tab extra-css]
   (let [$tab-base (css :rounded-lg :group :relative :min-w-0 :flex-1 :overflow-hidden
-                       :py-2 :px-1 :text-center :text-sm :leading-normal :font-medium  [:focus :z-10]
+                       :py-4 :px-1 :text-center :text-lg :leading-normal :font-medium  [:focus :z-10]
                        :text-smoky-800
                        ;; [:hover :bg-smoky-800]
                        [:dark :text-smoky-500])
@@ -420,11 +412,11 @@
 
 (defn player-tabs [active-tab]
   [:div {:id "player-tabs" :hx-swap-oob "outerHTML :#player-tabs" :class (css :pt-2 :px-2 :max-w-5xl)}
-   [:nav {:class (css :isolate :flex  :rounded-lg :shadow), :aria-label "Tabs"}
+   [:nav {:class (css :isolate :flex  :rounded-lg :shadow :mb-2), :aria-label "Tabs"}
     (tab  :controls "player-controls" "Now Playing" active-tab nil)
     (tab  :play-queue "play-queue" "Play Queue" active-tab nil)
     (tab :settings "settings"
-         [:svg {:xmlns "http://www.w3.org/2000/svg", :fill "none", :stroke "currentColor", :stroke-width "1.5", :class (css :w-6 :h-6) , :viewBox "0 0 24 24"} [:path {:stroke-linecap "round", :stroke-linejoin "round", :d "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"}] [:path {:stroke-linecap "round", :stroke-linejoin "round", :d "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"}]]
+         (icons/cog {:class (css :w-8 :h-8)})
          active-tab
          (css :grow-0 :shrink :min-w-min))]])
 
@@ -588,16 +580,8 @@
                             :bg-transparent :py-1.5 :pl-1   [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]]
 
    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-    [:button {:type   "button"   :class     (css :text-sm :font-semibold :leading-6 :text-gray-900
-                                                 [:dark :text-smoky-300])
-              :hx-get "settings" :hx-target "#active-tab"}
-     "Cancel"]
-    [:button {:type  "submit"
-              :class (css :rounded-md :px-3 :py-2 :text-sm :font-semibold :text-white :shadow-sm [:hover :bg-cloud-burst-500] [:focus-visible :outline :outline-2 :outline-offset-2 :outline-cloud-burst-600]
-                          [:disabled :bg-gray-400 :text-gray-300]
-                          :bg-smoky-600
-                          [:dark :bg-cloud-burst-600])}
-     "Save"]]])
+    (ui/button :label "Back" :priority :link :hx-get "settings" :hx-push-url "settings" :hx-target "#active-tab")
+    (ui/button :type :submit :label "Save")]])
 
 (defcomponent ^:endpoint playback-settings [req]
   (let [body [:div {:id "active-tab"}
