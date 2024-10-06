@@ -15,7 +15,7 @@
    [kit.edge.server.undertow]
    [fairy.box.web.handler]
 
-   ;; Routes
+   ;; System components
    [fairy.box.web.routes.api]
    [fairy.box.web.routes.ui]
    [fairy.box.db]
@@ -24,7 +24,8 @@
    [fairy.box.audio.system]
    [fairy.box.hardware]
    [fairy.box.settings]
-   [fairy.box.mqtt])
+   [fairy.box.mqtt]
+   [fairy.box.tts])
   (:gen-class))
 
 ;; log uncaught exceptions in threads

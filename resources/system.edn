@@ -6,18 +6,19 @@
 
  :fairy.box.db/db                   {:path #or [#env DB_PATH "/var/lib/fairybox/db.edn"]}
  :fairy.box.bus/bus                 {}
- :fairy.box.switchboard/switchboard {:bus     #ig/ref :fairy.box.bus/bus
-                                     :settings  #ig/ref :fairy.box/settings
-                                     :db-conn #ig/ref :fairy.box.db/db}
- :fairy.box.audio.system/player     {:bus #ig/ref :fairy.box.bus/bus
-                                     :settings  #ig/ref :fairy.box/settings
-                                     :db-conn #ig/ref :fairy.box.db/db
-                                     }
+ :fairy.box.switchboard/switchboard {:bus      #ig/ref :fairy.box.bus/bus
+                                     :settings #ig/ref :fairy.box/settings
+                                     :db-conn  #ig/ref :fairy.box.db/db}
+ :fairy.box.audio.system/player     {:bus      #ig/ref :fairy.box.bus/bus
+                                     :settings #ig/ref :fairy.box/settings
+                                     :db-conn  #ig/ref :fairy.box.db/db}
  :fairy.box.web.routes.ui/ws-events {:bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
  :reitit.routes/bus-emitter         {:bus     #ig/ref :fairy.box.bus/bus
                                      :db-conn #ig/ref :fairy.box.db/db}
+ :fairy.box.tts/tts         {:bus     #ig/ref :fairy.box.bus/bus
+                             :db-conn #ig/ref :fairy.box.db/db}
  :fairy.box.hardware/rfid           {:bus       #ig/ref :fairy.box.bus/bus
                                      :rfid-type :mfrc522
                                      :mfrc522   {:reset-gpio 25}}
@@ -52,6 +53,7 @@
                      :player      #ig/ref :fairy.box.audio.system/player
                      :settings    #ig/ref :fairy.box/settings
                      :switchboard #ig/ref :fairy.box.switchboard/switchboard
+                     :tts         #ig/ref :fairy.box.tts/tts
                      :http        #ig/ref :server/http}
 
  :system/env
