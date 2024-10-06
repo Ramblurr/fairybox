@@ -254,6 +254,26 @@
         group: ramblurr
         mode: "0750"
 
+    - name: Create fairybox-watcher.service systemd unit file
+      tags: [app]
+      ansible.builtin.copy:
+        dest: /home/ramblurr/.config/systemd/user/fairybox-watcher.service
+        content: |
+          [Unit]
+          Description=fairybox watcher
+          PartOf=fairybox.service
+          After=fairybox.service
+
+          [Service]
+          Type=oneshot
+          WorkingDirectory=/var/lib/fairybox
+          ExecStart=/usr/bin/python3 /var/lib/fairybox/fairybox/scripts/startup-pre.py
+          Environment="FAIRYBOX_API=http://localhost/api"
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=fairybox.service
+
     - name: Create fairybox.service systemd unit file
       tags: [app]
       ansible.builtin.copy:
@@ -282,9 +302,10 @@
       tags: [app]
       ansible.builtin.systemd_service:
         scope: user
-        name: fairybox
+        name: fairybox.service
         enabled: true
         state: started
+        daemon_reload: true
       environment:
         XDG_RUNTIME_DIR: "/run/user/{{ user_uid }}"
 
