@@ -76,10 +76,11 @@
   (do
 
     (require '[fairy.box.core :as main])
-    ;; (require '[integrant.repl.state :as state])
+    (require '[integrant.repl.state :as state])
     (def sys (:fairy.box.hardware/leds
-              ;; state/system
-              @main/system))
+              state/system
+              ;; @main/system
+              ))
     (def leds (:leds sys))
     (def groups (:groups sys))
     (def cancel-ch (async/chan))
@@ -152,8 +153,8 @@
     :led/set (let [{names :names value :value affected-groups :groups :keys [names value] :or {names [] affected-groups []}} value
                    led-names (set (distinct (reduce into names (map groups affected-groups))))]
                #_(tap> {:got-names led-names
-                      :affected-groups affected-groups
-                      :names names})
+                        :affected-groups affected-groups
+                        :names names})
                (doseq [name led-names]
                  (led-value! (get leds name) value)))))
 

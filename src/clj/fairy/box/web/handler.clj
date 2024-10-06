@@ -3,8 +3,7 @@
    [fairy.box.web.middleware.core :as middleware]
    [integrant.core :as ig]
    [ring.util.http-response :as http-response]
-   [reitit.ring :as ring]
-   [reitit.swagger-ui :as swagger-ui]))
+   [reitit.ring :as ring]))
 
 (defmethod ig/init-key :handler/ring
   [_ {:keys [router api-path settings] :as opts}]
@@ -15,9 +14,9 @@
      ;; https://github.com/metosin/reitit/blob/master/doc/ring/slash_handler.md 
     (ring/redirect-trailing-slash-handler)
     (ring/create-resource-handler {:path "/"})
-    (when (some? api-path)
-      (swagger-ui/create-swagger-ui-handler {:path api-path
-                                             :url  (str api-path "/swagger.json")}))
+    #_(when (some? api-path)
+        (swagger-ui/create-swagger-ui-handler {:path api-path
+                                               :url  (str api-path "/swagger.json")}))
     (ring/create-default-handler
      {:not-found
       (constantly (-> {:status 404, :body "Page not found"}

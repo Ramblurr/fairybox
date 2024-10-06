@@ -17,7 +17,7 @@
    opts
    {:muuntaja   formats/instance
     :middleware
-    [ ;; Default middleware for ui
+    [;; Default middleware for ui
      ;; query-params & form-params
      parameters/parameters-middleware
      ;; encoding response body
