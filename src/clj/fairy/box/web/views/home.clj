@@ -489,7 +489,6 @@
                  (icons/play {:class (cs $icon-color $icon-size)})])
 
         :choose  (when (browse/playable-type (util/req-settings req) abs-path)
-                   (tap> {:active-value active-value :rel-path rel-path})
                    [:input {:id       (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
                             :required true
                             :checked  (= active-value rel-path)

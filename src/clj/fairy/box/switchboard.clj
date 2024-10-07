@@ -1,5 +1,6 @@
 (ns fairy.box.switchboard
   (:require
+   [fairy.box.audio :as audio]
    [clojure.java.io :as io]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
@@ -9,11 +10,24 @@
    [clojure.tools.logging :as log]
    [integrant.core :as ig]))
 
-(def ^:private init-state {:system-state :system-state/booting})
+(def ^:private init-state {:system-state :system-state/booting
+                           :system-mode :system-mode/normal})
 (defonce ^:private state (atom init-state))
 
 (defn system-state! []
   (:system-state @state))
+
+(defn emit-system! [emitter event]
+  (async/put! emitter {:path "/system" :value event}))
+
+(defn emit-player! [emitter event]
+  (async/put! emitter {:path "/player/commands" :value event}))
+
+(defn emit-tts! [emitter event]
+  (async/put! emitter {:path "/tts/commands" :value event}))
+
+(defn emit-led! [emitter event]
+  (async/put! emitter {:path "/hardware/output/leds" :value event}))
 
 (def button-press-event {:audio/play-pause {:path "/player/commands"
                                             :value {:action :audio/play-pause}}
@@ -26,40 +40,58 @@
                          :audio/volume-down {:path  "/player/commands"
                                              :value {:action :audio/volume-down}}})
 
-(defn button-handler [{:keys [emitter]} {:keys [value] :as ev}]
+(defn exit-card-id-mode [{:keys [emitter] :as sys}]
+  (swap! state assoc :system-mode :system-mode/normal)
+  (emit-led! emitter {:action :led/animation-cancel :animation-id :card-identification-mode})
+  (emit-led! emitter {:action :led/set :groups [:all] :value  1.0}))
+
+(defn enter-card-id-mode [{:keys [emitter] :as sys}]
+  (swap! state assoc :system-mode :system-mode/card-identification)
+  (emit-led! emitter {:action :led/set :names [:audio/prev :audio/next :audio/volume-up :audio/volume-down]  :value  0.0})
+  (emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 10 :animation-id :card-identification-mode}))
+
+(defn handle-card-id-mode [sys {:keys [button-id]}]
+  (when (and (= button-id :audio/play-pause))
+    (if (= :system-mode/normal (:system-mode @state))
+      (when (not= :playing (-> (audio/current-playback!) :state))
+        (enter-card-id-mode sys))
+      (exit-card-id-mode sys))))
+
+(defn button-handler [{:keys [emitter] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (let [{:keys [button-id action]} value]
       (condp = action
         :button/single-press (when-let [ev (button-press-event button-id)]
                                (async/put! emitter ev))
+        :button/hold (handle-card-id-mode sys value)
         nil))))
-
-(defn emit-system! [emitter event]
-  (async/put! emitter {:path "/system" :value event}))
-
-(defn emit-player! [emitter event]
-  (async/put! emitter {:path "/player/commands" :value event}))
-
-(defn emit-led! [emitter event]
-  (async/put! emitter {:path "/hardware/output/leds" :value event}))
 
 (defn sfx-path [settings key]
   (let [path (-> settings :sfx key)]
     (str (browse/media-dir settings) "/" path)))
 
-(defn rfid-handler [{:keys [db-conn emitter settings]} {:keys [value] :as ev}]
+(defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
+  (if-let [rel-folder-path (db/linked-folder @db-conn uid)]
+    (emit-tts! emitter {:action :tts/speak
+                        :text "This one has..."})
+    (emit-tts! emitter {:action :tts/speak
+                        :text "This one is empty."})))
+
+(defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
+  #_(emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
+  (when-let [rel-folder-path (db/linked-folder @db-conn uid)]
+                    ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+    (async/put! emitter (doto  {:path "/player/commands"
+                                :value {:action :audio/play-path
+                                        :item-path (browse/absoluteify settings rel-folder-path)
+                                        :uid uid}} prn))))
+
+(defn rfid-handler [{:keys [db-conn emitter settings] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (condp = (:action value)
-      :placed (do (prn value)
-                  (prn (db/linked-folder @db-conn (:uid value)))
-                  (emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
-                  (when-let [rel-folder-path (db/linked-folder @db-conn (:uid value))]
-                    ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
-
-                    (async/put! emitter (doto  {:path "/player/commands"
-                                                :value {:action :audio/play-path
-                                                        :item-path (browse/absoluteify settings rel-folder-path)
-                                                        :uid (:uid value)}} prn))))
+      :placed (condp = (:system-mode @state)
+                :system-mode/normal (rfid-placed-play-mode sys value)
+                :system-mode/card-identification (rfid-placed-card-id-mode sys value))
       :removed (async/put! emitter {:path "/player/commands"
                                     :value {:action :audio/stop}})
       :error (do

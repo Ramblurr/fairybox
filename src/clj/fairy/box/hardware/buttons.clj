@@ -16,7 +16,7 @@
 
 (def hold-threshold
   "Time in milliseconds to wait before a button press is considered a hold."
-  500)
+  1000)
 
 ;; This is here just for debugging
 (defonce ^:private button-states (atom {}))
@@ -116,7 +116,7 @@
     (swap! button-states assoc action {:state :released :at 0})
     (Diozero/registerForShutdown (into-array Button [button]))
     (raw-button-listener! button-event-chan button action)
-    {:button button :gpio gpio :action action }))
+    {:button button :gpio gpio :action action}))
 
 (defn init-buttons! [{:keys [buttons bus]}]
   (let [exit-chan (async/chan)
