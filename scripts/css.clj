@@ -192,7 +192,13 @@
               :col-end-11                      {:grid-column-end "11"}
               :col-end-12                      {:grid-column-end "12"}
               :col-end-13                      {:grid-column-end "13"}
-              :col-end-auto                    {:grid-column-end "auto"}})
+              :col-end-auto                    {:grid-column-end "auto"}
+              :border-solid   {:border-style "solid"}
+              :border-dashed  {:border-style "dashed"}
+              :border-dotted  {:border-style "dotted"}
+              :border-double  {:border-style "double"}
+              :border-hidden  {:border-style "hidden"}
+              :border-none  {:border-style "none"}})
 
 (defn update-color-alias-groups [color-groups]
   (-> color-groups

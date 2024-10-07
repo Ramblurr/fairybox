@@ -123,10 +123,10 @@
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
    [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]
-   [:dl {:class (css :max-w-2xl)}
-    [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
-     [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600 [:dark :text-gray-400])} "RFID UID"]
-     [:dd {:class (css :mt-1 :text-sm :leading-6 [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "RFID Tag Not Present")]]
+   [:dl {:class (css :max-w-2xl :border-dashed :border-2 :border-gray-300)}
+    [:div {:class (css :px-2 :py-2 [:sm :grid :grid-cols-3 :gap-4])}
+     [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600 [:dark :text-gray-400])} "RFID Tag"]
+     [:dd {:class (css :mt-1 :text-sm :leading-6 [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "Not Present")]]
     (when (and rfid-uid linked-folder)
       [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
        [:dt {:class (css :text-sm :font-medium :leading-6)} "Linked Folder"]
@@ -146,31 +146,31 @@
 
 (declare browse-media-folder)
 (defn rfid-link-form [req uid linked-folder]
-  [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link" :class (css :px-10)}
-   [:div {:class (css   :pb-12)}
-    [:h2 {:class (css :text-base :font-semibold :leading-7)} "RFID Tag Link"]
-    [:div
-     [:div {:class (css :mt-8 :space-y-10)}
-      [:fieldset
-       [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
-       [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Place an RFID tag on your Fairybox, and the ID number will appear here."]
-       [:div {:class (css :mt-6 :space-y-2)}
-        (current-rfid uid linked-folder)]]]
-     [:div {:class (css :mt-2 :space-y-2)}
-      [:fieldset
+  [:form {:hx-target "#rfid-link" :hx-post "rfid-link-folder!" :id "rfid-link"
+          :class [ui/$page-margin]}
+   (ui/setting-heading :label "RFID Tags")
+   [:div
+    [:div {:class (css :mt-8 :space-y-10)}
+     [:fieldset
+      [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
+      [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Place an RFID tag on your Fairybox, and the ID number will appear here. Then you can link it to a folder or playlist below using the file browser."]
+      [:div {:class (css :mt-6 :space-y-2)}
+       (current-rfid uid linked-folder)]]]
+    [:div {:class (css :mt-2 :space-y-2)}
+     [:fieldset
        ;; [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
 
        ;; [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
-       (browse-media-folder req {:mode :choose :active-value linked-folder})
-       #_(audio-folder-select settings linked-folder)]]
+      (browse-media-folder req {:mode :choose :active-value linked-folder})
+      #_(audio-folder-select settings linked-folder)]]
 
-     [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-      (ui/button :priority :link :label "Back"
-                 :hx-get "settings" :hx-target "#active-tab"
-                 :hx-push-url "settings")
-      (ui/button :type :submit :priority :primary
-                 :disabled? (nil? uid)
-                 :label "Link To Folder")]]]])
+    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
+     (ui/button :priority :link :label "Back"
+                :hx-get "settings" :hx-target "#active-tab"
+                :hx-push-url "settings")
+     (ui/button :type :submit :priority :primary
+                :disabled? (nil? uid)
+                :label "Link To Folder")]]])
 
 (defn duration-data
   [^long duration-in-millis]
@@ -384,7 +384,7 @@
               :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold))])
 
 (defn settings-view [req]
-  [:div {:class (cs "fade-in-out" (css :px-10 :max-w-5xl))}
+  [:div {:class [(css :max-w-5xl) ui/$page-margin]}
    [:h1 {:class (css :text-2xl :mb-2)} "Settings"]
    [:div
     [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
@@ -558,9 +558,9 @@
     (response/hx-redirect "player-controls")))
 
 (defn playback-settings-form [req {:keys [min-volume max-volume]}]
-  [:form {:class (cs "fade-in-out" (css :px-4 :max-w-5xl))
+  [:form {:class [ui/$page-margin (css  :max-w-5xl)]
           :hx-target "#playback-settings" :hx-post "playback-settings!" :id "playback-settings"}
-   [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Playback Settings"]]
+   (ui/setting-heading :label "Playback Settings")
    [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
     [:div {:class (css [:sm :col-span-4])}
      [:label {:for "minvolume" :class (css :block :text-sm :font-medium :leading-6)} "Min Volume"]
@@ -601,7 +601,7 @@
 (defcomponent ^:endpoint browse-audio [req]
   (let [{:keys [uid action]} @rfid-cache
         body [:div {:id "active-tab"}
-              [:div {:class (cs "fade-in-out" (css :px-1 [:sm :px-4] :max-w-5xl))}
+              [:div {:class [(css :max-w-5xl) ui/$page-margin]}
                [:div [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} "Fairybox Audio Folders"]]
                (browse-media-folder req {:mode :play})]]]
     (if (htmx? req)
@@ -677,20 +677,21 @@
   :rewind
   [:svg {:xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]]
   :mute
-  [:svg {:xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]])
+  [:svg {:xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.53 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm8.41 10 4.29-4.29a1 1 0 0 0-1.41-1.41l-4.29 4.29-4.29-4.29a1 1 0 0 0-1.41 1.41l4.29 4.29-4.29 4.29a1 1 0 1 0 1.41 1.41l4.29-4.29 4.29 4.29a1 1 0 0 0 1.41-1.41z", :data-name "Layer 13"}]]
 
-:plus
-[:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]
-:minus
-[:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.925-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]
+  :plus
+  [:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4a11 11 0 1 0 11 11A11 11 0 0 0 15 4Zm4 12h-3v3a1 1 0 0 1-2 0v-3h-3a1 1 0 0 1 0-2h3v-3a1 1 0 0 1 2 0v3h3a1 1 0 0 1 0 2z"}]]
+  :minus
+  [:svg {:xmlns "http://www.w3.org/2000/svg", :data-name "Layer 1", :viewBox "0 0 30 30"} [:path {:d "M15 4C5.2 4 .293 15.849 7.222 22.778 14.152 29.707 26 24.8 26 15c0-6.075-4.925-11-11-11Zm4 12h-8c-1.333 0-1.333-2 0-2h8c1.333 0 1.333 2 0 2z"}]]
 
-:volume-down
-[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
-:volume-up
-[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]
-:download
-[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm7.51 15.9-6.81 6.81a1 1 0 0 1-1.41 0l-6.8-6.81a1 1 0 0 1 .71-1.71h3.08V8a1 1 0 0 1 1-1h5.44a1 1 0 0 1 1 1v6.19h3.08a1 1 0 0 1 .71 1.71z", :data-name "Layer 29"}]]
-:playlist
-[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M30 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h20a1 1 0 0 1 1 1zm-1 7H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1Zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1ZM5.45 2.11l-4-2A1 1 0 0 0 0 1v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 9v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 17v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 25v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79z", :data-name "Layer 6"}]]
-:volume-middle
-[:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M18 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38H3a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm7.38 18.15a14 14 0 0 0 0-16.31 1 1 0 0 0-1.62 1.16 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 15"}]]
+  :volume-down
+  [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M20.006 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm4.53 15.2a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 14"}]]
+  :volume-up
+  [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 16"}]]
+  :download
+  [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M15 0a15 15 0 1 0 15 15A15 15 0 0 0 15 0Zm7.51 15.9-6.81 6.81a1 1 0 0 1-1.41 0l-6.8-6.81a1 1 0 0 1 .71-1.71h3.08V8a1 1 0 0 1 1-1h5.44a1 1 0 0 1 1 1v6.19h3.08a1 1 0 0 1 .71 1.71z", :data-name "Layer 29"}]]
+  :playlist
+  [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M30 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h20a1 1 0 0 1 1 1zm-1 7H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1Zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1ZM5.45 2.11l-4-2A1 1 0 0 0 0 1v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 9v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 17v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 25v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79z", :data-name "Layer 6"}]]
+  :volume-middle
+  [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M18 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38H3a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm7.38 18.15a14 14 0 0 0 0-16.31 1 1 0 0 0-1.62 1.16 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 15"}]])
+

@@ -3,6 +3,11 @@
    [fairy.box.util :as util]
    [shadow.css :refer (css)]))
 
+(def $page-margin (css :px-8 :px-4 :py-4 [:sm :px-6] [:lg :px-8]))
+
+(defn setting-heading [& {:keys [label]}]
+  [:h2 [:p {:class (css :text-lg :font-bold :text-smoky-900 [:dark :text-smoky-300])} label]])
+
 (def button-priority-classes {:link (css :text-sm :font-semibold :leading-6 :text-gray-900
 
                                          [:hover-mouse [:hover :bg-smoky-300]]
@@ -60,15 +65,18 @@
                        :title     title
                        :href      (when-not disabled? href)})
     {:type  type
+     :disabled disabled?
      :class
      (let [;; $not-link-rounding (css :inline-flex :items-center :rounded-md :border :font-medium)
            $centered (css :items-center :justify-center)
+           $disabled (css [:disabled :opacity-50 :cursor-not-allowed])
            $disabled-a (css :opacity-50 :cursor-not-allowed)]
        [(priority button-priority-classes)
         (size button-sizes-classes)
         ;; (when-not (= :link priority)  $not-link-rounding)
         (when centered? $centered)
         (when (and disabled? (= :tag :a)) $disabled-a)
+        (when (and disabled? (not= :tag :a)) $disabled)
         (when class class)])})
 
    (when icon
