@@ -40,8 +40,10 @@ FAIRYBOX_API = os.getenv("FAIRYBOX_API", "http://localhost:3000/api")
 
 def is_fairybox_ready():
     try:
-        response = urllib.request.urlopen(f"{FAIRYBOX_API}/ready")
-        print(f"checking ready: {response.getcode()}")
+        url = f"{FAIRYBOX_API}/ready"
+        print(f"checking ready: {url}")
+        response = urllib.request.urlopen(url)
+        print(f"checking ready got: {response.getcode()}")
         return response.getcode() == 200
     except urllib.error.HTTPError as e:
         return False
