@@ -227,6 +227,7 @@
 (defn play-pause-button [state]
   (let [icon (condp = state
                :paused :play
+               :stopped :play
                :playing :pause
                :opening :pause
                :finished :play)]

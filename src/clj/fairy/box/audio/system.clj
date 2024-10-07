@@ -179,7 +179,8 @@
       (finally
         (.release media)))))
 
-(def not-interesting #{:internal-player/buffering :internal-player/length-changed :internal-player/audio-device-changed
+(def not-interesting #{:internal-player/buffering :internal-player/length-changed
+                       :internal-player/audio-device-changed
                        :internal-player/position-changed
                        :internal-player/time-changed})
 
@@ -204,6 +205,8 @@
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :playing})))
       :internal-player/paused                  (do (swap! audio-state assoc-in [:current-playback :state] :paused)
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :paused})))
+      :internal-player/stopped                  (do (swap! audio-state assoc-in [:current-playback :state] :stopped)
+                                                    (async/put! emitter (player-event {:event :player/state-changed :state :stopped})))
       :internal-player/opening                 (do (swap! audio-state assoc-in [:current-playback :state] :opening)
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :opening})))
       :internal-player/finished                (do (swap! audio-state assoc-in [:current-playback :state] :finished)
