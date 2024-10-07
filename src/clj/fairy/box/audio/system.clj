@@ -274,11 +274,30 @@
                            :playlist-path playlist-path
                            :play-request-id (new-id!)}))
 
+(defn play-url! [{:keys [player]} url]
+  (let [medias (interop/make-medias! [url])
+        media-list (interop/make-media-list medias)]
+    (interop/stop! player)
+    (interop/set-media-list! player media-list)
+    (interop/unpause! player)
+    (interop/release-media-list! media-list)
+    (interop/release-medias! medias)))
+
 (defn play-path! [sys item-path]
   (condp = (browse/playable-type (:settings sys) item-path)
     :dir (play-folder! sys item-path)
     :playlist (play-playlist! sys item-path)
-    nil))
+    :url (play-url! sys item-path)
+    :tts (play-url! sys item-path)
+    (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path}))))
+
+(defn metadata-for
+  "Returns (blocks!) a vector of parsed metadata for the .m3u or all files in path."
+  [sys item-path]
+  (condp = (browse/playable-type (:settings sys) item-path)
+    :dir (interop/parse-medias-sync (browse/list-media-file-paths item-path))
+    :playlist (interop/parse-media-playlist-sync item-path)
+    (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path}))))
 
 (defn new-player! [db handler]
   (let [player (interop/init-player! handler)]

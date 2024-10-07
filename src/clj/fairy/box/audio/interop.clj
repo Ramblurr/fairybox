@@ -5,6 +5,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str])
   (:import
+   [java.util.concurrent CountDownLatch TimeUnit]
    [uk.co.caprica.vlcj.media.callback.seekable SeekableCallbackMedia]
    [java.nio.channels FileChannel]
    [java.nio.file Files Path Paths]
@@ -231,6 +232,8 @@
     (mediaParsedChanged [^Media media ^MediaParsedStatus newStatus]
       (try
         (callback media (metadata->map (-> media (.meta) (.asMetaData))) newStatus)
+        (catch Throwable e
+          (log/error "Uncaught exception from parse-event-listener" e))
         (finally
           (-> media (.events) (.removeMediaEventListener this)))))))
 
@@ -244,6 +247,61 @@
   (let [n-tracks (-> list (.media) (.count))]
     (for [i (range n-tracks)]
       (-> list (.media) (.newMedia i)))))
+
+(defn parse-medias-sync [track-paths]
+  (let [medias (make-medias! track-paths)
+        latch (CountDownLatch. (count medias))
+        result (atom [])
+        cb (fn [media meta-map status]
+             (try
+               (swap! result conj meta-map)
+               (finally
+                 (.countDown latch))))]
+
+    (doseq [media medias]
+      (-> media (.events) (.addMediaEventListener (parse-event-listener cb)))
+      (-> media (.parsing) (.parse)))
+    (.await latch)
+    (release-medias! medias)
+    (sort-by :track-number @result)))
+
+(defn parse-media-playlist-sync [playlist-path]
+  (let [playlist-parse-promise (promise)
+        media (-> (MediaPlayerFactory.) (.media) (.newMedia playlist-path nil))
+        playlist-cb (fn [playlist-media meta-map status]
+                      (future
+                        (let [result (atom [])
+                              playlist-media-list (-> playlist-media (.subitems) (.newMediaList))
+                              subitem-count       (-> playlist-media-list (.media) (.count))
+                              new-medias          (medias-from-medialist playlist-media-list)
+                              subitem-latch       (CountDownLatch. subitem-count)
+                              subitem-cb          (fn [media meta-map status]
+                                                    (try
+                                                      (swap! result conj meta-map)
+                                                      (finally
+                                                        (.countDown subitem-latch))))]
+                          (doseq [media new-medias]
+                            (-> media (.events) (.addMediaEventListener (parse-event-listener subitem-cb)))
+                            (-> media (.parsing) (.parse)))
+                          (.await subitem-latch 2 TimeUnit/SECONDS)
+                          (release-medias! new-medias)
+                          (deliver playlist-parse-promise @result))))]
+
+    (-> media (.events) (.addMediaEventListener (parse-event-listener playlist-cb)))
+    (-> media (.parsing) (.parse))
+    (let [res (deref playlist-parse-promise 3000 [])]
+      (release-medias! [media])
+      (sort-by :track-number res))))
+
+(comment
+  (parse-media-playlist-sync "/srv/media/playlists/SoManyFairies-Fall2.m3u")
+  1
+  (parse-medias-sync ["/srv/media/audiobooks/A.A. Milne/Disc 1 - Introducing Pooh and Piglet/Story 1 - In which we are introduced.mp3"
+                      "/srv/media/audiobooks/A.A. Milne/Disc 1 - Introducing Pooh and Piglet/Story 2 - In which Piglet does a very grand thing.mp3"
+                      "/srv/media/audiobooks/A.A. Milne/Disc 1 - Introducing Pooh and Piglet/Story 3 - In which Pooh and Piglet go hunting and nearly catch a Woozle.mp3"])
+
+;;
+  )
 
 (defn set-media-list!
   "Set a new media list. The media list will be released."

@@ -54,15 +54,24 @@
 (defn playable-type
   "Returns :dir, :playlist, or :file if the path is a playable media path, otherwise nil."
   [settings abs-path]
-  (let [file (io/file abs-path)
-        media-base (media-dir settings)]
-    (when (and (validate-base-path media-base abs-path) (.exists file))
-      (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) file)]
-        (cond
-          (and dir? (not-empty (list-media-files file))) :dir
-          (m3u? abs-path) :playlist
-          file? :file
-          :else nil)))))
+  (if (str/starts-with? abs-path "http")
+    :url
+    (let [file (io/file abs-path)
+          media-base (media-dir settings)]
+      (when (and (validate-base-path media-base abs-path) (.exists file))
+        (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) file)]
+          (cond
+            (and dir? (not-empty (list-media-files file))) :dir
+            (m3u? abs-path) :playlist
+            (str/ends-with? abs-path ".tts-cache") :tts
+            file? :file
+            :else nil))))))
+
+#_(comment
+
+    (playable-type
+     (let [settings {:media {:media-dir "/srv/media"}}])
+     "audiobooks/A.A. Milne/Disc 4 - Eeyore loses a Tail"))
 
 (defn list-dirs
   ([path]

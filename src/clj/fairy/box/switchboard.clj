@@ -1,5 +1,6 @@
 (ns fairy.box.switchboard
   (:require
+   [clojure.string :as str]
    [clojure.java.shell :as shell]
    [fairy.box.audio :as audio]
    [clojure.java.io :as io]
@@ -73,11 +74,18 @@
   (let [path (-> settings :sfx key)]
     (str (browse/media-dir settings) "/" path)))
 
+(defn speak-card-contents [{:keys [emitter] :as sys} item-path]
+  (let [metadata (audio/metadata-for sys item-path)
+        text (str "This one has. "
+                  (str/join ". " (map :title metadata)))]
+    (tap> [:card-contents metadata text])
+    (emit-tts! emitter {:action :tts/speak
+                        :text text})))
+
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
-  (if-let [rel-folder-path (db/linked-folder @db-conn uid)]
-    (emit-tts! emitter {:action :tts/speak
-                        :text   "This one has..."})
+  (if-let [item-path (db/linked-folder @db-conn uid)]
+    (speak-card-contents sys (browse/absoluteify settings item-path))
     (emit-tts! emitter {:action :tts/speak
                         :text   "This one is empty."})))
 
@@ -105,12 +113,15 @@
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))
 
-(defn initiate-shutdown! [emitter]
-  (emit-system! emitter {:event :system/cooling-down}))
+(defn initiate-shutdown!
+  ([emitter]
+   (initiate-shutdown! emitter true))
+  ([emitter poweroff?]
+   (emit-system! emitter {:event :system/cooling-down :poweroff? poweroff?})))
 
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as ev}]
   ;; (tap> {:system ev})
-  (let [{:keys [event]} value]
+  (let [{:keys [event poweroff?]} value]
     (condp = event
       :system/initialized (do
                             (swap! state assoc :system-state :system-state/initialized)
@@ -127,12 +138,13 @@
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
                              (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
-                             (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound
+                             (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff)
                                                     :item-path (sfx-path settings :shutdown)}))
       :system/shutdown (do
                          (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
                          (swap! state assoc :system-state :system-state/shutdown)
-                         (shell/sh "systemctl" "poweroff"))
+                         (when poweroff?
+                           (shell/sh "systemctl" "poweroff")))
       nil)))
 
 (defn player-handler [{:keys [emitter]} {:keys [value] :as ev}]
@@ -141,7 +153,8 @@
     (when (= :player/one-shot-finished (:event value))
       (condp = (:id value)
         :startup-sound  (emit-system! emitter {:event :system/warmed-up})
-        :shutdown-sound (emit-system! emitter {:event :system/shutdown})))))
+        :shutdown-sound-no-poweroff (emit-system! emitter {:event :system/shutdown :poweroff? false})
+        :shutdown-sound (emit-system! emitter {:event :system/shutdown :poweroff? true})))))
 
 (def ^:private patch-ports {:rfid  {:handler #'rfid-handler
                                     :name :rfid

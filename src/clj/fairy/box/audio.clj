@@ -14,3 +14,6 @@
 
 (defn current-play-queue! []
   (audio/current-play-queue!))
+
+(defn metadata-for [sys item-path]
+  (audio/metadata-for sys item-path))

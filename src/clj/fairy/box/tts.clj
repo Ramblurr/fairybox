@@ -20,10 +20,12 @@
   (str (browse/media-dir settings) "/tts-cache"))
 
 (defn hash-text [text]
-  (.encodeToString (Base64/getUrlEncoder) (.getBytes (str (hash text)))))
+  (str
+   (.encodeToString (Base64/getUrlEncoder) (.getBytes (str (hash text))))
+   ".tts-cache"))
 
 (defn cache-get
-  "Returns the absolute file:// url for the tts'ed audio of `text` from `cache-dir`, if it exists, otherwise nil"
+  "Returns the absolute path for the tts'ed audio of `text` from `cache-dir`, if it exists, otherwise nil"
   [cache-dir text]
   (assert cache-dir "cache-dir must be set")
   (let [maybe-file (.toFile (Paths/get cache-dir (into-array [(hash-text text)])))]
@@ -72,7 +74,11 @@
 (defn tts-speak [sys text]
   (when-let [url (text->audio-url sys text)]
     (tap> [:tts-speak url])
-    (emit-player! sys {:action :audio/play-one-shot :id :tts :item-path url})))
+    (emit-player! sys
+                  {:action :audio/play-path
+                   :item-path url
+                   :uid nil}
+                  #_{:action :audio/play-one-shot :id :tts :item-path url})))
 
 (defn with-db [sys]
   (assoc sys :db @(:db-conn sys)))
@@ -125,7 +131,7 @@
                     )))
   (def url1 (text->audio-url nil "hello"))
 
-  (tts-speak (with-db sys) "Hello")
+  (tts-speak (with-db sys) "Hello6")
 
   (async/put! (:emitter sys) {:path "/tts/commands" :value {:action :tts/speak :text "Hello"}})
   ;;
