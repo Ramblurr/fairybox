@@ -60,18 +60,51 @@
       (when-let [handle (get led-handles led-name)]
         (led-value! handle value)))))
 
+(defonce ^:private animation-state (atom {:animations {}}))
+
+(defn add-animation! [{:keys [animation-id] :as anim}]
+  (assert animation-id)
+  (swap! animation-state (fn [s]
+                           ;; cancel the old one, if it exists
+                           (let [{:keys [cancel-ch]} (get-in s [:animations animation-id])]
+                             (when cancel-ch
+                               (async/put! cancel-ch :cancel)))
+                           (assoc-in s [:animations animation-id] anim))))
+
+(defn cancel-animation! [animation-id]
+  (swap! animation-state (fn [s]
+                           (let [{:keys [cancel-ch]} (get-in s [:animations animation-id])]
+                             (when cancel-ch
+                               (async/put! cancel-ch :cancel)))
+                           (assoc-in s [:animations animation-id] nil))))
+
+(defn cancel-all-animations! []
+  (swap! animation-state (fn [s]
+                           (doseq [{:keys [cancel-ch]} (vals (:animations s))]
+                             (when cancel-ch
+                               (async/put! cancel-ch :cancel)))
+                           (assoc s :animations {}))))
+
 (defn pulse
-  ([led-handles leds repeat-times on-time off-time]
-   (anim/animate! (partial apply-tween! led-handles)
-                  [(anim/tween leds :from 0.0 :to 1.0 :duration on-time)
-                   (anim/tween leds :from 1.0 :to 0.0 :duration off-time :delay on-time)]
-                  :repeat-times repeat-times))
-  ([led-handles leds repeat-times]
-   (pulse led-handles leds repeat-times 500 500))
+  ([led-handles leds repeat-times on-time off-time animation-id]
+   (let [cancel-ch (async/chan)
+         animation-id (or animation-id (random-uuid))]
+     (tap> [:PULSE leds repeat-times animation-id])
+     (add-animation! {:animation-id animation-id :cancel-ch cancel-ch})
+     (anim/animate! (partial apply-tween! led-handles)
+                    [(anim/tween leds :from 0.0 :to 1.0 :duration on-time)
+                     (anim/tween leds :from 1.0 :to 0.0 :duration off-time :delay on-time)]
+                    :repeat-times repeat-times
+                    :cancel-ch cancel-ch)))
+  ([led-handles leds repeat-times animation-id]
+   (pulse led-handles leds repeat-times 500 500 animation-id))
   ([led-handles leds]
    (pulse led-handles leds 1 500 500)))
 
 (comment
+
+  (:animations @animation-state)
+  (cancel-all-animations!)
 
   (do
 
@@ -132,25 +165,29 @@
   (async/put! cancel-ch :finish-current)
 
   ;;
-  )
-(let [affected-groups [:all :others]
-      groups {:all [:audio/prev :audio/next]
-              :others [:audio/something]}
-      names [:audio/volume-up]]
-  (set (distinct (reduce into names (map groups affected-groups)))))
+
+  (let [affected-groups [:all :others]
+        groups {:all [:audio/prev :audio/next]
+                :others [:audio/something]}
+        names [:audio/volume-up]]
+    (set (distinct (reduce into names (map groups affected-groups))))))
 
 (defn events-handler! [{:keys [groups leds]} {:keys [value] :as ev}]
   ;; (tap> [:LEDS ev groups leds])
   (condp = (:action value)
-    :led/pulse (let [{:keys [names after-set repeat-times]
+    :led/animation-cancel (cancel-animation! (:animation-id value))
+    :led/pulse (let [{:keys [names after-set repeat-times animation-id]
                       :or {repeat-times 1
                            after-set 1.0}} value]
                  (async/go
-                   (let [pulse-chan (pulse leds names repeat-times)]
-                     (async/<! pulse-chan)
-                     (doseq [name names]
-                       (led-value! (get leds name) after-set)))))
-    :led/set (let [{names :names value :value affected-groups :groups :keys [names value] :or {names [] affected-groups []}} value
+                   (let [pulse-chan (pulse leds names repeat-times animation-id)]
+                     ;; run the after-set, but only if the animation wasn't cancelled
+                     (when (nil? (async/<! pulse-chan))
+                       (doseq [name names]
+                         (led-value! (get leds name) after-set))))))
+    :led/set (let [{names :names value :value affected-groups :groups
+                    :keys [names value animation-id]
+                    :or {names [] affected-groups []}} value
                    led-names (set (distinct (reduce into names (map groups affected-groups))))]
                #_(tap> {:got-names led-names
                         :affected-groups affected-groups
@@ -201,6 +238,7 @@
              (.close handle))))
 
 (defn release-leds! [{:keys [leds listener]}]
+  (cancel-all-animations!)
   (async/close! listener)
   (doseq [led (vals leds)]
     (release-led! led)))

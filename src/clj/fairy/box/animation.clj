@@ -345,4 +345,4 @@
                                      (= port timeout) (recur {:tweens new-tweens :step (inc (:step state)) :t (+ (:t state) DT) :iteration (:iteration state)})
                                      (= op :finish-current) (recur {:tweens new-tweens :step (inc (:step state)) :t (+ (:t state) DT) :iteration repeat-times})
                                      :else
-                                     (async/put! finished-ch :cancelled)))))))))
+                                     (when finished-ch (async/put! finished-ch :cancelled))))))))))
