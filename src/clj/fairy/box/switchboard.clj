@@ -60,9 +60,11 @@
 (defn button-handler [{:keys [emitter] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (let [{:keys [button-id action]} value]
+      #_(tap> [:button button-id action])
       (condp = action
         :button/single-press (when-let [ev (button-press-event button-id)]
-                               (async/put! emitter ev))
+                               (when (= :system-mode/normal (:system-mode @state))
+                                 (async/put! emitter ev)))
         :button/hold (handle-card-id-mode sys value)
         nil))))
 
@@ -71,20 +73,24 @@
     (str (browse/media-dir settings) "/" path)))
 
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
+  (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
   (if-let [rel-folder-path (db/linked-folder @db-conn uid)]
     (emit-tts! emitter {:action :tts/speak
-                        :text "This one has..."})
+                        :text   "This one has..."})
     (emit-tts! emitter {:action :tts/speak
-                        :text "This one is empty."})))
+                        :text   "This one is empty."})))
 
 (defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   #_(emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
-  (when-let [rel-folder-path (db/linked-folder @db-conn uid)]
-                    ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
-    (async/put! emitter (doto  {:path "/player/commands"
-                                :value {:action :audio/play-path
-                                        :item-path (browse/absoluteify settings rel-folder-path)
-                                        :uid uid}} prn))))
+  (if-let [rel-folder-path (db/linked-folder @db-conn uid)]
+    (do
+      ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
+      (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 1.0 :repeat-times 2})
+      (async/put! emitter (doto  {:path "/player/commands"
+                                  :value {:action :audio/play-path
+                                          :item-path (browse/absoluteify settings rel-folder-path)
+                                          :uid uid}} prn)))
+    (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
 
 (defn rfid-handler [{:keys [db-conn emitter settings] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))

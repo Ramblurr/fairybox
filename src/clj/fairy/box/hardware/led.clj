@@ -89,7 +89,6 @@
   ([led-handles leds repeat-times on-time off-time animation-id]
    (let [cancel-ch (async/chan)
          animation-id (or animation-id (random-uuid))]
-     (tap> [:PULSE leds repeat-times animation-id])
      (add-animation! {:animation-id animation-id :cancel-ch cancel-ch})
      (anim/animate! (partial apply-tween! led-handles)
                     [(anim/tween leds :from 0.0 :to 1.0 :duration on-time)
