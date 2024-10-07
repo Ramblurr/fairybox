@@ -100,6 +100,19 @@
   ([led-handles leds]
    (pulse led-handles leds 1 500 500)))
 
+(defn clamp [v]
+  (max (min v 1.0) 0))
+
+(defn fade
+  ([led-handles leds repeat-times from to duration start-delay animation-id]
+   (let [cancel-ch (async/chan)
+         animation-id (or animation-id (random-uuid))]
+     (add-animation! {:animation-id animation-id :cancel-ch cancel-ch})
+     (anim/animate! (partial apply-tween! led-handles)
+                    [(anim/tween leds :from (clamp from) :to (clamp to) :duration duration :delay start-delay)]
+                    :repeat-times repeat-times
+                    :cancel-ch cancel-ch))))
+
 (comment
 
   (:animations @animation-state)
@@ -172,27 +185,36 @@
     (set (distinct (reduce into names (map groups affected-groups))))))
 
 (defn events-handler! [{:keys [groups leds]} {:keys [value] :as ev}]
-  ;; (tap> [:LEDS ev groups leds])
-  (condp = (:action value)
-    :led/animation-cancel (cancel-animation! (:animation-id value))
-    :led/pulse (let [{:keys [names after-set repeat-times animation-id]
-                      :or {repeat-times 1
-                           after-set 1.0}} value]
-                 (async/go
-                   (let [pulse-chan (pulse leds names repeat-times animation-id)]
-                     ;; run the after-set, but only if the animation wasn't cancelled
-                     (when (nil? (async/<! pulse-chan))
-                       (doseq [name names]
-                         (led-value! (get leds name) after-set))))))
-    :led/set (let [{names :names value :value affected-groups :groups
-                    :keys [names value animation-id]
-                    :or {names [] affected-groups []}} value
-                   led-names (set (distinct (reduce into names (map groups affected-groups))))]
-               #_(tap> {:got-names led-names
-                        :affected-groups affected-groups
-                        :names names})
-               (doseq [name led-names]
-                 (led-value! (get leds name) value)))))
+  (let [led-names (set (distinct (reduce into (:names value) (map groups (:groups value)))))]
+    ;; (tap> [:LEDS ev groups leds])
+    (condp = (:action value)
+      :led/animation-cancel (cancel-animation! (:animation-id value))
+      :led/pulse (let [{:keys [after-set repeat-times animation-id]
+                        :or {repeat-times 1
+                             after-set 1.0}} value]
+                   (async/go
+                     (let [pulse-chan (pulse leds led-names repeat-times animation-id)]
+                       ;; run the after-set, but only if the animation wasn't cancelled
+                       (when (nil? (async/<! pulse-chan))
+                         (doseq [name led-names]
+                           (led-value! (get leds name) after-set))))))
+
+      :led/fade (let [{:keys [after-set repeat-times animation-id from to duration start-delay]
+                       :or {repeat-times 1
+                            from 1.0
+                            to 0.0
+                            duration 1000
+                            start-delay 0
+                            after-set 0.0}} value]
+                  (async/go
+                    (let [fade-chan (fade leds led-names repeat-times from to duration start-delay animation-id)]
+                      ;; run the after-set, but only if the animation wasn't cancelled
+                      (when (nil? (async/<! fade-chan))
+                        (doseq [name led-names]
+                          (led-value! (get leds name) after-set))))))
+      :led/set (let [{:keys [value animation-id]} value]
+                 (doseq [name led-names]
+                   (led-value! (get leds name) value))))))
 
 (defn start-led-loop! [opts listener]
   (async/go-loop []
