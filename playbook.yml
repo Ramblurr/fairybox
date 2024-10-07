@@ -289,6 +289,7 @@
           Environment="PORT=80"
           Environment="DB_PATH=/var/lib/fairybox/db.edn"
           Environment="MEDIA_DIR=/srv/media"
+          EnvironmentFile=/var/lib/fairybox/secret-env
           Restart=on-failure
           TimeoutStopSec=60
 

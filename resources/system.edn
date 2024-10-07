@@ -1,4 +1,4 @@
-{:fairy.box/settings {:fairybox-id "test"
+{:fairy.box/settings {:fairybox-id #or [#env FAIRYBOX_ID "" "test"]
                       :media       {:media-dir #or [#env MEDIA_DIR "/srv/media"]}
                       :shutdown    {:type :pimoroni-onoff-shim}
                       :sfx         {:shutdown "sfx/sergequadrado__celtic-positive-intro.mp3"
@@ -41,9 +41,11 @@
                                     ]
                            :groups {}}
 
- :fairy.box.mqtt/client {:uri       "tcp://10.9.4.3:1883"
+ :fairy.box.mqtt/client {:uri       #or [#env MQTT_URI nil]
                          :mqtt-opts {:auto-reconnect     true
-                                     :connection-timeout 5}
+                                     :connection-timeout 5
+                                     :username #or [#env MQTT_USERNAME nil]
+                                     :password #or [#env MQTT_PASSWORD nil]}
                          :bus       #ig/ref :fairy.box.bus/bus
                          :settings  #ig/ref :fairy.box/settings
                          :qos       2}

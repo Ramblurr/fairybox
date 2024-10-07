@@ -8,6 +8,7 @@
    [integrant.core :as ig]
    [cheshire.core :as cheshire]
    [clojurewerkz.machine-head.client :as mh]))
+
 (def ->json cheshire/generate-string)
 (def <-json #(cheshire/parse-string % true))
 
@@ -157,23 +158,25 @@
                     (catch Exception e e))]
       (when (util/exception? conn)
         #_(log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
-                  "Reported exception: " (ex-message conn))
+                    "Reported exception: " (ex-message conn))
         (when (= :timeout (async/alt!
                             (async/timeout retry-timeout) :timeout
                             exit-ch :exit))
           (recur (inc retries)))))))
 
 (defn init-client! [opts]
+  (reset! mqtt-state mqtt-init-state)
   (let [exit-ch (async/chan)]
-    (swap! mqtt-state assoc :connected? false)
-    (try-connect! (assoc opts :exit-ch exit-ch))
-    {:exit-ch exit-ch}))
+    (when (:uri opts)
+      (try-connect! (assoc opts :exit-ch exit-ch))
+      {:exit-ch exit-ch})))
 
 (defn halt-client! [{:keys [exit-ch]}]
-  (async/put! exit-ch :exit)
-  (halt-subscriber! (:subscriber-state @mqtt-state))
-  (halt-publisher! (:publisher-state @mqtt-state))
-  (close-client! (:client @mqtt-state))
+  (when exit-ch
+    (async/put! exit-ch :exit)
+    (halt-subscriber! (:subscriber-state @mqtt-state))
+    (halt-publisher! (:publisher-state @mqtt-state))
+    (close-client! (:client @mqtt-state)))
   (reset! mqtt-state mqtt-init-state))
 
 (defmethod ig/init-key ::client [_ opts]
