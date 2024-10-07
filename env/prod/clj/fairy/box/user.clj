@@ -1,6 +1,6 @@
 (ns fairy.box.user
   (:import
-    [java.io File] [java.util.zip ZipInputStream])
+   [java.io File] [java.util.zip ZipInputStream])
   (:require
    [portal.api :as inspect]
    [clojure.string :as string]
@@ -43,10 +43,15 @@
     (def player (:player (:fairy.box.audio.system/player @main/system)))
     (def emitter (:emitter (:fairy.box.audio.system/player @main/system)))) ;; rcf
 
+  (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  0.0})
+  (switchboard/emit-led! emitter {:action :led/set :names [:audio/volume-up] :value  0.0})
   (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
 
-  (switchboard/emit-led! emitter {:action :led/pulse :names [:audio/prev] :after-set 1.0})
+  (switchboard/emit-led! emitter {:action :led/fade :names [:audio/volume-up] :duration 1000})
+  (switchboard/emit-led! emitter {:action :led/fade :groups [:all] :duration 1000 :start-delay 1000 :after-set 1.0})
+  (switchboard/emit-led! emitter {:action :led/fade :groups [:all] :duration 1000 :from 0.0 :to 1.0 :after-set 1.0})
 
+  (switchboard/emit-led! emitter {:action :led/pulse :names [:audio/volume-up] :after-set 1.0})
 
   (interop/stop! player)
   (-> player  (.mediaPlayer) (.media) (.start "/home/ramblurr/media/sfx/startupsound.mp3" nil))

@@ -1,5 +1,6 @@
 (ns fairy.box.switchboard
   (:require
+   [clojure.java.shell :as shell]
    [fairy.box.audio :as audio]
    [clojure.java.io :as io]
    [fairy.box.audio.browse :as browse]
@@ -125,12 +126,13 @@
       :system/cooling-down (do
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
+                             (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
                              (emit-player! emitter {:action :audio/play-one-shot :id :shutdown-sound
                                                     :item-path (sfx-path settings :shutdown)}))
       :system/shutdown (do
+                         (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
                          (swap! state assoc :system-state :system-state/shutdown)
-                         ;; todo perform shutdown
-                         )
+                         (shell/sh "systemctl" "poweroff"))
       nil)))
 
 (defn player-handler [{:keys [emitter]} {:keys [value] :as ev}]

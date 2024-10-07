@@ -52,10 +52,15 @@
     (fn [request]
       (artwork/current-artwork request))]
 
+   ["/shutdown"
+    {:post (fn [request]
+             (switchboard/initiate-shutdown! emitter)
+             (http-response/ok {}))}]
+
    ["/leds-on"
-    (fn [request]
-      (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
-      (http-response/ok {}))]
+    {:get (fn [request]
+            (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
+            (http-response/ok {}))}]
 
    ["/ws" (fn [request]
             {:undertow/websocket

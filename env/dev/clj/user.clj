@@ -1,7 +1,7 @@
 (ns user
   "Userspace functions you can run by default in your local REPL."
-  (:import [uk.pigpioj PigpioJ]
-           [uk.co.caprica.vlcj.media ParseFlag Meta Picture MetaData MediaParsedStatus MediaEventListener Media MediaRef MediaEventAdapter])
+  #_(:import [uk.pigpioj PigpioJ]
+             [uk.co.caprica.vlcj.media ParseFlag Meta Picture MetaData MediaParsedStatus MediaEventListener Media MediaRef MediaEventAdapter])
   (:require
    [portal.api :as inspect]
    [clojure.pprint]
@@ -13,15 +13,13 @@
    [integrant.repl :refer [clear go halt prep init reset reset-all]]
    [integrant.repl.state :as state]
    [kit.api :as kit]
-   [lambdaisland.classpath.watch-deps :as watch-deps]      ;; hot loading for deps
-   [fairy.box.audio.browse :as browse]
-   [fairy.box.audio.interop :as interop]
-   [fairy.box.audio.system :as audio-sys]
-   [fairy.box.core :refer [start-app initiate-shutdown!]]
-   [fairy.box.switchboard :as switchboard]))
-
-;; uncomment to enable hot loading for deps
-(watch-deps/start! {:aliases [:dev :test]})
+   [fairy.box.config :as config]
+   ;; [fairy.box.audio.browse :as browse]
+   ;; [fairy.box.audio.interop :as interop]
+   ;; [fairy.box.audio.system :as audio-sys]
+   ;; [fairy.box.core :refer [start-app initiate-shutdown!]]
+   ;; [fairy.box.switchboard :as switchboard]
+   ))
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 
@@ -32,13 +30,13 @@
 (defn dev-prep!
   []
   (integrant.repl/set-prep! (fn []
-                              (-> (fairy.box.config/system-config {:profile :dev})
+                              (-> (config/system-config {:profile :dev})
                                   (ig/prep)))))
 
 (defn test-prep!
   []
   (integrant.repl/set-prep! (fn []
-                              (-> (fairy.box.config/system-config {:profile :test})
+                              (-> (config/system-config {:profile :test})
                                   (ig/prep)))))
 
 ;; Can change this to test-prep! if want to run tests as the test profile in your repl
@@ -52,7 +50,7 @@
 
 (defn portal-remote []
   (inspect/open {:theme :portal.colors/gruvbox
-                 :portal.launcher/host "10.9.6.33"
+                 :portal.launcher/host "10.9.6.26"
                  :portal.launcher/port  7001})
   (add-tap portal.api/submit))
 
@@ -95,9 +93,9 @@
 
   (browse/playable-type settings (browse/absoluteify settings "playlists/LibbyDish1.m3u"))
   (async/put! emitter {:path  "/player/commands"
-                       :value {:action    :audio/play-path
-                               :item-path (browse/absoluteify settings "playlists/LibbyDish1.m3u")
-                               :uid       nil}})
+                       :value {:action    :audio/play-one-shot :id :test
+                               :item-path  #_"http://home.int.socozy.casa:8123/api/tts_proxy/3ea719233bbeeec95d388313f4788462f54dc829_zh-cn_-_tts.piper.mp3"
+                               "/srv/media/tts-cache/LTYzMDg5NDIwMw==" #_(browse/absoluteify settings "playlists/LibbyDish1.m3u")}})
 
   (audio-sys/media-info (first medias))
   (-> (first medias)  (.info) (.type))
@@ -147,5 +145,13 @@
   (reset)
   (reset-all)
   (reset-web)
-  ;;
+
+  (do (require '[fairy.box.core :as core]))
+
+  (go)
+
+  1
+
+  (sync-deps)
+;;
   )

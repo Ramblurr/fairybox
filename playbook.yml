@@ -261,8 +261,6 @@
         content: |
           [Unit]
           Description=fairybox watcher
-          PartOf=fairybox.service
-          After=fairybox.service
 
           [Service]
           Type=oneshot
@@ -272,7 +270,7 @@
           RemainAfterExit=yes
 
           [Install]
-          WantedBy=fairybox.service
+          WantedBy=default.target
 
     - name: Create fairybox.service systemd unit file
       tags: [app]
@@ -357,7 +355,7 @@
             sleep 0.2
           done
           echo "Powering Off!"
-          /usr/bin/systemctl poweroff
+          curl -vX POST http://localhost/api/shutdown
         dest: /usr/local/bin/onoff-shim-trigger
         owner: root
         group: root
@@ -391,7 +389,29 @@
         enabled: true
         state: started
 
+    - name: Create policy kit file to allow passwordless shutdown
+      become: true
+      tags: [onoff]
+      ansible.builtin.copy:
+        dest: /var/lib/polkit-1/localauthority/50-local.d/custom-actions.pkla
+        content: |
+          [Actions for ramblurr user]
+          Identity=unix-user:ramblurr
+          Action=org.freedesktop.login1.power-off;
+          ResultAny=yes
+          ResultInactive=no
+          ResultActive=yes
+      notify: restart policykit
+
   handlers:
+    - name: restart policykit
+      become: true
+      ansible.builtin.systemd_service:
+        name: policykit.service
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
     - name: restart pigpiod
       become: true
       ansible.builtin.systemd_service:
