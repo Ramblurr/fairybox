@@ -74,30 +74,41 @@
   (let [path (-> settings :sfx key)]
     (str (browse/media-dir settings) "/" path)))
 
+(defn choose-album [mm]
+  (let [albums (->> mm
+                    (map :album)
+                    (map (fn [a] (when a (str/trim a))))
+                    (set))]
+    (when (= 1 (count albums))
+      (first albums))))
+
 (defn speak-card-contents [{:keys [emitter] :as sys} item-path]
   (let [metadata (audio/metadata-for sys item-path)
-        text (str "This one has. "
-                  (str/join ". " (map :title metadata)))]
-    (tap> [:card-contents metadata text])
+        album (choose-album metadata)
+        titles (str/join ". " (map :title metadata))
+        text (if album
+               (str "This one is " album ". With: " titles)
+               (str "This one has. " titles))]
+    (tap> [:card-contents metadata album text])
     (emit-tts! emitter {:action :tts/speak
                         :text text})))
 
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
-  (if-let [item-path (db/linked-folder @db-conn uid)]
-    (speak-card-contents sys (browse/absoluteify settings item-path))
+  (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
+    (speak-card-contents sys item-path)
     (emit-tts! emitter {:action :tts/speak
                         :text   "This one is empty."})))
 
 (defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   #_(emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
-  (if-let [rel-folder-path (db/linked-folder @db-conn uid)]
+  (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
     (do
       ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
       (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 1.0 :repeat-times 2})
       (async/put! emitter (doto  {:path "/player/commands"
                                   :value {:action :audio/play-path
-                                          :item-path (browse/absoluteify settings rel-folder-path)
+                                          :item-path item-path
                                           :uid uid}} prn)))
     (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
 
@@ -108,7 +119,7 @@
                 :system-mode/normal (rfid-placed-play-mode sys value)
                 :system-mode/card-identification (rfid-placed-card-id-mode sys value))
       :removed (async/put! emitter {:path "/player/commands"
-                                    :value {:action :audio/stop}})
+                                    :value {:action :audio/pause}})
       :error (do
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))

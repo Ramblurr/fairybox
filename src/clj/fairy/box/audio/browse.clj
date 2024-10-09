@@ -124,7 +124,8 @@
 (defn absoluteify
   "Given a relative path inside the media dir, return the absolute path"
   [settings rel-path]
-  (str (Paths/get (media-dir settings) (into-array [rel-path]))))
+  (when rel-path
+    (str (Paths/get (media-dir settings) (into-array [rel-path])))))
 
 (comment
   (list-media-files (str (media-dir nil) "/WinnieThePooh"))

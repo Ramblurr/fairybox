@@ -62,9 +62,9 @@
                      (rfid-link-form req nil nil)))))))
 
 (defn broadcast-player-event! [event]
-  (if (and (not= (:event event) :player/time-changed)
-           (not= (:event event) :player/position-changed))
-    (tap> {:event event}))
+  #_(if (and (not= (:event event) :player/time-changed)
+             (not= (:event event) :player/position-changed))
+      (tap> {:event event}))
   (condp = (:event event)
     ;; :player/position-changed (broadcast! (partial-htmx (progress-bar (:position event))))
     :player/muted (broadcast! (partial-htmx (volume-icon (-> (audio/current-playback!) :current-volume) (:muted? event))))
@@ -86,7 +86,7 @@
 
 (defn ^:export ws-handler [{:keys [emitter]} {:keys [channel data]}]
   (let [payload (<-json data)]
-    (tap> {:data payload})
+    #_(tap> {:data payload})
     (condp = (:action payload)
       "play-pause" (async/put! emitter {:path "/player/commands"
                                         :value {:action :audio/play-pause}})
