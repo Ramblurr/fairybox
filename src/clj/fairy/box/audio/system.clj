@@ -1,15 +1,16 @@
 (ns fairy.box.audio.system
-  (:import
-   [uk.co.caprica.vlcj.media ParseFlag Meta Picture MetaData MediaParsedStatus MediaEventListener Media MediaRef MediaEventAdapter])
   (:require
-   [fairy.box.audio.browse :as browse]
-   [medley.core :as m]
-   [jp.nijohando.event :as ev]
+   [clojure.string :as str]
    [clojure.core.async :as async]
-   [fairy.box.audio.interop :as interop]
    [clojure.tools.logging :as log]
+   [fairy.box.audio.browse :as browse]
+   [fairy.box.audio.interop :as interop]
+   [fairy.box.db :as db]
    [integrant.core :as ig]
-   [fairy.box.db :as db]))
+   [jp.nijohando.event :as ev]
+   [medley.core :as m])
+  (:import
+   (uk.co.caprica.vlcj.media Media)))
 
 (defn- player-event
   "Constructs a valid event map for a player event"
@@ -56,8 +57,13 @@
                    :media-state (interop/media->media-state media)
                    :duration (interop/media->media-duration media)
                    :media-type (interop/media->media-type media)}
-        meta (or (interop/media->meta-map media) {})]
-    (merge meta file-info)))
+        meta (or (interop/media->meta-map media) {})
+        meta (merge meta file-info)]
+    (if (str/includes?  (:title meta) ".tts-cache")
+      (-> meta
+          (assoc :tts? true)
+          (assoc :title "Text to Speech"))
+      meta)))
 
 (defn parse-handler [{:keys [player internal-ch]} play-request-id]
   (interop/parse-event-listener

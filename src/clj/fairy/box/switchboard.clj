@@ -1,17 +1,15 @@
 (ns fairy.box.switchboard
   (:require
-   [clojure.string :as str]
+   [clojure.core.async :as async]
    [clojure.java.shell :as shell]
+   [clojure.tools.logging :as log]
    [fairy.box.audio :as audio]
-   [fairy.box.tts :as tts]
-   [clojure.java.io :as io]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
-   [medley.core :as m]
+   [fairy.box.tts :as tts]
+   [integrant.core :as ig]
    [jp.nijohando.event :as ev]
-   [clojure.core.async :as async]
-   [clojure.tools.logging :as log]
-   [integrant.core :as ig]))
+   [medley.core :as m]))
 
 (def ^:private init-state {:system-state :system-state/booting
                            :system-mode :system-mode/normal

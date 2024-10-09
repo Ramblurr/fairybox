@@ -1,21 +1,20 @@
 (ns fairy.box.tts
-  (:import [java.util Base64]
-           [java.nio.file Paths])
   (:require
-   [fairy.box.audio.browse :as browse]
-   [hiccup2.core :as h2]
-   [clojure.string :as str]
-   [fairy.box.audio :as audio]
-   [clojure.core.async :as async]
-   [clojure.string :as str]
-   [clojure.java.io :as io]
-   [fairy.box.audio.browse :as browse]
-   [integrant.core :as ig]
-   [jp.nijohando.event :as ev]
    [cheshire.core :as cheshire]
+   [clojure.core.async :as async]
+   [clojure.java.io :as io]
+   [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [fairy.box.audio :as audio]
+   [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
-   [hato.client :as hc]))
+   [hato.client :as hc]
+   [hiccup2.core :as h2]
+   [integrant.core :as ig]
+   [jp.nijohando.event :as ev])
+  (:import
+   (java.nio.file Paths)
+   (java.util Base64)))
 
 (def ->json cheshire/generate-string)
 (def <-json #(cheshire/parse-string % true))
