@@ -557,27 +557,17 @@
                                  :uid nil}})
     (response/hx-redirect "player-controls")))
 
-(defn playback-settings-form [req {:keys [min-volume max-volume]}]
+(defn playback-settings-form [req {:keys [min-volume max-volume max-volume-day max-volume-night hour-day-start hour-night-start]}]
   [:form {:class [ui/$page-margin (css  :max-w-5xl)]
           :hx-target "#playback-settings" :hx-post "playback-settings!" :id "playback-settings"}
    (ui/setting-heading :label "Playback Settings")
    [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8 [:sm :grid-cols-6])}
-    [:div {:class (css [:sm :col-span-4])}
-     [:label {:for "minvolume" :class (css :block :text-sm :font-medium :leading-6)} "Min Volume"]
-     [:div {:class (css :mt-2)}
-      [:div {:class (css :flex [:sm :max-w-md])}
-       [:input {:type  "number" :min 0 :max 100 :step 1 :name "minvolume" :id "minvolume" :autocomplete "minvolume"
-                :value min-volume
-                :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                            :bg-transparent :py-1.5 :pl-1  [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]
-    [:div {:class (css [:sm :col-span-4])}
-     [:label {:for "maxvolume" :class (css :block :text-sm :font-medium :leading-6)} "Max Volume"]
-     [:div {:class (css :mt-2)}
-      [:div {:class (css :flex [:sm :max-w-md])}
-       [:input {:type  "number" :min 0 :max 100 :step 1 :name "maxvolume" :id "maxvolume" :autocomplete "maxvolume"
-                :value max-volume
-                :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                            :bg-transparent :py-1.5 :pl-1   [:focus :ring-0] [:sm :text-sm :leading-6])}]]]]]
+    (ui/integer-input :name "min-volume" :label "Min Volume" :value min-volume)
+    (ui/integer-input :name "max-volume" :label "Max Volume" :value max-volume)
+    (ui/integer-input :name "max-volume-day" :label "Max Volume (Day)" :value max-volume-day)
+    (ui/integer-input :name "max-volume-night" :label "Max Volume (Night)" :value max-volume-night)
+    (ui/integer-input :name "hour-day-start" :label "Day Starts At" :value hour-day-start :min 0 :max 23)
+    (ui/integer-input :name "hour-night-start" :label "Night Starts At" :value hour-night-start :min 0 :max 23)]
 
    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
     (ui/button :label "Back" :priority :link :hx-get "settings" :hx-push-url "settings" :hx-target "#active-tab")
@@ -590,10 +580,19 @@
       body
       (page-htmx (home-page :settings body)))))
 
-(defcomponent ^:endpoint playback-settings! [req ^:long-option minvolume ^:long-option maxvolume]
-  (tap> {:settings {:minvolume minvolume :maxvolume maxvolume}})
-  (let [audio (remove-nils {:min-volume minvolume
-                            :max-volume maxvolume})]
+(defcomponent ^:endpoint playback-settings! [req
+                                             ^:long-option min-volume
+                                             ^:long-option max-volume
+                                             ^:long-option max-volume-day
+                                             ^:long-option max-volume-night
+                                             ^:long-option hour-day-start
+                                             ^:long-option hour-night-start]
+  (let [audio (remove-nils {:min-volume min-volume
+                            :max-volume max-volume
+                            :max-volume-day max-volume-day
+                            :max-volume-night max-volume-night
+                            :hour-day-start hour-day-start
+                            :hour-night-start hour-night-start})]
 
     (db/upsert-audio-settings! (util/req-db-conn req) audio)
     (playback-settings-form req audio)))

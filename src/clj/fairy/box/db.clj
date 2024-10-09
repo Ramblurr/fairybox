@@ -5,7 +5,7 @@
    [integrant.core :as ig]
    [duratom.core :as duratom]))
 
-(def DEFAULT_MAX_VOLUME 80)
+(def DEFAULT_MAX_VOLUME 95)
 
 (defmethod ig/init-key ::db [_ {:keys [path]}]
   (log/info "\n-=[starting db]=-")
@@ -14,7 +14,13 @@
    :file-path path
    :init {:_version 1
           :linked-tags {}
-          :settings {:audio {:max-volume DEFAULT_MAX_VOLUME}}}))
+          :settings {:audio
+                     {:max-volume DEFAULT_MAX_VOLUME
+                      :min-volume 0
+                      :max-volume-day DEFAULT_MAX_VOLUME
+                      :max-volume-night DEFAULT_MAX_VOLUME
+                      :hour-day-start 8
+                      :hour-night-start 19}}}))
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)
@@ -33,10 +39,22 @@
   (get-in db [:settings :audio]))
 
 (defn max-volume [db]
-  (get-in db [:settings :audio :max-volume] DEFAULT_MAX_VOLUME))
+  (:max-volume (audio-settings db)))
 
 (defn min-volume [db]
-  (get-in db [:settings :audio :min-volume] 0))
+  (:min-volume (audio-settings db)))
+
+(defn max-volume-day [db]
+  (:max-volume-day (audio-settings db)))
+
+(defn max-volume-night [db]
+  (:max-volume-night (audio-settings db)))
+
+(defn hour-day-start [db]
+  (:hour-day-start (audio-settings db)))
+
+(defn hour-night-start [db]
+  (:hour-night-start (audio-settings db)))
 
 (defn ha-url [db]
   (get-in db [:settings :homeassistant :ha-url]))

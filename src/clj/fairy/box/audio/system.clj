@@ -308,9 +308,32 @@
     :playlist (interop/parse-media-playlist-sync item-path)
     (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path}))))
 
+(defn maximum-volume
+  ([db current-hour]
+   (let [;; user configured absolute max volume - can never be louder than this
+         absolute-max-volume (db/max-volume db)
+         hour-day-start (db/hour-day-start db)
+         hour-night-start (db/hour-night-start db)
+         max-volume-night (db/max-volume-night db)
+         max-volume-day (db/max-volume-day db)
+         m (min absolute-max-volume
+                (if (< (dec hour-day-start) current-hour hour-night-start)
+                  (or max-volume-day absolute-max-volume)
+                  (or max-volume-night absolute-max-volume)))]
+     #_(tap> {:hour current-hour
+              :hour-day-start hour-day-start
+              :hour-night-start hour-night-start
+              :max-volume-night max-volume-night
+              :max-volume-day max-volume-day
+              :absolute-max-volume absolute-max-volume
+              :result m})
+     m))
+  ([db]
+   (maximum-volume db (-> (java.time.LocalTime/now) (.getHour)))))
+
 (defn new-player! [db handler]
   (let [player (interop/init-player! handler)]
-    (interop/set-volume! player (db/max-volume db))
+    (interop/set-volume! player (maximum-volume db))
     player))
 
 (defn play-one-shot! [{:keys [emitter db-conn]} {:keys [item-path id]}]
@@ -340,12 +363,14 @@
 (defn wrap-volume [db-conn new-volume]
   (let [db @db-conn
         minv (db/min-volume db)
-        maxv (db/max-volume db)]
-    (max minv (min maxv new-volume))))
+        maxv (maximum-volume db)
+        v (max minv (min maxv new-volume))]
+    #_(tap> {:minv minv :maxv maxv :v v})
+    v))
 
 (defn adjust-volume! [{:keys [player db-conn] :as sys} delta]
   (let [current (interop/volume player)
-        new-volume (wrap-volume db-conn  (+ current delta))]
+        new-volume (wrap-volume db-conn (+ current delta))]
     (interop/set-volume! player new-volume)))
 
 (defn set-volume! [{:keys [player db-conn] :as sys} v]

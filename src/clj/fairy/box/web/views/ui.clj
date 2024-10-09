@@ -85,3 +85,14 @@
                        #_(when label $label-offset)
                        icon-class]})))
    [:span {:class "button-label"} label]])
+
+(defn integer-input [& {:keys [name value label required? hint error min max step id autocomplete]
+                        :or {required? true step 1 min 0 max 100}}]
+  [:div {:class (css [:sm :col-span-4])}
+   [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
+   [:div {:class (css :mt-2)}
+    [:div {:class (css :flex [:sm :max-w-md])}
+     [:input {:type "number" :min min :max max :step step :name name :id (or id name) :autocomplete autocomplete
+              :value value
+              :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
+                          :bg-transparent :py-1.5 :pl-1  [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])

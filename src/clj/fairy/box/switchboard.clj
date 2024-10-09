@@ -112,15 +112,21 @@
     (do
       ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
       (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 1.0 :repeat-times 2})
-      (async/put! emitter (doto  {:path "/player/commands"
-                                  :value {:action :audio/play-path
-                                          :item-path item-path
-                                          :uid uid}} prn)))
+      (async/put! emitter {:path "/player/commands"
+                           :value {:action :audio/play-path
+                                   :item-path item-path
+                                   :uid uid}}))
     (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
+
+(defn cap-volume! [emitter]
+  ;; calls adjust volume with a 0 delta, which will ensure the volume is within the limits
+  (async/put! emitter {:path "/player/commands"
+                       :value {:action :audio/adjust-volume :delta 0}}))
 
 (defn rfid-handler [{:keys [db-conn emitter settings] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (swap! state assoc :rfid value)
+    (cap-volume! emitter)
     (condp = (:action value)
       :placed (condp = (:system-mode @state)
                 :system-mode/normal (rfid-placed-play-mode sys value)
