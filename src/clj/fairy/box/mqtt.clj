@@ -87,8 +87,10 @@
       (recur))))
 
 (defn init-publisher! [{:keys [bus settings] :as opts}]
-  (let [listener (async/chan)
-        topic (format "fairybox/%s/state" (:fairybox-id settings))]
+  (let [{:keys [fairybox-id]} settings
+        _ (assert fairybox-id)
+        listener (async/chan)
+        topic (format "fairybox/%s/state" fairybox-id)]
     (ev/listen bus "/player/events" listener)
     (start-publish-loop! (assoc opts :topic topic) listener)
     {:listener listener}))

@@ -2,7 +2,8 @@
                       :media       {:media-dir #or [#env MEDIA_DIR "/srv/media"]}
                       :shutdown    {:type :pimoroni-onoff-shim}
                       :sfx         {:shutdown "sfx/sergequadrado__celtic-positive-intro.mp3"
-                                    :startup  "sfx/sergequadrado__magic-harp-logo.mp3"}}
+                                    :startup  "sfx/sergequadrado__magic-harp-logo.mp3"
+                                    :tts-problem "sfx/tts-sorry-problem.wav"}}
 
  :fairy.box.db/db                   {:path #or [#env DB_PATH "/var/lib/fairybox/db.edn"]}
  :fairy.box.bus/bus                 {}

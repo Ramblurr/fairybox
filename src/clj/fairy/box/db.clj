@@ -62,6 +62,12 @@
 (defn ha-bearer-token [db]
   (get-in db [:settings :homeassistant :ha-bearer-token]))
 
+(defn tts-engine [db]
+  (get-in db [:settings :tts :engine] :google-cloud))
+
+(defn google-cloud-api-key [db]
+  (get-in db [:settings :google-cloud-api-key]))
+
 (defn upsert-settings! [conn settings]
   (swap! conn assoc :settings settings))
 

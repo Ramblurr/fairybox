@@ -15,11 +15,10 @@
    [kit.api :as kit]
    [fairy.box.config :as config]
    ;; [fairy.box.audio.browse :as browse]
-   ;; [fairy.box.audio.interop :as interop]
-   ;; [fairy.box.audio.system :as audio-sys]
+   [fairy.box.audio.interop :as interop]
+   [fairy.box.audio.system :as audio-sys]
    ;; [fairy.box.core :refer [start-app initiate-shutdown!]]
-   ;; [fairy.box.switchboard :as switchboard]
-   ))
+   [fairy.box.switchboard :as switchboard]))
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 
@@ -68,6 +67,12 @@
     (def player (:player (:fairy.box.audio.system/player state/system)))
     (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
     (def bus (:fairy.box.bus/bus state/system))) ;; rcf
+  (switchboard/initiate-shutdown! emitter)
+
+  (interop/pause! player)
+  (interop/unpause! player)
+
+  (interop)
 
   (initiate-shutdown! emitter bus)
   (switchboard/emit-system! emitter {:event :system/shutdown})
@@ -149,9 +154,10 @@
   (do (require '[fairy.box.core :as core]))
 
   (go)
+  (halt)
 
   1
 
   (sync-deps)
-;;
+  ;;
   )
