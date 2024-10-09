@@ -40,12 +40,12 @@
   (assert db-conn "db-conn not defined")
   (try
     (condp = path
-      "/player/events" (do (when-not (contains? #{:player/time-changed :player/position-changed}  (:event value))
-                             (tap> {(:event value) value}))
-                           (condp = (:event value)
-                             :player/position-changed (async/put! position-ch value)
-                             :player/time-changed (async/put! time-ch value)
-                             (home/broadcast-player-event! value)))
+      "/player/events" (do #_(when-not (contains? #{:player/time-changed :player/position-changed}  (:event value))
+                               (tap> {(:event value) value}))
+                        (condp = (:event value)
+                          :player/position-changed (async/put! position-ch value)
+                          :player/time-changed (async/put! time-ch value)
+                          (home/broadcast-player-event! value)))
 
       "/hardware/input/rfid"
       (let [{:keys [uid action at]} value]

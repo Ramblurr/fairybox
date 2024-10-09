@@ -131,6 +131,10 @@
   (let [volume (volume player)]
     (set-volume! player (max 0 (min 100 (+ volume delta))))))
 
+(defn clear-media-list! [^AudioListPlayerComponent player]
+  (when-let [m (-> player (.mediaListPlayer) (.list) (.media))]
+    (.clear m)))
+
 (defn stop! [^AudioListPlayerComponent player]
   (-> player (.mediaListPlayer) (.controls) (.stop)))
 

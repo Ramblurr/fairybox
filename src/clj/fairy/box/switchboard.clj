@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [clojure.java.shell :as shell]
    [fairy.box.audio :as audio]
+   [fairy.box.tts :as tts]
    [clojure.java.io :as io]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
@@ -32,13 +33,20 @@
 (defn emit-led! [emitter event]
   (async/put! emitter {:path "/hardware/output/leds" :value event}))
 
+(defn change-mode! [sys new-mode]
+  (emit-player! (:emitter sys) {:action :audio/clear})
+  (swap! state (fn [s]
+                 (-> s
+                     (assoc :system-mode new-mode)
+                     (assoc :rfid nil)))))
+
 (defn exit-card-id-mode [{:keys [emitter] :as sys}]
-  (swap! state assoc :system-mode :system-mode/normal)
+  (change-mode! sys :system-mode/normal)
   (emit-led! emitter {:action :led/animation-cancel :animation-id :card-identification-mode})
   (emit-led! emitter {:action :led/set :groups [:all] :value  1.0}))
 
 (defn enter-card-id-mode [{:keys [emitter] :as sys}]
-  (swap! state assoc :system-mode :system-mode/card-identification)
+  (change-mode! sys :system-mode/card-identification)
   (emit-led! emitter {:action :led/set :names [:audio/prev :audio/next :audio/volume-up :audio/volume-down]  :value  0.0})
   (emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 10 :animation-id :card-identification-mode}))
 
@@ -77,32 +85,10 @@
         :button/hold (handle-card-id-mode sys value)
         nil))))
 
-(defn sfx-path [settings key]
-  (let [path (-> settings :sfx key)]
-    (str (browse/media-dir settings) "/" path)))
-
-(defn choose-album [mm]
-  (let [albums (->> mm
-                    (map :album)
-                    (map (fn [a] (when a (str/trim a))))
-                    (set))]
-    (when (= 1 (count albums))
-      (first albums))))
-
-(defn speak-card-contents [{:keys [emitter] :as sys} item-path]
-  (let [metadata (audio/metadata-for sys item-path)
-        album (choose-album metadata)
-        titles (str/join ". " (map :title metadata))
-        text (if album
-               (str "This one is " album ". With: " titles)
-               (str "This one has. " titles))]
-    (tap> [:card-contents metadata album text])
-    (emit-tts! emitter {:action :tts/speak :text text})))
-
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
   (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
-    (speak-card-contents sys item-path)
+    (tts/speak-card-contents sys item-path)
     (emit-tts! emitter {:action :tts/speak
                         :text   "This one is empty."})))
 
@@ -154,7 +140,7 @@
                            (swap! state assoc :system-state :system-state/warming-up)
                            (emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
                            (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound
-                                                  :item-path (sfx-path settings :startup)}))
+                                                  :item-path (browse/sfx-path settings :startup)}))
       :system/warmed-up (when (= :system-state/warming-up (system-state!))
                           (swap! state assoc :system-state :system-state/ready)
                           (emit-system! emitter {:event :system/ready}))
@@ -163,7 +149,7 @@
                              (emit-player! emitter {:action :audio/stop})
                              (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
                              (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff)
-                                                    :item-path (sfx-path settings :shutdown)}))
+                                                    :item-path (browse/sfx-path settings :shutdown)}))
       :system/shutdown (when (= :system-state/cooling-down (system-state!))
                          (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
                          (swap! state assoc :system-state :system-state/shutdown)

@@ -127,6 +127,10 @@
   (when rel-path
     (str (Paths/get (media-dir settings) (into-array [rel-path])))))
 
+(defn sfx-path [settings key]
+  (let [path (-> settings :sfx key)]
+    (str (media-dir settings) "/" path)))
+
 (comment
   (list-media-files (str (media-dir nil) "/WinnieThePooh"))
   (list-dirs media-dir)

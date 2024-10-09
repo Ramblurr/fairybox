@@ -112,17 +112,27 @@
       (swap! audio-state assoc-in [:play-requests play-request-id] play-request))))
 
 (defn stop-and-release-current! [player {:keys [current-play-request] :as state}]
-  (when current-play-request
+  (when player
     (interop/stop! player)
+    (interop/clear-media-list! player))
+  (when current-play-request
     (release-play-request-by-id! state current-play-request)))
 
+(defn clear-current-play-request! [{:keys [player]}]
+  (stop-and-release-current! player @audio-state)
+  (swap! audio-state (fn [s]
+                       (let [current-play-request-id  (get-in s [:current-play-request])]
+                         (-> s
+                             (m/dissoc-in [:play-requests current-play-request-id])
+                             (assoc :current-play-request nil))))))
+
 (defn handle-pre-play-parse-finished! [{:keys [player]} {:keys [play-request-id]}]
-  (let [state @audio-state
-        current-play-request-id (get-in state [:current-play-request])
-        current-play-request (get-in state [:play-requests current-play-request-id])
-        finished-parsing-play-request (get-in state [:play-requests play-request-id])
-        current-play-request (or current-play-request -1)]
-    (if (< (:created-at finished-parsing-play-request)  (:created-at current-play-request -1))
+  (let [state                         @audio-state
+        current-play-request-id       (get-in state [:current-play-request])
+        current-play-request          (get-in state [:play-requests current-play-request-id])
+        finished-parsing-play-request (get-in state [:play-requests play-request-id])]
+    #_(tap> [:handle-pre-play-fin :current-id current-play-request-id :finished-id play-request-id :finished finished-parsing-play-request])
+    (if (< (:created-at finished-parsing-play-request) (:created-at current-play-request -1))
       (do
         ;; this play request that just finished parsing has been superceded
         ;; so we don't need to play it, just release it
@@ -381,6 +391,7 @@
     (let [{:keys [action item-path]} value
           {:keys [config]} @audio-state]
       (condp = action
+        :audio/clear (clear-current-play-request! sys)
         :audio/play-one-shot (play-one-shot! sys value)
         :audio/play-path (play-path! sys item-path)
         :audio/stop (interop/stop! player)
