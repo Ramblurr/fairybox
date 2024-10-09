@@ -13,7 +13,8 @@
    [integrant.core :as ig]))
 
 (def ^:private init-state {:system-state :system-state/booting
-                           :system-mode :system-mode/normal})
+                           :system-mode :system-mode/normal
+                           :rfid nil})
 (defonce ^:private state (atom init-state))
 
 (defn system-state! []
@@ -30,17 +31,6 @@
 
 (defn emit-led! [emitter event]
   (async/put! emitter {:path "/hardware/output/leds" :value event}))
-
-(def button-press-event {:audio/play-pause {:path "/player/commands"
-                                            :value {:action :audio/play-pause}}
-                         :audio/next {:path "/player/commands"
-                                      :value {:action :audio/next}}
-                         :audio/prev {:path "/player/commands"
-                                      :value {:action :audio/prev}}
-                         :audio/volume-up {:path  "/player/commands"
-                                           :value {:action :audio/volume-up}}
-                         :audio/volume-down {:path  "/player/commands"
-                                             :value {:action :audio/volume-down}}})
 
 (defn exit-card-id-mode [{:keys [emitter] :as sys}]
   (swap! state assoc :system-mode :system-mode/normal)
@@ -59,14 +49,31 @@
         (enter-card-id-mode sys))
       (exit-card-id-mode sys))))
 
+(defn handle-button-press [{:keys [emitter] :as sys} {:keys [button-id]}]
+  (let [{:keys [system-mode rfid]} @state
+        normal-mode? (= :system-mode/normal system-mode)
+        rfid-present? (= :placed  (:action rfid))]
+    (condp = button-id
+      :audio/play-pause (when (and rfid-present? normal-mode?)
+                          (async/put! emitter {:path "/player/commands"
+                                               :value {:action :audio/play-pause}}))
+      :audio/next (when (and rfid-present? normal-mode?)
+                    (async/put! emitter {:path "/player/commands"
+                                         :value {:action :audio/next}}))
+      :audio/prev (when (and rfid-present? normal-mode?)
+                    (async/put! emitter {:path "/player/commands"
+                                         :value {:action :audio/prev}}))
+      :audio/volume-up (async/put! emitter {:path "/player/commands"
+                                            :value {:action :audio/volume-up}})
+      :audio/volume-down (async/put! emitter {:path "/player/commands"
+                                              :value {:action :audio/volume-down}}))))
+
 (defn button-handler [{:keys [emitter] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
     (let [{:keys [button-id action]} value]
       #_(tap> [:button button-id action])
       (condp = action
-        :button/single-press (when-let [ev (button-press-event button-id)]
-                               (when (= :system-mode/normal (:system-mode @state))
-                                 (async/put! emitter ev)))
+        :button/single-press (handle-button-press sys value)
         :button/hold (handle-card-id-mode sys value)
         nil))))
 
@@ -90,8 +97,7 @@
                (str "This one is " album ". With: " titles)
                (str "This one has. " titles))]
     (tap> [:card-contents metadata album text])
-    (emit-tts! emitter {:action :tts/speak
-                        :text text})))
+    (emit-tts! emitter {:action :tts/speak :text text})))
 
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
@@ -114,6 +120,7 @@
 
 (defn rfid-handler [{:keys [db-conn emitter settings] :as sys} {:keys [value] :as ev}]
   (when (= :system-state/ready (system-state!))
+    (swap! state assoc :rfid value)
     (condp = (:action value)
       :placed (condp = (:system-mode @state)
                 :system-mode/normal (rfid-placed-play-mode sys value)
