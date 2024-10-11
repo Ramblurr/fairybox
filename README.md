@@ -79,9 +79,9 @@ bb uberjar
 
 # Development
 
-Running and developing fairybox requires a raspberry pi.
+Running and developing Fairybox requires a raspberry pi.
 
-But we don't want to edit on the raspberry pi, so we use a remote nrepl and a sync script.
+But we don't want to edit on the Raspberry PI, so we use a remote nrepl and a sync script.
 
 On your raspberry pi clone this repo, then start the remote repl with:
 
@@ -111,7 +111,23 @@ Editing using a remote repl makes code changes easy, but to change css, js, and 
 bb watch
 ```
 
+Or you can sync one-time with 
+
+``bash
+bb sync
+```
+
 Run this in a different terminal window on your *workstation* (not the raspberry pi), it will watch for changes and rsync them to the pi. Your `~/.ssh/config` must have a `fairybox` entry.
+
+
+# Deployment
+
+There is a simple ansible playbook in this repo that can be run against your PI assuming it has Raspberry PI OS installed.
+
+You should side-load the uberjar (`bb uberjar && scp target/box-standalone.jar fairybox:/var/lib/fairybox`) yourself.
+
+The playbook sets up a simple systemd service to run the uberjar.
+
 
 # License
 
