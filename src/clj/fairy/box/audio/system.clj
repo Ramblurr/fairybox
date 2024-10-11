@@ -455,9 +455,9 @@
                    (recur)))))
 
 (defn- init-audio! [{:keys [bus settings db-conn]}]
-  (let [emitter (async/chan)
-        commands-ch (async/chan (async/sliding-buffer 2048))
-        internal-ch (async/chan (async/sliding-buffer 2048))
+  (let [emitter (async/chan (async/sliding-buffer 512))
+        commands-ch (async/chan (async/sliding-buffer 512))
+        internal-ch (async/chan (async/sliding-buffer 512))
         exit-ch (async/chan)
         player (new-player! @db-conn (fn [ev]
                                        (try

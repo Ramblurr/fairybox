@@ -89,21 +89,23 @@
 (defn init-publisher! [{:keys [bus settings] :as opts}]
   (let [{:keys [fairybox-id]} settings
         _ (assert fairybox-id)
-        listener (async/chan)
+        listener (async/chan (async/sliding-buffer 512))
         topic (format "fairybox/%s/state" fairybox-id)]
     (ev/listen bus "/player/events" listener)
     (start-publish-loop! (assoc opts :topic topic) listener)
     {:listener listener}))
 
 (defn halt-publisher! [{:keys [listener] :as opts}]
-  (when opts
-    (async/close! listener)))
+  (when listener
+    (log/info "mqtt halt-subscriber!")
+    (async/close! listener)
+    nil))
 
 (defn emit! [emitter event]
   (async/put! emitter {:path "/player/commands" :value event}))
 
 (defn init-subscriber! [{:keys [client bus settings qos]}]
-  (let [emitter (async/chan)
+  (let [emitter (async/chan (async/sliding-buffer 512))
         topic (format "fairybox/%s/command" (:fairybox-id settings))]
     (ev/emitize bus emitter)
     (mh/subscribe client {topic qos}
@@ -117,8 +119,10 @@
 (defn halt-subscriber! [{:keys [emitter topic client] :as opts}]
   (when opts
     (try
+      (log/info "mqtt halt-subscriber!")
       (async/close! emitter)
       (mh/unsubscribe client topic)
+      nil
       (catch Exception e
         (log/error e "halting mqtt subscriber error")))))
 
@@ -159,8 +163,8 @@
           conn (try (mqtt-connect! opts)
                     (catch Exception e e))]
       (when (util/exception? conn)
-        #_(log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
-                    "Reported exception: " (ex-message conn))
+        (log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
+                  "Reported exception: " (ex-message conn))
         (when (= :timeout (async/alt!
                             (async/timeout retry-timeout) :timeout
                             exit-ch :exit))
@@ -168,10 +172,22 @@
 
 (defn init-client! [opts]
   (reset! mqtt-state mqtt-init-state)
-  (let [exit-ch (async/chan)]
-    (when (:uri opts)
-      (try-connect! (assoc opts :exit-ch exit-ch))
-      {:exit-ch exit-ch})))
+
+  (let [exit-ch (async/chan)
+        opts (-> opts
+                 (assoc :uri "tcp://home.int.socozy.casa:1883")
+                 (assoc-in [:settings :fairybox-id] "fairybox1")
+                 (assoc-in [:mqtt-opts :username] "phoniebox")
+                 (assoc-in [:mqtt-opts :password] "frostbite-enlarging-pretext-stingily-gosling-task-osmosis-flirt"))]
+
+    (prn opts)
+    (if (:uri opts)
+      (do
+        (let [fairybox-id (get-in opts [:settings :fairybox-id])]
+          (assert (and (some? fairybox-id) (not= "" fairybox-id)) "fairybox-id must be set!"))
+        (try-connect! (assoc opts :exit-ch exit-ch))
+        {:exit-ch exit-ch})
+      (log/info "mqtt not connecting uri is nil"))))
 
 (defn halt-client! [{:keys [exit-ch]}]
   (when exit-ch

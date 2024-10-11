@@ -109,7 +109,7 @@
     (let [{:keys [device test-fn get-card-uid-fn]} (->rfid opts)]
       (assert device)
       (assert get-card-uid-fn)
-      (let [emitter (async/chan)]
+      (let [emitter (async/chan (async/sliding-buffer 512))]
         (try
           (ev/emitize bus emitter)
           (with-open [device device]
