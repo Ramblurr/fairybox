@@ -6,32 +6,41 @@
                                   :mvn/version "0.4.6"}}
  :pods  {org.babashka/fswatcher {:version "0.0.5"}}
  :paths ["resources" "scripts"]
- :tasks {:requires   ([babashka.fs :as fs]
-                      [babashka.tasks :refer [shell]])
-         remote-repl {:doc  "Start nREPL for remote development"
-                      :task (clojure {:extra-env {"NREPL_HOST" "0.0.0.0"
-                                                  "LD_LIBRARY_PATH" "/nix/store/32bnkg0ac2g3mzc2mn9w0kvxwl3lg7k4-vlc-3.0.20/lib:/nix/store/zz0idbln84l44gk44bnq1m7vlw4h2nj2-pigpio-79/lib"}
-                                      :dir "."} "-M:dev:remote-dev")
-                      ;; :task (shell {:dir "."} "make deps-repl")
-                      }
-         run         {:doc  "starts the app"
-                      :task (clojure {:dir "."} "-m fairy.box.core")}
-         nrepl       {:doc  "starts the nREPL"
-                      :task (clojure {:dir "."} "-M:dev:nrepl")}
-         cider       {:doc  "starts the cider"
-                      :task (clojure {:dir "."} "-M:dev:cider")}
-         test        {:doc  "runs tests"
-                      :task (clojure {:dir "."} "-M:test")}
-         uberjar     {:doc  "builds the uberjar"
-                      :task (clojure {:dir "."} "-T:build all")}
-         format      {:doc  "Formats codebase"
-                      :task (try
-                              (shell {:dir "src"} "cljstyle fix")
-                              (catch Exception _
-                                (clojure {:dir "src"} "-M:dev -m cljstyle.main fix")))}
-         watch       {:requires ([pod.babashka.fswatcher :as fw])
-                      :task     (exec 'watch/dev-watch)}
-         sync        {:task (exec 'sync/do-sync!)}
-         css-dev {:task (exec 'css/css-dev)}
-         css-release {:task (exec 'css/css-release)}
-         credits {:task (exec 'credits/build-attribution)}}}
+ :tasks {:requires         ([babashka.fs :as fs]
+                            [clojure.string :as str]
+                            [babashka.tasks :refer [shell]])
+         remote-repl       {:doc  "Start nREPL for remote development"
+                            :task (clojure {:extra-env {"NREPL_HOST"      "0.0.0.0"
+                                                        "LD_LIBRARY_PATH" "/nix/store/32bnkg0ac2g3mzc2mn9w0kvxwl3lg7k4-vlc-3.0.20/lib:/nix/store/zz0idbln84l44gk44bnq1m7vlw4h2nj2-pigpio-79/lib"}
+                                            :dir       "."} "-M:dev:remote-dev")
+                            ;; :task (shell {:dir "."} "make deps-repl")
+                            }
+         run               {:doc  "starts the app"
+                            :task (clojure {:dir "."} "-m fairy.box.core")}
+         nrepl             {:doc  "starts the nREPL"
+                            :task (clojure {:dir "."} "-M:dev:nrepl")}
+         cider             {:doc  "starts the cider"
+                            :task (clojure {:dir "."} "-M:dev:cider")}
+         test              {:doc  "runs tests"
+                            :task (clojure {:dir "."} "-M:test")}
+         uberjar           {:doc  "builds the uberjar"
+                            :task (clojure {:dir "."} "-T:build all")}
+         format            {:doc  "Formats codebase"
+                            :task (try
+                                    (shell {:dir "src"} "cljstyle fix")
+                                    (catch Exception _
+                                      (clojure {:dir "src"} "-M:dev -m cljstyle.main fix")))}
+         watch             {:requires ([pod.babashka.fswatcher :as fw])
+                            :task     (exec 'watch/dev-watch)}
+         sync              {:task (exec 'sync/do-sync!)}
+         css-dev           {:task (exec 'css/css-dev)}
+         css-release       {:task (exec 'css/css-release)}
+         credits           {:task (exec 'credits/build-attribution)}
+         fmt               (shell "cljfmt -v fix .")
+         lint.copy-configs (let [cp (-> (shell {:out :string} "clojure -Spath -M:test:dev") :out str/trim)]
+                             (shell (str "clj-kondo --lint " cp " --dependencies --copy-configs --skip-lint")))
+         lint.kondo        (shell "clj-kondo" *command-line-args*)
+         lint              (shell (str "clj-kondo" " --fail-level error"
+                                       (if (seq *command-line-args*)
+                                         (str " --lint " (first *command-line-args*))
+                                         " --lint .")))}}

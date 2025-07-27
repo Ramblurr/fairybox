@@ -11,7 +11,7 @@ _Igniting children's imagination with tactile, screen-less storytelling and musi
 
 <div align="center">
 
-![License AGPL v3+](https://img.shields.io/github/license/ramblurr/fairybox)
+[![AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--v3--or--later-blue)](./LICENSE)
 
 </div>
 
