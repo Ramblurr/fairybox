@@ -1,11 +1,11 @@
 {:paths   ["src/clj" "resources"]
- :deps    {org.clojure/clojure                 {:mvn/version "1.12.0"}
-           org.clojure/core.async              {:mvn/version "1.6.681"}
+ :deps    {org.clojure/clojure                 {:mvn/version "1.12.1"}
+           org.clojure/core.async              {:mvn/version "1.8.741"}
            ;; RPI
-           com.diozero/diozero-core            {:mvn/version "1.4.0"
+           com.diozero/diozero-core            {:mvn/version "1.4.1"
                                                 ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
                                                 }
-           com.diozero/diozero-provider-pigpio {:mvn/version "1.4.0"}
+           com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
            ;; uk.pigpioj/pigpioj-java             {:mvn/version "2.6.1"}
            ;; Media
            uk.co.caprica/vlcj                  {:mvn/version "4.8.2"}
@@ -16,70 +16,70 @@
            ;; Util
            medley/medley                       {:mvn/version "1.4.0"}
            ;; Routing
-           metosin/reitit                      {:mvn/version "0.7.2"}
+           metosin/reitit                      {:mvn/version "0.9.1"}
            ;; Ring
-           metosin/ring-http-response          {:mvn/version "0.9.4"}
-           ring/ring-core                      {:mvn/version "1.12.2"}
-           ring/ring-defaults                  {:mvn/version "0.5.0"}
+           metosin/ring-http-response          {:mvn/version "0.9.5"}
+           ring/ring-core                      {:mvn/version "1.14.2"}
+           ring/ring-defaults                  {:mvn/version "0.6.0"}
            ;; Logging
-           ch.qos.logback/logback-classic      {:mvn/version "1.5.8"}
+           ch.qos.logback/logback-classic      {:mvn/version "1.5.18"}
            ;; Data coercion
            luminus-transit/luminus-transit     {:mvn/version "0.1.6"}
-           metosin/muuntaja                    {:mvn/version "0.6.10"}
-           cheshire/cheshire                   {:mvn/version "5.13.0"}
+           metosin/muuntaja                    {:mvn/version "0.6.11"}
+           cheshire/cheshire                   {:mvn/version "6.0.0"}
            ;; HTML and CSS
-           com.thheller/shadow-css             {:mvn/version "0.4.6"}
+           com.thheller/shadow-css             {:mvn/version "0.6.1"}
            simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
-                                                :git/sha "98bc37311f41772fe98590e0313d6d0285e4019d"}
+                                                :git/sha "9c96c9fcd6f78c84d14e02829578f6d0dca47689"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
            ;; posix signal handling
            spootnik/signal                     {:mvn/version "0.2.5"}
            ;; kit Libs
-           io.github.kit-clj/kit-core          {:mvn/version "1.0.8"}
-           io.github.kit-clj/kit-undertow      {:mvn/version "1.0.7"}
+           io.github.kit-clj/kit-core          {:mvn/version "1.0.9"}
+           io.github.kit-clj/kit-undertow      {:mvn/version "1.0.8"}
            io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
            ;; making http requests as a client
            hato/hato {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.57.3"}}
- :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+           djblue/portal                       {:mvn/version "0.59.2"}}
+ :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
                         :ns-default build}
-           :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.5.48"}
+           :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.6.58"}
                                       criterium/criterium             {:mvn/version "0.4.6"}
                                       expound/expound                 {:mvn/version "0.9.0"}
-                                      integrant/repl                  {:mvn/version "0.3.3"}
-                                      mvxcvi/cljstyle                 {:mvn/version "0.16.630"}
+                                      integrant/repl                  {:mvn/version "0.4.0"}
+                                      mvxcvi/cljstyle                 {:mvn/version "0.17.642"}
                                       pjstadig/humane-test-output     {:mvn/version "0.11.0"}
-                                      ring/ring-devel                 {:mvn/version "1.12.2"}
-                                      ring/ring-mock                  {:mvn/version "0.4.0"}
-                                      io.github.kit-clj/kit-generator {:mvn/version "0.2.3"}
+                                      ring/ring-devel                 {:mvn/version "1.14.2"}
+                                      ring/ring-mock                  {:mvn/version "0.6.1"}
+                                      io.github.kit-clj/kit-generator {:mvn/version "0.2.5"}
                                       org.clojure/tools.namespace     {:mvn/version "1.5.0"}
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
                         :jvm-opts    ["-XX:-OmitStackTraceInFastThrow" "-DPIGPIOD_HOST=127.0.0.1"]}
-           :nrepl      {:extra-deps {nrepl/nrepl {:mvn/version "1.3.0"}}
+           :nrepl      {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
                         :main-opts  ["-m" "nrepl.cmdline" "-i"]}
-           :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.10.0"}
-                                     nrepl/nrepl                   {:mvn/version "1.3.0"}
-                                     cider/cider-nrepl             {:mvn/version "0.50.2"}}
+           :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
+                                     nrepl/nrepl                   {:mvn/version "1.3.1"}
+                                     cider/cider-nrepl             {:mvn/version "0.57.0"}}
                         :main-opts  ["-m" "nrepl.cmdline"
                                      "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware,portal.nrepl/wrap-portal]"
                                      "--bind" "0.0.0.0"
                                      "--port" "7002"]}
            :test       {:extra-deps  {criterium/criterium                  {:mvn/version "0.4.6"}
                                       expound/expound                      {:mvn/version "0.9.0"}
-                                      integrant/repl                       {:mvn/version "0.3.3"}
+                                      integrant/repl                       {:mvn/version "0.4.0"}
                                       io.github.cognitect-labs/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                                                             :git/tag "v0.5.1"
                                                                             :git/sha "dfb30dd"}
                                       pjstadig/humane-test-output          {:mvn/version "0.11.0"}
-                                      ring/ring-devel                      {:mvn/version "1.12.2"}
-                                      ring/ring-mock                       {:mvn/version "0.4.0"}
-                                      io.github.kit-clj/kit-generator      {:mvn/version "0.2.3"}
+                                      ring/ring-devel                      {:mvn/version "1.14.2"}
+                                      ring/ring-mock                       {:mvn/version "0.6.1"}
+                                      io.github.kit-clj/kit-generator      {:mvn/version "0.2.5"}
                                       org.clojure/tools.namespace          {:mvn/version "1.5.0"}
-                                      com.lambdaisland/classpath           {:mvn/version "0.5.48"}}
+                                      com.lambdaisland/classpath           {:mvn/version "0.6.58"}}
                         :exec-fn     cognitect.test-runner.api/test
                         :extra-paths ["env/dev/clj" "env/dev/resources" "env/test/resources" "test/clj"]
                         :main-opts   ["-e" "(require 'pjstadig.humane-test-output) (pjstadig.humane-test-output/activate!)"
