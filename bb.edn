@@ -3,28 +3,24 @@
  :deps  {failjure/failjure       {:mvn/version "2.3.0"}
          com.thheller/shadow-css {;; :git/url "https://github.com/thheller/shadow-css.git"
                                   ;; :git/sha "b3c97fe3caf16fab1a90fb93a7baad76fe15aa46"
-                                  :mvn/version "0.4.6"}}
+                                  :mvn/version "0.6.1"}}
  :pods  {org.babashka/fswatcher {:version "0.0.5"}}
  :paths ["resources" "scripts"]
  :tasks {:requires         ([babashka.fs :as fs]
                             [clojure.string :as str]
                             [babashka.tasks :refer [shell]])
-         remote-repl       {:doc  "Start nREPL for remote development"
-                            :task (clojure {:extra-env {"NREPL_HOST"      "0.0.0.0"
-                                                        "LD_LIBRARY_PATH" "/nix/store/32bnkg0ac2g3mzc2mn9w0kvxwl3lg7k4-vlc-3.0.20/lib:/nix/store/zz0idbln84l44gk44bnq1m7vlw4h2nj2-pigpio-79/lib"}
-                                            :dir       "."} "-M:dev:remote-dev")
-                            ;; :task (shell {:dir "."} "make deps-repl")
-                            }
+         remote-dev        {:doc  "Start nREPL for remote development. Designed to be ran on the RPI"
+                            :task (clojure {:extra-env {"NREPL_HOST" "0.0.0.0"}} "-M:dev:remote-dev")}
          run               {:doc  "starts the app"
-                            :task (clojure {:dir "."} "-m fairy.box.core")}
+                            :task (clojure "-m fairy.box.core")}
          nrepl             {:doc  "starts the nREPL"
-                            :task (clojure {:dir "."} "-M:dev:nrepl")}
+                            :task (clojure "-M:dev:nrepl")}
          cider             {:doc  "starts the cider"
-                            :task (clojure {:dir "."} "-M:dev:cider")}
+                            :task (clojure "-M:dev:cider")}
          test              {:doc  "runs tests"
-                            :task (clojure {:dir "."} "-M:test")}
+                            :task (clojure "-M:test")}
          uberjar           {:doc  "builds the uberjar"
-                            :task (clojure {:dir "."} "-T:build all")}
+                            :task (clojure "-T:build all")}
          format            {:doc  "Formats codebase"
                             :task (try
                                     (shell {:dir "src"} "cljstyle fix")
