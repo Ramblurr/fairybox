@@ -164,6 +164,15 @@
         regexp: "^dtoverlay=vc4-kms-v3d.*"
         line: dtoverlay=vc4-kms-v3d,noaudio
 
+    - name: Turn on Next/Prev LEDs very very early to show that something is happening
+      become: true
+      ansible.builtin.blockinfile:
+        path: /boot/firmware/config.txt
+        block: |
+          # turn on the next/prev leds right at boot to show something is happening
+          gpio=7=op,dh
+          gpio=14=op,dh
+
     - name: Ensure pigpiod.service directory exists for overrides
       become: true
       ansible.builtin.file:
