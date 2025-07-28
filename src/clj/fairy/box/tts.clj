@@ -103,9 +103,10 @@
     (assert api-key)
     (->
      (hc/post "https://texttospeech.googleapis.com/v1/text:synthesize"
-              {:body (->json {"input" {"ssml" text}
+              {:body (->json {"input" {"ssml"
+                                       (str "<speak>" text "</speak>")}
                               "voice" {"languageCode" "en-US"
-                                       "name" "en-US-Studio-O"}
+                                       "name" "en-US-Polyglot-1"}
                               "audioConfig" {"audioEncoding" "MP3"}})
 
                :content-type :json
@@ -154,10 +155,10 @@
     (assert text)
     (when-let [url (tts sys text)]
       (emit-player! sys
-                    {:action :audio/play-path
-                     :item-path url
-                     :uid nil}
-                    #_{:action :audio/play-one-shot :id :tts :item-path url}))
+                    #_{:action :audio/play-path
+                       :item-path url
+                       :uid nil}
+                    {:action :audio/play-one-shot :id :tts :item-path url}))
 
     (catch Exception e
       (log/error "tts-speak failed" e)
@@ -266,8 +267,12 @@
                     ;; @main/system
                     )))
   (def url1 (text->audio-url nil "hello"))
+  (db/tts-engine (:db (with-db sys)))
 
-  (tts-speak (with-db sys) "Hello there, how are you. I am google cloud.")
+  (tts (with-db sys) "This is a test of the tts system")
+  ;; rcf
+
+  (tts-speak (with-db sys) "This is a test of the tts system wow. WOW!") ;; rcf
   (tts-speak (with-db sys) "
 <speak>
   <s>
@@ -281,7 +286,6 @@ This one is Piglet has a Bath
 
   (async/put! (:emitter sys) {:path "/tts/commands" :value {:action :tts/speak :text "Hello"}})
 
-  (caching-mimic3-tts sys "hello there!23")      ;; rcf
-  (speak-problem! sys)
+  (caching-mimic3-tts sys "hello there!23")
   ;;
   )
