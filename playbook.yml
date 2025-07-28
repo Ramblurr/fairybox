@@ -254,23 +254,27 @@
         group: ramblurr
         mode: "0750"
 
-    - name: Create fairybox-watcher.service systemd unit file
+    - name: Create fairybox-startup.service systemd unit file
       tags: [app]
+      become: true
       ansible.builtin.copy:
-        dest: /home/ramblurr/.config/systemd/user/fairybox-watcher.service
+        dest: /etc/systemd/system/fairybox-startup.service
         content: |
           [Unit]
-          Description=fairybox watcher
+          Description=fairybox startup animation
+          DefaultDependencies=no
+          After=local-fs.target
 
           [Service]
-          Type=oneshot
+          Type=simple
           WorkingDirectory=/var/lib/fairybox
           ExecStart=/usr/bin/python3 /var/lib/fairybox/fairybox/scripts/startup-pre.py
+          User=ramblurr
           Environment="FAIRYBOX_API=http://localhost/api"
-          RemainAfterExit=yes
+          Restart=no
 
           [Install]
-          WantedBy=default.target
+          WantedBy=basic.target
 
     - name: Create fairybox.service systemd unit file
       tags: [app]
@@ -419,6 +423,14 @@
       become: true
       ansible.builtin.systemd_service:
         name: pigpiod.service
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
+    - name: enable fairybox-startup
+      become: true
+      ansible.builtin.systemd_service:
+        name: fairybox-startup.service
         state: restarted
         daemon_reload: true
         enabled: true

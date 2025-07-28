@@ -1,8 +1,8 @@
 (ns sync
   (:require [babashka.tasks :refer [shell]]))
 
-#_(def host "fairybox-wifi")
-(def host "fairybox")
+(def host "fairybox-wifi")
+#_(def host "fairybox")
 
 (def excludes ["archive" ".git" "target" ".lsp" ".clj-kondo" ".cpcache"])
 (def exclude-args (mapcat (fn [x] ["--exclude" x]) excludes))

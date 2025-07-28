@@ -66,6 +66,8 @@ def initiate_animation():
     pos = 1
     direction = 0
     fairybox_ready = False
+    min_sleep = 1000
+    total_sleep = 0
     while not fairybox_ready:
         if pos == 1:
             LED_PLAY.pulse(n=1, fade_in_time=0.2, fade_out_time=0.8)
@@ -77,17 +79,13 @@ def initiate_animation():
         elif pos == 3:
             LED_VOLUP.pulse(n=1, fade_in_time=0.2, fade_out_time=0.8)
             LED_VOLDOWN.pulse(n=1, fade_in_time=0.2, fade_out_time=0.8)
-            fairybox_ready = is_fairybox_ready()
+            if total_sleep >= min_sleep:
+                fairybox_ready = is_fairybox_ready()
             sleep(0.8)
             pos = 0
         pos += 1
+        total_sleep += 200
         sleep(0.04)
-
-
-def main():
-    dummy = ""
-    while dummy == "":
-        sleep(5)
 
 
 if __name__ == "__main__":
