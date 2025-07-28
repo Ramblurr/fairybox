@@ -78,9 +78,13 @@
   (start-app))
 
 (signal/with-handler :term
-  (log/info "caught SIGTERM, quitting")
-  (initiate-shutdown!
-   (:emitter (:fairy.box.audio.system/player @system))
-   (:fairy.box.bus/bus @system))
-  #_(stop-app!)
-  #_(log/info "all components shut down"))
+  (try
+    (log/info "caught SIGTERM, quitting")
+    (initiate-shutdown!
+     (:emitter (:fairy.box.audio.system/player @system))
+     (:fairy.box.bus/bus @system))
+    #_(stop-app!)
+    #_(log/info "all components shut down")
+    (catch Throwable t
+      (log/error t "Error during shutdown")
+      (println t))))
