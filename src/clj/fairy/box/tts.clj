@@ -150,15 +150,16 @@
                   #_{:action :audio/play-one-shot :id :tts :item-path url})
     (log/error "no tts problem sound found!")))
 
-(defn tts-speak [sys text]
+(defn tts-speak [sys {:keys [text :audio/play-one-shot]}]
   (try
     (assert text)
     (when-let [url (tts sys text)]
       (emit-player! sys
-                    #_{:action :audio/play-path
+                    (if play-one-shot
+                      {:action :audio/play-one-shot :id :tts :item-path url}
+                      {:action :audio/play-path
                        :item-path url
-                       :uid nil}
-                    {:action :audio/play-one-shot :id :tts :item-path url}))
+                       :uid nil})))
 
     (catch Exception e
       (log/error "tts-speak failed" e)
@@ -223,7 +224,8 @@
 
 (defn events-handler! [sys {:keys [value] :as ev}]
   (condp = (:action value)
-    :tts/speak (tts-speak sys (:text value))))
+    :tts/speak (tts-speak sys
+                          (select-keys value [:text :audio/play-one-shot]))))
 
 (defn start-tts-loop! [sys listener]
   (async/go-loop []
@@ -272,8 +274,8 @@
   (tts (with-db sys) "This is a test of the tts system")
   ;; rcf
 
-  (tts-speak (with-db sys) "This is a test of the tts system wow. WOW!") ;; rcf
-  (tts-speak (with-db sys) "
+  (tts-speak (with-db sys) {:text "This is a test of the tts system wow. WOW!"}) ;; rcf
+  (tts-speak (with-db sys) {:text "
 <speak>
   <s>
 This one is Piglet has a Bath
@@ -282,7 +284,7 @@ This one is Piglet has a Bath
 <s>1,<break time=\"500ms\" /> In which Kanga and Baby Roo come to the forest and Piglet has a bath <break time=\"500ms\" /></s>
 <s>2,<break time=\"500ms\" /> In which Christopher Robin leads an expotition to the north pole <break time=\"500ms\" /></s>
 <s>and 3,<break time=\"500ms\" /> In which Tigger comes to the forest and has breakfast</s>
-</speak> ")
+</speak> "})
 
   (async/put! (:emitter sys) {:path "/tts/commands" :value {:action :tts/speak :text "Hello"}})
 

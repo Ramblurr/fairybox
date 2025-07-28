@@ -88,6 +88,7 @@
   (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
     (tts/speak-card-contents sys item-path)
     (emit-tts! emitter {:action :tts/speak
+                        :audio/play-one-shot false
                         :text   "This one is empty."})))
 
 (defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
