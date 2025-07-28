@@ -14,7 +14,8 @@
    [integrant.repl.state :as state]
    [kit.api :as kit]
    [fairy.box.config :as config]
-   ;; [fairy.box.audio.browse :as browse]
+   [fairy.box.db :as db]
+   [fairy.box.audio.browse :as browse]
    [fairy.box.audio.interop :as interop]
    [fairy.box.audio.system :as audio-sys]
    ;; [fairy.box.core :refer [start-app initiate-shutdown!]]
@@ -66,6 +67,7 @@
     (def settings (:fairy.box/settings state/system))
     (def player (:player (:fairy.box.audio.system/player state/system)))
     (def emitter (:emitter (:fairy.box.audio.system/player state/system)))
+    (def db-conn (:fairy.box.db/db state/system))
     (def bus (:fairy.box.bus/bus state/system))) ;; rcf
   (switchboard/initiate-shutdown! emitter)
 
@@ -101,6 +103,18 @@
                        :value {:action    :audio/play-one-shot :id :test
                                :item-path  #_"http://home.int.socozy.casa:8123/api/tts_proxy/3ea719233bbeeec95d388313f4788462f54dc829_zh-cn_-_tts.piper.mp3"
                                "/srv/media/tts-cache/LTYzMDg5NDIwMw==" #_(browse/absoluteify settings "playlists/LibbyDish1.m3u")}})
+
+  (async/put! emitter {:path "/player/commands"
+                       :value {:action :audio/play-path
+                               :announce-per-track? false
+                               :item-path
+                               ;; "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad"
+                               "/srv/media/audiobooks/Margaret Wise Brown"
+                               :uid "OMGOMGOMG"}})
+  (db/announce-file? {:settings settings :db-conn db-conn} "/srv/media/audiobooks/Margaret Wise Brown")
+  (db/announce-file? {:settings settings :db-conn db-conn} "audiobooks/Margaret Wise Brown/Brown - Goodnight Moon - 1 of 1.mp3")
+  (db/set-announce! {:settings settings :db-conn db-conn} "/srv/media/audiobooks/Margaret Wise Brown")
+  (browse/playable-type settings "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad")
 
   (audio-sys/media-info (first medias))
   (-> (first medias)  (.info) (.type))
@@ -155,9 +169,12 @@
 
   (go)
   (halt)
+  (require '[clojure.edn :as edn])
+  (edn/read-string (slurp "/var/lib/fairybox/db.edn"))
 
   1
 
-  (sync-deps)
+  (clojure.repl.deps/sync-deps)
+
   ;;
   )

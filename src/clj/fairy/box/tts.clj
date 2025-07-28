@@ -5,7 +5,6 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [fairy.box.audio :as audio]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [hato.client :as hc]
@@ -104,7 +103,9 @@
     (->
      (hc/post "https://texttospeech.googleapis.com/v1/text:synthesize"
               {:body (->json {"input" {"ssml"
-                                       (str "<speak>" text "</speak>")}
+                                       (if-not (str/starts-with? text "<")
+                                         (str "<speak>" text "</speak>")
+                                         text)}
                               "voice" {"languageCode" "en-US"
                                        "name" "en-US-Polyglot-1"}
                               "audioConfig" {"audioEncoding" "MP3"}})
@@ -196,12 +197,6 @@
 
     (str (h2/html {:mode :xml} ssml))))
 
-(defn speak-card-contents [{:keys [emitter] :as sys} item-path]
-  (let [metadata (audio/metadata-for sys item-path)
-        text (metadata->ssml metadata)]
-    (tap> [:card-contents metadata text])
-    (emit-tts! emitter {:action :tts/speak :text text})))
-
 (defn tts-track-text [{:keys [title] :as metadata} {:keys [with-artist? with-album? index] :or {with-artist? false with-album? false}}]
   (let [ssml [:speak
               [:s "Number " (inc index) " "
@@ -274,7 +269,7 @@
   (tts (with-db sys) "This is a test of the tts system")
   ;; rcf
 
-  (tts-speak (with-db sys) {:text "This is a test of the tts system wow. WOW!"}) ;; rcf
+  (tts-speak (with-db sys) {:text "<speak>I can speak in cardinals. Your number is <say-as interpret-as=\"cardinal\">10</say-as>.</speak>"}) ;; rcf
   (tts-speak (with-db sys) {:text "
 <speak>
   <s>

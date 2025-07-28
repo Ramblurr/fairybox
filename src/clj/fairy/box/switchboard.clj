@@ -83,22 +83,27 @@
         :button/hold (handle-card-id-mode sys value)
         nil))))
 
+(defn speak-card-contents [{:keys [emitter] :as sys} item-path]
+  (let [metadata (audio/metadata-for sys item-path)
+        text (tts/metadata->ssml metadata)]
+    #_(tap> [:card-contents metadata text])
+    (emit-tts! emitter {:action :tts/speak :text text})))
+
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})
   (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
-    (tts/speak-card-contents sys item-path)
+    (speak-card-contents sys item-path)
     (emit-tts! emitter {:action :tts/speak
                         :audio/play-one-shot false
                         :text   "This one is empty."})))
 
-(defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
-  #_(emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 3})
+(defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as _sys} {:keys [uid]}]
   (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
     (do
-      ;; rfid tags are linked with relative paths so the audio folder can be moved without breaking links
       (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 1.0 :repeat-times 2})
       (async/put! emitter {:path "/player/commands"
                            :value {:action :audio/play-path
+                                   :announce-per-track? nil
                                    :item-path item-path
                                    :uid uid}}))
     (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
@@ -108,7 +113,7 @@
   (async/put! emitter {:path "/player/commands"
                        :value {:action :audio/adjust-volume :delta 0}}))
 
-(defn rfid-handler [{:keys [db-conn emitter settings] :as sys} {:keys [value] :as ev}]
+(defn rfid-handler [{:keys [emitter] :as sys} {:keys [value]}]
   (when (= :system-state/ready (system-state!))
     (swap! state assoc :rfid value)
     (cap-volume! emitter)

@@ -1,11 +1,14 @@
 (ns fairy.box.audio.system
   (:require
-   [clojure.string :as str]
+   [babashka.fs :as fs]
    [clojure.core.async :as async]
+   [clojure.java.io :as io]
+   [clojure.string :as str]
    [clojure.tools.logging :as log]
    [fairy.box.audio.browse :as browse]
    [fairy.box.audio.interop :as interop]
    [fairy.box.db :as db]
+   [fairy.box.tts :as tts]
    [integrant.core :as ig]
    [jp.nijohando.event :as ev]
    [medley.core :as m])
@@ -81,8 +84,65 @@
        (finally
          (interop/release-later player [media]))))))
 
+(defn announce-mrl? [sys mrl]
+  (when (str/starts-with? (or mrl "") "file://")
+    (db/announce-file? sys (-> (io/as-url mrl) .toURI fs/path str))))
+
+(defn mrl->title [mrl]
+  (->
+   (io/as-url mrl)
+   .toURI
+   fs/path
+   fs/file-name
+   fs/strip-ext))
+
+(defn announce-track? [sys {:keys [genre duration mrl]}]
+  (or
+   ;; audiobook genre
+   (str/includes? (or (str/lower-case genre) "") "book")
+   ;; longer than 10 minutes
+   (>= (or duration 0) (* 10 60 1000))
+   (announce-mrl? sys mrl)))
+
+(defn should-announce-type?
+  "Returns true if the media-info should be announced per track"
+  [sys media-info]
+  (tap> [:should-announce-type? media-info (keys sys)])
+  (doto
+   (some? (->> media-info
+               (vals)
+               (some (partial announce-track? sys))))
+    tap>))
+
+(defn announcment-for-track [{:keys [track-number title mrl]}]
+  (let [title (if (str/blank? title)
+                (mrl->title mrl)
+                title)]
+    (if (str/blank? track-number)
+      (str "<speak>" title "</speak>")
+      (str "<speak><say-as interpret-as=\"cardinal\">" track-number "</say-as> " title "</speak>"))))
+
+(defn handle-pre-play-tts-prepare [{:keys [internal-ch] :as sys} {:keys [play-request-id]}]
+  (let [play-request (get-in @audio-state [:play-requests play-request-id])
+        _ (tap> [:handle-pre-play-tts-prepare play-request])
+        media-info (:media-info play-request)
+        announcements (->> media-info
+                           (vals)
+                           (sort-by :track-number)
+                           (map announcment-for-track)
+                           (mapv  #(tts/tts (assoc sys
+                                                   :tts-cache-dir (tts/tts-cache-dir (:settings sys))) %)))
+        new-track-paths (interleave announcements (into [] (keys media-info)))
+        _ (tap> [:handle-pre-play-tts-prepare play-request-id :new-list new-track-paths :announcements announcements :media-info media-info])
+        new-medias (interop/make-medias! new-track-paths)
+        new-native-list (interop/make-media-list new-medias)]
+    (interop/release-media-list! (:media-list play-request))
+    (swap! audio-state assoc-in [:play-requests play-request-id :media-list] new-native-list)
+    (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id play-request-id})))
+
 (defn pre-play-parse-playlist-items! [{:keys [player] :as sys} {:keys [id media-list] :as play-request}]
-  (let [playlist-media (-> media-list (.media) (.newMedia 0))
+  (let [_ (tap> [:pre-play-parse-playlist-items! id play-request])
+        playlist-media (-> media-list (.media) (.newMedia 0))
         playlist-media-list (-> playlist-media (.subitems) (.newMediaList))
         subitem-count (-> playlist-media-list (.media) (.count))
         new-medias (interop/medias-from-medialist playlist-media-list)
@@ -95,12 +155,13 @@
     (interop/release-later player [media-list])
     (interop/parse-medias-async! (parse-handler sys id) new-medias)))
 
-(defn parse-countdown-finished! [{:keys [internal-ch] :as sys} {:keys [source-type id playlist-items-parsed] :as play-request}]
-  (let [should-parse-subitems (and (= :playlist source-type) (not playlist-items-parsed))]
-
+(defn parse-countdown-finished! [{:keys [internal-ch] :as sys} {:keys [media-info source-type id playlist-items-parsed announce-per-track?] :as play-request}]
+  (let [should-parse-subitems (and (#{:playlist} source-type) (not playlist-items-parsed))]
     (if should-parse-subitems
       (pre-play-parse-playlist-items! sys play-request)
-      (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id id}))))
+      (if (or announce-per-track? (should-announce-type? sys media-info))
+        (async/put! internal-ch {:event :internal-player/pre-play-tts-prepare :play-request-id id})
+        (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id id})))))
 
 (defn handle-pre-play-parse!
   "This event is emitted in the parse handler callback, once for each item in the play request.
@@ -112,10 +173,10 @@
         play-request (-> play-request
                          (assoc :parsed-countdown parsed-countdown)
                          (assoc-in [:media-info (:mrl media-info)] media-info))]
-    #_(tap> {:parsed-countdown parsed-countdown :play-request-id play-request-id})
-    (if (= 0 parsed-countdown)
-      (parse-countdown-finished! sys play-request)
-      (swap! audio-state assoc-in [:play-requests play-request-id] play-request))))
+    (tap> {:parsed-countdown parsed-countdown :play-request-id play-request-id})
+    (swap! audio-state assoc-in [:play-requests play-request-id] play-request)
+    (when (= 0 parsed-countdown)
+      (parse-countdown-finished! sys play-request))))
 
 (defn stop-and-release-current! [player {:keys [current-play-request] :as state}]
   (when player
@@ -152,13 +213,14 @@
         (interop/set-media-list! player (get-in state [:play-requests play-request-id :media-list]))
         (interop/unpause! player)))))
 
-(defn prepare-play-request-folder [{:keys [source-type folder-path track-paths play-request-id]}]
+(defn prepare-play-request-folder [{:keys [source-type folder-path track-paths play-request-id announce-per-track?]}]
   (let [medias (interop/make-medias! track-paths)
         media-list (interop/make-media-list medias)]
     [medias
      {:id play-request-id
       :created-at (System/currentTimeMillis)
       :source-type source-type
+      :announce-per-track?  announce-per-track?
       :folder-path folder-path
       :media-list media-list
       :parsed-countdown (count medias)}]))
@@ -200,13 +262,15 @@
                        :internal-player/position-changed
                        :internal-player/time-changed})
 
+@audio-state
 (defn internal-event-handler [{:keys [emitter player] :as sys} event]
   (try
     #_(when-not (contains? not-interesting (:event event))
         (tap> {(:event event) event}))
     (condp = (:event event)
-      :internal-player/pre-play-parse          (handle-pre-play-parse! sys event)
-      :internal-player/pre-play-parse-finished (handle-pre-play-parse-finished! sys event)
+      :internal-player/pre-play-parse          ((var-get #'handle-pre-play-parse!) sys event)
+      :internal-player/pre-play-parse-finished ((var-get #'handle-pre-play-parse-finished!) sys event)
+      :internal-player/pre-play-tts-prepare    ((var-get #'handle-pre-play-tts-prepare)  sys event)
       :internal-player/play-request            (handle-play-request! sys event)
       :internal-player/media-changed           (handle-media-changed sys event)
       :internal-player/muted                   (do
@@ -221,8 +285,8 @@
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :playing})))
       :internal-player/paused                  (do (swap! audio-state assoc-in [:current-playback :state] :paused)
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :paused})))
-      :internal-player/stopped                  (do (swap! audio-state assoc-in [:current-playback :state] :stopped)
-                                                    (async/put! emitter (player-event {:event :player/state-changed :state :stopped})))
+      :internal-player/stopped                 (do (swap! audio-state assoc-in [:current-playback :state] :stopped)
+                                                   (async/put! emitter (player-event {:event :player/state-changed :state :stopped})))
       :internal-player/opening                 (do (swap! audio-state assoc-in [:current-playback :state] :opening)
                                                    (async/put! emitter (player-event {:event :player/state-changed :state :opening})))
       :internal-player/finished                (do (swap! audio-state assoc-in [:current-playback :state] :finished)
@@ -236,6 +300,7 @@
                                                  (async/put! emitter (player-event {:event :player/repeat-changed :time (:mode event)})))
       nil)
     (catch Exception e
+      (tap> [:internal-event-handler-error (:event event) e])
       (log/error e "internal event error"))))
 
 (def fixers {:media (fn [^Media media]
@@ -279,23 +344,25 @@
 (defn play-folder!
   "Starts the process to play all media in the given folder-path.
   Playback will not start right away, first the media has to be parsed asynchronously"
-  [{:keys [internal-ch player]} folder-path]
+  [{:keys [internal-ch player]} folder-path {:keys [announce-per-track?]}]
   (if (can-resume-play-request? folder-path)
     (interop/unpause! player)
     (let [track-paths  (browse/list-media-file-paths folder-path)]
       (if (seq track-paths)
         (async/put! internal-ch {:event :internal-player/play-request
                                  :source-type :folder
+                                 :announce-per-track? announce-per-track?
                                  :folder-path folder-path
                                  :track-paths track-paths
                                  :play-request-id folder-path})
         (throw (ex-info "No media files found in folder" {:error :audio/no-media-files :folder-path folder-path}))))))
 
-(defn play-playlist! [{:keys [internal-ch player]} playlist-path]
+(defn play-playlist! [{:keys [internal-ch player]} playlist-path {:keys [announce-per-track?]}]
   (if (can-resume-play-request? playlist-path)
     (interop/unpause! player)
     (async/put! internal-ch {:event :internal-player/play-request
                              :source-type :playlist
+                             :announce-per-track? announce-per-track?
                              :playlist-path playlist-path
                              :play-request-id playlist-path})))
 
@@ -308,13 +375,14 @@
     (interop/release-media-list! media-list)
     (interop/release-medias! medias)))
 
-(defn play-path! [sys item-path]
-  (condp = (browse/playable-type (:settings sys) item-path)
-    :dir (play-folder! sys item-path)
-    :playlist (play-playlist! sys item-path)
-    :url (play-url! sys item-path)
-    :tts (play-url! sys item-path)
-    (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path}))))
+(defn play-path! [sys {:keys [item-path announce-per-track?]}]
+  (let [playable-type (browse/playable-type (:settings sys) item-path)]
+    (condp =  playable-type
+      :dir (play-folder! sys item-path {:announce-per-track? announce-per-track?})
+      :playlist (play-playlist! sys item-path {:announce-per-track? announce-per-track?})
+      :url (play-url! sys item-path)
+      :tts (play-url! sys item-path)
+      (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path})))))
 
 (defn metadata-for
   "Returns (blocks!) a vector of parsed metadata for the .m3u or all files in path."
@@ -399,7 +467,7 @@
       (condp = action
         :audio/clear (clear-current-play-request! sys)
         :audio/play-one-shot (play-one-shot! sys value)
-        :audio/play-path (play-path! sys item-path)
+        :audio/play-path (play-path! sys value)
         :audio/stop (interop/stop! player)
         :audio/play-pause (interop/play-pause! player)
         :audio/next (interop/next! player)

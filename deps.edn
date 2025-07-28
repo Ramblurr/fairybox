@@ -9,6 +9,7 @@
            ;; uk.pigpioj/pigpioj-java             {:mvn/version "2.6.1"}
            ;; Media
            uk.co.caprica/vlcj                  {:mvn/version "4.8.2"}
+           babashka/fs                         {:mvn/version "0.5.26"}
            ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
            ;; Database
@@ -41,7 +42,7 @@
            io.github.kit-clj/kit-undertow      {:mvn/version "1.0.8"}
            io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
            ;; making http requests as a client
-           hato/hato {:mvn/version "1.0.0"}
+           hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
            djblue/portal                       {:mvn/version "0.59.2"}}
  :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}}

@@ -1,6 +1,8 @@
 (ns fairy.box.db
   (:require
-
+   [fairy.box.db.media-meta :as mm]
+   [clojure.pprint :as pp]
+   [duratom.utils :as dut]
    [clojure.tools.logging :as log]
    [integrant.core :as ig]
    [duratom.core :as duratom]))
@@ -12,6 +14,12 @@
   (duratom/duratom
    :local-file
    :file-path path
+   :rw {:commit-mode :sync
+        :read  dut/read-edn-object
+        :write (fn [filepath data]
+                 (spit filepath
+                       (with-out-str
+                         (pp/pprint data))))}
    :init {:_version 1
           :linked-tags {}
           :settings {:audio
@@ -20,7 +28,8 @@
                       :max-volume-day DEFAULT_MAX_VOLUME
                       :max-volume-night DEFAULT_MAX_VOLUME
                       :hour-day-start 8
-                      :hour-night-start 19}}}))
+                      :hour-night-start 19}}
+          :media-metadata {}}))
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)
@@ -73,6 +82,16 @@
 
 (defn upsert-audio-settings! [conn audio-settings]
   (swap! conn assoc-in [:settings :audio] audio-settings))
+
+(defn set-announce! [sys path]
+  (mm/set-metadata! sys path
+                    (merge (mm/get-metadata sys (str path))
+                           {:announce? true})))
+
+(defn announce-file? [sys file]
+  (let [res (:announce? (mm/get-metadata sys (str file)))]
+    (tap> [:announce-file? :result res :file file])
+    res))
 
 (comment
   (do
