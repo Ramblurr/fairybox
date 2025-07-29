@@ -99,7 +99,7 @@
 (defn announce-track? [sys {:keys [genre duration mrl]}]
   (or
    ;; audiobook genre
-   (str/includes? (or (str/lower-case genre) "") "book")
+   (str/includes? (str/lower-case (or genre "")) "book")
    ;; longer than 10 minutes
    (>= (or duration 0) (* 10 60 1000))
    (announce-mrl? sys mrl)))
