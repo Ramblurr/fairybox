@@ -141,8 +141,8 @@
     (async/put! internal-ch {:event :internal-player/pre-play-parse-finished :play-request-id play-request-id})))
 
 (defn pre-play-parse-playlist-items! [{:keys [player] :as sys} {:keys [id media-list] :as play-request}]
-  (let [_ (tap> [:pre-play-parse-playlist-items! id play-request])
-        playlist-media (-> media-list (.media) (.newMedia 0))
+  (tap> [:start-pre-play-parse-playlist-items! id play-request])
+  (let [playlist-media (-> media-list (.media) (.newMedia 0))
         playlist-media-list (-> playlist-media (.subitems) (.newMediaList))
         subitem-count (-> playlist-media-list (.media) (.count))
         new-medias (interop/medias-from-medialist playlist-media-list)
@@ -151,6 +151,8 @@
                          (assoc :media-info {})
                          (assoc :parsed-countdown subitem-count)
                          (assoc :playlist-items-parsed true))]
+
+    (tap> [:pre-play-parse-playlist-items! id play-request])
     (swap! audio-state assoc-in [:play-requests id] play-request)
     (interop/release-later player [media-list])
     (interop/parse-medias-async! (parse-handler sys id) new-medias)))
@@ -173,7 +175,7 @@
         play-request (-> play-request
                          (assoc :parsed-countdown parsed-countdown)
                          (assoc-in [:media-info (:mrl media-info)] media-info))]
-    (tap> {:parsed-countdown parsed-countdown :play-request-id play-request-id})
+    (tap> [:handle-pre-play-parse! :parsed-countdown parsed-countdown :play-request-id play-request-id play-request])
     (swap! audio-state assoc-in [:play-requests play-request-id] play-request)
     (when (= 0 parsed-countdown)
       (parse-countdown-finished! sys play-request))))
@@ -193,18 +195,43 @@
                              (m/dissoc-in [:play-requests current-play-request-id])
                              (assoc :current-play-request nil))))))
 
+(defn mrl->file [mrl]
+  (-> mrl
+      (io/as-url)
+      (io/as-file)))
+
+(defn check-missing-media [play-request]
+  (->> play-request
+       :media-info
+       vals
+       (map :mrl)
+       (map mrl->file)
+       (map #(when-not (.exists ^java.io.File %)
+               (str %)))
+       (filter some?)))
+
 (defn handle-pre-play-parse-finished! [{:keys [player]} {:keys [play-request-id]}]
   (let [state                         @audio-state
         current-play-request-id       (get-in state [:current-play-request])
         current-play-request          (get-in state [:play-requests current-play-request-id])
-        finished-parsing-play-request (get-in state [:play-requests play-request-id])]
-    #_(tap> [:handle-pre-play-fin :current-id current-play-request-id :finished-id play-request-id :finished finished-parsing-play-request])
-    (if (< (:created-at finished-parsing-play-request) (:created-at current-play-request -1))
+        finished-parsing-play-request (get-in state [:play-requests play-request-id])
+        missing-media (check-missing-media finished-parsing-play-request)
+        cleanup (fn []
+                  (release-play-request-by-id! state play-request-id)
+                  (swap! audio-state m/dissoc-in [:play-requests play-request-id]))]
+    (tap> [:handle-pre-play-fin :current-id current-play-request-id :finished-id play-request-id :finished finished-parsing-play-request])
+    (cond
+      (seq missing-media) (do
+                            (cleanup)
+                            (throw (ex-info "Missing media files" {:error :audio/media-not-found :files missing-media})))
+
+      (< (:created-at finished-parsing-play-request) (:created-at current-play-request -1))
       (do
         ;; this play request that just finished parsing has been superceded
         ;; so we don't need to play it, just release it
-        (release-play-request-by-id! state play-request-id)
-        (swap! audio-state m/dissoc-in [:play-requests play-request-id]))
+        (cleanup))
+
+      :else
       (do
         ;; this play request that just finished parsing should supercede the current one
         (stop-and-release-current! player state)
@@ -271,7 +298,7 @@
       :internal-player/pre-play-parse          ((var-get #'handle-pre-play-parse!) sys event)
       :internal-player/pre-play-parse-finished ((var-get #'handle-pre-play-parse-finished!) sys event)
       :internal-player/pre-play-tts-prepare    ((var-get #'handle-pre-play-tts-prepare)  sys event)
-      :internal-player/play-request            (handle-play-request! sys event)
+      :internal-player/play-request            ((var-get #'handle-play-request!) sys event)
       :internal-player/media-changed           (handle-media-changed sys event)
       :internal-player/muted                   (do
                                                  (swap! audio-state assoc-in [:current-playback :muted?] (:muted? event))
@@ -337,9 +364,12 @@
   #_(async/put! emitter (player-event (fix-event event))))
 
 (defn can-resume-play-request? [new-play-request-id]
-  (let [current-play-request-id (-> @audio-state :current-play-request)]
-    (tap> [:can-resume-play-request? :new new-play-request-id :current current-play-request-id (= new-play-request-id current-play-request-id)])
-    (= new-play-request-id current-play-request-id)))
+  (let [current-play-request-id (-> @audio-state :current-play-request)
+        res (= new-play-request-id current-play-request-id)]
+    (tap> [:can-resume-play-request? res :new new-play-request-id :current current-play-request-id (= new-play-request-id current-play-request-id)])
+    res
+    ;; TODO REMOVE THIS
+    false))
 
 (defn play-folder!
   "Starts the process to play all media in the given folder-path.
@@ -382,7 +412,7 @@
       :playlist (play-playlist! sys item-path {:announce-per-track? announce-per-track?})
       :url (play-url! sys item-path)
       :tts (play-url! sys item-path)
-      (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path})))))
+      (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path :playable-type playable-type})))))
 
 (defn metadata-for
   "Returns (blocks!) a vector of parsed metadata for the .m3u or all files in path."
@@ -493,6 +523,7 @@
                             (async/put! internal-ch {:event :internal-player/repeat-changed :mode (:mode value)}))
         nil))
     (catch Exception e
+      (tap> e)
       (log/error e "audio command error"))))
 
 (defn- release-all-resources! [{:keys [player]}]

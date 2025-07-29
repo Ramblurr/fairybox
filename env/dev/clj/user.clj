@@ -7,7 +7,7 @@
    [clojure.pprint]
    [clojure.spec.alpha :as s]
    [clojure.tools.namespace.repl :as repl]
-   [criterium.core :as c]                                  ;; benchmarking
+   [criterium.core :as c] ;; benchmarking
    [expound.alpha :as expound]
    [integrant.core :as ig]
    [integrant.repl :refer [clear go halt prep init reset reset-all]]
@@ -19,7 +19,10 @@
    [fairy.box.audio.interop :as interop]
    [fairy.box.audio.system :as audio-sys]
    ;; [fairy.box.core :refer [start-app initiate-shutdown!]]
-   [fairy.box.switchboard :as switchboard]))
+   [fairy.box.switchboard :as switchboard]
+   [fairy.box.web.routes.api]
+   [fairy.box.web.routes.ui]
+   [fairy.box.bus]))
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 
@@ -106,11 +109,29 @@
 
   (async/put! emitter {:path "/player/commands"
                        :value {:action :audio/play-path
-                               :announce-per-track? false
                                :item-path
                                ;; "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad"
-                               "/srv/media/audiobooks/Margaret Wise Brown"
-                               :uid "OMGOMGOMG"}})
+                               ;; "/srv/media/audiobooks/Margaret Wise Brown"
+                               "/srv/media/playlists/Martin & Sylvia Nine and Seven-1.m3u"
+                               :uid "play1"}})
+
+  (async/put! emitter {:path "/player/commands"
+                       :value {:action :audio/play-path
+                               :item-path
+                               ;; "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad"
+                               ;; "/srv/media/audiobooks/Margaret Wise Brown"
+                               "/srv/media/playlists/Martin & Sylvia Nine and Seven-1.m3u"
+                               :uid "play1"}})
+
+  (audio-sys/mrl->title
+   "file:///srv/media/audiobooks/SparkleStories/Martin%20&%20Sylvia%20Nine%20and%20Seven/01-01%20Martin%20Has%20the%20Nines.mp3")
+  (require '[clojure.java.io :as io])
+  (-> "file:///srv/media/audiobooks/SparkleStories/Martin%20&%20Sylvia%20Nine%20and%20Seven/01-01%20Martin%20Has%20the%20Nines.mp3"
+      (io/as-url)
+      (io/as-file)
+      str)
+;; => "/srv/media/audiobooks/SparkleStories/Martin+&+Sylvia+Nine+and+Seven/01-01+Martin+Has+the+Nines.mp3"
+
   (db/announce-file? {:settings settings :db-conn db-conn} "/srv/media/audiobooks/Margaret Wise Brown")
   (db/announce-file? {:settings settings :db-conn db-conn} "audiobooks/Margaret Wise Brown/Brown - Goodnight Moon - 1 of 1.mp3")
   (db/set-announce! {:settings settings :db-conn db-conn} "/srv/media/audiobooks/Margaret Wise Brown")
@@ -126,7 +147,7 @@
   (interop/media->meta-map item-0)
   (interop/parse-medias-async! (interop/parse-event-listener
                                 (fn [^Media media meta-map status]
-                                   ;; this is the parse handler callback
+                                  ;; this is the parse handler callback
                                   (tap> {:event    :internal-player/pre-play-parse
                                          :media    media
                                          :status   status

@@ -1,13 +1,11 @@
 (ns fairy.box.user
-  (:import
-   [java.io File] [java.util.zip ZipInputStream])
   (:require
    [portal.api :as inspect]
-   [clojure.string :as string]
-   [fairy.box.audio.interop :as interop]
-   [clojure.java.io :as io]
-   [fairy.box.switchboard :as switchboard]
-   [fairy.box.core :as main]))
+   #_[clojure.string :as string]
+   #_[fairy.box.audio.interop :as interop]
+   #_[clojure.java.io :as io]
+   #_[fairy.box.switchboard :as switchboard]
+   #_[fairy.box.core :as main]))
 
 (defn portal-remote []
   (inspect/open {:theme :portal.colors/gruvbox
@@ -15,23 +13,23 @@
                  :portal.launcher/port  7001})
   (add-tap portal.api/submit))
 
-(defn extract
-  ([zip-path dest-dir]
-   (extract zip-path dest-dir (constantly true)))
-  ([zip-path dest-dir pred]
-   (with-open [stream (-> zip-path io/as-file io/input-stream (java.util.zip.ZipInputStream.))]
-     (loop [entry (.getNextEntry stream)]
-       (when entry
-         (when (pred entry)
-           (let [entry-path (str dest-dir File/separatorChar (.getName entry))
-                 entry-file (File. entry-path)]
-             (if (.isDirectory entry)
-               (when-not (.exists entry-file)
-                 (.mkdirs entry-file))
-               (let [parent-dir (.getParentFile entry-file)]
-                 (when-not (.exists parent-dir) (.mkdirs parent-dir))
-                 (clojure.java.io/copy stream entry-file)))))
-         (recur (.getNextEntry stream)))))))
+#_(defn extract
+    ([zip-path dest-dir]
+     (extract zip-path dest-dir (constantly true)))
+    ([zip-path dest-dir pred]
+     (with-open [stream (-> zip-path io/as-file io/input-stream (java.util.zip.ZipInputStream.))]
+       (loop [entry (.getNextEntry stream)]
+         (when entry
+           (when (pred entry)
+             (let [entry-path (str dest-dir File/separatorChar (.getName entry))
+                   entry-file (File. entry-path)]
+               (if (.isDirectory entry)
+                 (when-not (.exists entry-file)
+                   (.mkdirs entry-file))
+                 (let [parent-dir (.getParentFile entry-file)]
+                   (when-not (.exists parent-dir) (.mkdirs parent-dir))
+                   (clojure.java.io/copy stream entry-file)))))
+           (recur (.getNextEntry stream)))))))
 
 (comment
   (keys @main/system)
