@@ -10,16 +10,17 @@
                             [clojure.string :as str]
                             [babashka.tasks :refer [shell]])
          remote-dev        {:doc  "Start nREPL for remote development. Designed to be ran on the RPI"
-                            :task (clojure {:extra-env {"NREPL_HOST" "0.0.0.0"}} "-M:dev:remote-dev")}
-         run               {:doc  "starts the app"
-                            :task (clojure "-m fairy.box.core")}
+                            :task (do
+                                    (shell "sudo systemctl stop fairybox-startup.service")
+                                    (shell "systemctl --user stop  fairybox.service")
+                                    (clojure {:extra-env {"NREPL_HOST" "0.0.0.0"}} "-M:dev:remote-dev"))}
          nrepl             {:doc  "starts the nREPL"
                             :task (clojure "-M:dev:nrepl")}
          cider             {:doc  "starts the cider"
                             :task (clojure "-M:dev:cider")}
          test              {:doc  "runs tests"
                             :task (clojure "-M:test")}
-         uberjar           {:doc  "builds the uberjar"
+         uber              {:doc  "builds the uberjar"
                             :task (clojure "-T:build all")}
          format            {:doc  "Formats codebase"
                             :task (try

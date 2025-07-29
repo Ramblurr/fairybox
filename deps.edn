@@ -59,7 +59,13 @@
                                       org.clojure/tools.namespace     {:mvn/version "1.5.0"}
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
-                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow" "-DPIGPIOD_HOST=127.0.0.1"]}
+
+                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow" "-DPIGPIOD_HOST=127.0.0.1"
+                                      "-XX:+ZGenerational"
+                                      "--add-opens=java.base/java.nio=ALL-UNNAMED"
+                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+                                      "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
+                                      ]}
            :nrepl      {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
                         :main-opts  ["-m" "nrepl.cmdline" "-i"]}
            :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
