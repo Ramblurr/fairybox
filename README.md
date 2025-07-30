@@ -73,7 +73,7 @@ Pre-reqs:
 * Clojure
 
 ```bash
-bb uberjar
+bb uber
 ```
 
 
@@ -86,12 +86,12 @@ But we don't want to edit on the Raspberry PI, so we use a remote nrepl and a sy
 On your raspberry pi clone this repo, then start the remote repl with:
 
 ``` bash
-bb remote-repl
+bb remote-dev
 ```
 
 This will load up (it takes awhile) and expose an nrepl port on port `7002`. Using your editor of choice, connect to `RASPBERRYPI_IP_ADDRESS:7002`, and you're connected.
 
-Once connected open the [`env/dev/clj/user.clj`](./env/dev/clj/user.clj) file, and start the server with:
+Once connected open the [`env/dev/clj/dev.clj`](./env/dev/clj/dev.clj) file, and start the server with:
 
 ```clojure
 (go)
@@ -131,7 +131,7 @@ The playbook sets up a simple systemd service to run the uberjar.
 
 # License
 
-Copyright (C) 2024 Casey Link
+Copyright (C) 2024-2025 Casey Link
 
 Fairybox is licensed under the [GNU Affero General Public License v3.0 or later
 (AGPLv3+)](LICENSE.md).
