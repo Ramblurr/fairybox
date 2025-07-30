@@ -1,5 +1,5 @@
 {:fairy.box/settings {:fairybox-id #or [#env FAIRYBOX_ID "" "test"]
-                      :media       {:media-dir #or [#profile {:dev-no-rpi "./data/media"} #env MEDIA_DIR "/srv/media"]}
+                      :media       {:media-dir #or [#profile {:dev-no-rpi "../../sparklestories/media"} #env MEDIA_DIR "/srv/media"]}
                       :shutdown    {:type :pimoroni-onoff-shim}
                       :sfx         {:shutdown    "sfx/sergequadrado__celtic-positive-intro.mp3"
                                     :startup     "sfx/sergequadrado__magic-harp-logo.mp3"

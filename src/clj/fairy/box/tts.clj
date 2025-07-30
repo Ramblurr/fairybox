@@ -99,7 +99,7 @@
 
 (defn google-cloud-tts [{:keys [db]} text]
   (let [api-key (db/google-cloud-api-key db)]
-    (assert api-key)
+    (assert api-key "google cloud api key must be set in settings")
     (->
      (hc/post "https://texttospeech.googleapis.com/v1/text:synthesize"
               {:body (->json {"input" {"ssml"

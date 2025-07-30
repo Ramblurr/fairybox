@@ -406,13 +406,14 @@
     (interop/release-medias! medias)))
 
 (defn play-path! [sys {:keys [item-path announce-per-track?]}]
-  (let [playable-type (browse/playable-type (:settings sys) item-path)]
+  (let [path (browse/canonicalize-path (:settings sys) item-path)
+        playable-type (browse/playable-type (:settings sys) path)]
     (condp =  playable-type
-      :dir (play-folder! sys item-path {:announce-per-track? announce-per-track?})
-      :playlist (play-playlist! sys item-path {:announce-per-track? announce-per-track?})
-      :url (play-url! sys item-path)
-      :tts (play-url! sys item-path)
-      (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path item-path :playable-type playable-type})))))
+      :dir (play-folder! sys path {:announce-per-track? announce-per-track?})
+      :playlist (play-playlist! sys path {:announce-per-track? announce-per-track?})
+      :url (play-url! sys path)
+      :tts (play-url! sys path)
+      (throw (ex-info "Unknown playable-type" {:error :audio/not-playable-type :path path :playable-type playable-type})))))
 
 (defn metadata-for
   "Returns (blocks!) a vector of parsed metadata for the .m3u or all files in path."

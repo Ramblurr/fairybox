@@ -79,7 +79,23 @@
     (def bus (:fairy.box.bus/bus integrant.repl.state/system))) ;; rcf
 
   (interop/pause! player)
+
   (interop/unpause! player)
+
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
+
+  (async/put! emitter {:path "/player/commands"
+                       :value {:action :audio/play-path
+                               :item-path
+                               ;; "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad"
+                               ;; "/srv/media/audiobooks/Margaret Wise Brown"
+                               "audiobooks/From Nonna/"
+                               :uid "play1"}})
+  (fairy.box.audio.browse/playable-type settings
+                                        "/home/ramblurr/outside/foo"
+   ;; "/home/ramblurr/src/sparklestories/media/audiobooks/From Nonna"
+   ;; "audiobooks/From Nonna/"
+                                        )
 
   (my-portal/open-portals)
   (start)

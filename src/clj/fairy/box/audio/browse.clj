@@ -1,19 +1,22 @@
 (ns fairy.box.audio.browse
-  (:import [java.nio.file Paths])
   (:require
-   [fairy.box.util.natural-sorting :as natsort]
+   [babashka.fs :as fs]
+   [clojure.java.io :as io]
    [clojure.string :as str]
-   [clojure.java.io :as io]))
+   [fairy.box.util.natural-sorting :as natsort])
+  (:import
+   [java.nio.file Paths]))
 
 (defn media-dir [settings]
   (assert settings "settings not defined")
   (assert (-> settings :media :media-dir) "media-dir not defined")
-  (-> settings :media :media-dir))
+  (-> settings :media :media-dir fs/path fs/canonicalize str))
 
 (defn validate-base-path
   "Helper to prevent path traversal attacks. If full-path is not contained inside base-path, will return false, otherwise true"
   [base-path full-path]
-  (str/starts-with? (-> (io/file full-path) (.getCanonicalPath))
+  (str/starts-with? (-> (fs/file full-path)
+                        (.getCanonicalPath))
                     base-path))
 
 (defn dir-item [^java.nio.file.Path root ^java.io.File f]
@@ -51,27 +54,29 @@
        (list-media-files)
        (map :abs-path)))
 
+(defn canonicalize-path
+  "Returns the canonical path of the given path, ensuring it is within the media directory. If the path is within the media-dir, returns nil."
+  [settings path]
+  (let [media-base (media-dir settings)
+        abs-path (fs/canonicalize (fs/path media-base path))]
+    (when (validate-base-path media-base abs-path)
+      (str abs-path))))
+
 (defn playable-type
   "Returns :dir, :playlist, or :file if the path is a playable media path, otherwise nil."
-  [settings abs-path]
-  (if (str/starts-with? abs-path "http")
+  [settings path]
+  (if (str/starts-with? path "http")
     :url
-    (let [file (io/file abs-path)
-          media-base (media-dir settings)]
-      (when (and (validate-base-path media-base abs-path) (.exists file))
-        (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) file)]
+    (let [media-base (media-dir settings)
+          abs-path (canonicalize-path settings path)]
+      (when (and abs-path (.exists (fs/file abs-path)))
+        (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) (fs/file abs-path))]
           (cond
-            (and dir? (not-empty (list-media-files file))) :dir
+            (and dir? (not-empty (list-media-files (fs/file abs-path)))) :dir
             (m3u? abs-path) :playlist
             (str/ends-with? abs-path ".tts-cache") :tts
             file? :file
             :else nil))))))
-
-#_(comment
-
-    (playable-type
-     (let [settings {:media {:media-dir "/srv/media"}}])
-     "audiobooks/A.A. Milne/Disc 4 - Eeyore loses a Tail"))
 
 (defn list-dirs
   ([path]
