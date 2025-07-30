@@ -1,3 +1,5 @@
+;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
+;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.db.media-meta
   (:require [babashka.fs :as fs]
             [fairy.box.audio.browse :as browse]

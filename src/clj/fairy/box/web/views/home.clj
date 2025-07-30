@@ -1,3 +1,5 @@
+;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
+;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.web.views.home
   (:require
    [fairy.box.web.views.ui :as ui]
@@ -693,4 +695,3 @@
   [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M30 1v4a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1h20a1 1 0 0 1 1 1zm-1 7H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1Zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1zm0 8H9a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1v-4a1 1 0 0 0-1-1ZM5.45 2.11l-4-2A1 1 0 0 0 0 1v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 9v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 17v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79zm0 8-4-2A1 1 0 0 0 0 25v4a1 1 0 0 0 1.45.89l4-2a1 1 0 0 0 0-1.79z", :data-name "Layer 6"}]]
   :volume-middle
   [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 30 30"} [:path {:d "M18 5.004v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38H3a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm7.38 18.15a14 14 0 0 0 0-16.31 1 1 0 0 0-1.62 1.16 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z", :data-name "Layer 15"}]])
-

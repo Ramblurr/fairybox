@@ -11,7 +11,7 @@ _Igniting children's imagination with tactile, screen-less storytelling and musi
 
 <div align="center">
 
-[![AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--v3--or--later-blue)](./LICENSE)
+[![EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-blue)](./LICENSE)
 
 </div>
 
@@ -129,13 +129,10 @@ You should side-load the uberjar (`bb uberjar && scp target/box-standalone.jar f
 The playbook sets up a simple systemd service to run the uberjar.
 
 
-# License
+## License: European Union Public License 1.2
 
-Copyright (C) 2024-2025 Casey Link
-
-Fairybox is licensed under the [GNU Affero General Public License v3.0 or later
-(AGPLv3+)](LICENSE.md).
-
+Copyright © 2024-2025 Casey Link <casey@outskirtslabs.com>
+Distributed under the [EUPL-1.2](https://spdx.org/licenses/EUPL-1.2.html).
 
 ### Asset Attribution
 

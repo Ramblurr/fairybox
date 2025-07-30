@@ -1,3 +1,5 @@
+;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
+;; SPDX-License-Identifier: EUPL-1.2
 (ns colors
   (:require [clojure.string :as string]))
 ;;  custom pallette from https://lospec.com/palette-list/ty-shades-of-nokia-12

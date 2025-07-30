@@ -1,3 +1,5 @@
+;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
+;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.hardware.buttons
   (:require
    [fairy.box.util :refer [debounce]]
