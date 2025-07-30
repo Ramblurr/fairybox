@@ -21,6 +21,7 @@
  :fairy.box.tts/tts                 {:bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
+
  :fairy.box.hardware/rfid           {:bus       #ig/ref :fairy.box.bus/bus
                                      :rfid-type :mfrc522
                                      :mfrc522   {:reset-gpio 25}}

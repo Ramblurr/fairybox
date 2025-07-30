@@ -1,8 +1,7 @@
 (ns fairy.box.core-test
-  (:require
-    [fairy.box.test-utils :as utils]
-    [clojure.test :refer :all]))
+  #_(:require
+     [fairy.box.test-utils :as utils]
+     [clojure.test :refer :all]))
 
-(deftest example-test
-  (is (= 1 2)))
-
+#_(deftest example-test
+    (is (= 1 2)))
