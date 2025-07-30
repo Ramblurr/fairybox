@@ -40,6 +40,8 @@
            ;; kit Libs
            io.github.kit-clj/kit-core          {:mvn/version "1.0.9"}
            io.github.kit-clj/kit-undertow      {:mvn/version "1.0.8"}
+           #_#_io.github.kit-clj/kit-http-kit {:mvn/version "1.0.5"
+                                               :exclusions [http-kit/http-kit]}
            io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
            ;; making http requests as a client
            hato/hato                           {:mvn/version "1.0.0"}
@@ -65,7 +67,6 @@
                                       "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
                                       "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       ]}
-           :not-a-rpi {:jvm-opts ["-DNOT_A_RPI=true"]}
            :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
                                      nrepl/nrepl                   {:mvn/version "1.3.1"}
                                      cider/cider-nrepl             {:mvn/version "0.57.0"}}

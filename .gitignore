@@ -22,3 +22,10 @@ resources/public/css/generated.css
 resources/public/css/tailwind.css
 archive
 .enrich-classpath-deps-repl
+deps.tree
+.direnv
+extra
+data
+env/dev/scratch/
+*.log
+hosts

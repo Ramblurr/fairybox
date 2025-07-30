@@ -9,6 +9,7 @@
  :tasks {:requires         ([babashka.fs :as fs]
                             [clojure.string :as str]
                             [babashka.tasks :refer [shell]])
+         dev               {:doc "Start a local development server" :task (clojure "-M:dev:repl/dev")}
          remote-dev        {:doc  "Start nREPL for remote development. Designed to be ran on the RPI"
                             :task (do
                                     (shell "sudo systemctl stop fairybox-startup.service")

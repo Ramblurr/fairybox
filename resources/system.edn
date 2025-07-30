@@ -1,16 +1,20 @@
 {:fairy.box/settings {:fairybox-id #or [#env FAIRYBOX_ID "" "test"]
-                      :media       {:media-dir #or [#env MEDIA_DIR "/srv/media"]}
+                      :media       {:media-dir #or [#profile {:dev-no-rpi "./data/media"} #env MEDIA_DIR "/srv/media"]}
                       :shutdown    {:type :pimoroni-onoff-shim}
-                      :sfx         {:shutdown "sfx/sergequadrado__celtic-positive-intro.mp3"
-                                    :startup  "sfx/sergequadrado__magic-harp-logo.mp3"
+                      :sfx         {:shutdown    "sfx/sergequadrado__celtic-positive-intro.mp3"
+                                    :startup     "sfx/sergequadrado__magic-harp-logo.mp3"
                                     :tts-problem "sfx/tts-sorry-problem.wav"}}
 
- :fairy.box.db/db                   {:path #or [#env DB_PATH "/var/lib/fairybox/db.edn"]}
+ :fairy.box.db/db                   {:env #ig/ref :system/env
+                                     :path
+                                     #or [#profile {:dev-no-rpi "./data/db.edn"}
+                                          #env DB_PATH "/var/lib/fairybox/db.edn"]}
  :fairy.box.bus/bus                 {}
  :fairy.box.switchboard/switchboard {:bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
- :fairy.box.audio.system/player     {:bus      #ig/ref :fairy.box.bus/bus
+ :fairy.box.audio.system/player     {:env      #ig/ref :system/env
+                                     :bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
  :fairy.box.web.routes.ui/ws-events {:bus      #ig/ref :fairy.box.bus/bus
@@ -18,41 +22,55 @@
                                      :db-conn  #ig/ref :fairy.box.db/db}
  :reitit.routes/bus-emitter         {:bus     #ig/ref :fairy.box.bus/bus
                                      :db-conn #ig/ref :fairy.box.db/db}
- :fairy.box.tts/tts                 {:bus      #ig/ref :fairy.box.bus/bus
+ :fairy.box.tts/tts                 {:env      #ig/ref :system/env
+                                     :bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
 
- :fairy.box.hardware/rfid           {:bus       #ig/ref :fairy.box.bus/bus
-                                     :rfid-type :mfrc522
-                                     :mfrc522   {:reset-gpio 25}}
- :fairy.box.hardware/buttons        {:bus     #ig/ref :fairy.box.bus/bus
-                                     :buttons [{:gpio 22 :action :audio/prev}
-                                               {:gpio 23 :action :audio/next}
-                                               {:gpio 27 :action :audio/play-pause}
-                                               {:gpio 5 :action :audio/volume-up}
-                                               {:gpio 6 :action :audio/volume-down}
-                                               {:gpio 17 :action :system/shutdown}]}
+ :fairy.box.hardware/enabled #profile {:dev        {:rfid    true
+                                                    :buttons true
+                                                    :leds    true}
+                                       :prod       {:rfid    true
+                                                    :buttons true
+                                                    :leds    true}
+                                       :dev-no-rpi {:rfid    false
+                                                    :buttons false
+                                                    :leds    false}}
+ :fairy.box.hardware/rfid    {:hardware-enablement #ig/ref :fairy.box.hardware/enabled
+                              :bus                 #ig/ref :fairy.box.bus/bus
+                              :rfid-type           :mfrc522
+                              :mfrc522             {:reset-gpio 25}}
+ :fairy.box.hardware/buttons {:hardware-enablement #ig/ref :fairy.box.hardware/enabled
+                              :bus                 #ig/ref :fairy.box.bus/bus
+                              :buttons             [{:gpio 22 :action :audio/prev}
+                                                    {:gpio 23 :action :audio/next}
+                                                    {:gpio 27 :action :audio/play-pause}
+                                                    {:gpio 5 :action :audio/volume-up}
+                                                    {:gpio 6 :action :audio/volume-down}
+                                                    {:gpio 17 :action :system/shutdown}]}
 
- :fairy.box.hardware/leds {:bus    #ig/ref :fairy.box.bus/bus
-                           :leds   [{:gpio 14 :led-type :pwm :name :audio/prev}
-                                    {:gpio 7 :led-type :pwm :name :audio/next}
-                                    {:gpio 12 :led-type :pwm :name :audio/play-pause}
-                                    {:gpio 13 :led-type :pwm :name :audio/volume-up}
-                                    {:gpio 15 :led-type :pwm :name :audio/volume-down}
+ :fairy.box.hardware/leds {:hardware-enablement #ig/ref :fairy.box.hardware/enabled
+                           :bus                 #ig/ref :fairy.box.bus/bus
+                           :leds                [{:gpio 14 :led-type :pwm :name :audio/prev}
+                                                 {:gpio 7 :led-type :pwm :name :audio/next}
+                                                 {:gpio 12 :led-type :pwm :name :audio/play-pause}
+                                                 {:gpio 13 :led-type :pwm :name :audio/volume-up}
+                                                 {:gpio 15 :led-type :pwm :name :audio/volume-down}
                                     ;; {:gpio 17 :led-type :led :name :system/power}
-                                    ]
-                           :groups {}}
+                                                 ]
+                           :groups              {}}
 
  :fairy.box.mqtt/client {:uri       #or [#env MQTT_URI nil]
                          :mqtt-opts {:auto-reconnect     true
                                      :connection-timeout 5
-                                     :username #or [#env MQTT_USERNAME nil]
-                                     :password #or [#env MQTT_PASSWORD nil]}
+                                     :username           #or [#env MQTT_USERNAME nil]
+                                     :password           #or [#env MQTT_PASSWORD nil]}
                          :bus       #ig/ref :fairy.box.bus/bus
                          :settings  #ig/ref :fairy.box/settings
                          :qos       2}
 
- :fairy.box/startup {:leds        #ig/ref :fairy.box.hardware/leds
+ :fairy.box/startup {:env         #ig/ref :system/env
+                     :leds        #ig/ref :fairy.box.hardware/leds
                      :bus         #ig/ref :fairy.box.bus/bus
                      :rfid        #ig/ref :fairy.box.hardware/rfid
                      :player      #ig/ref :fairy.box.audio.system/player
@@ -62,9 +80,10 @@
                      :http        #ig/ref :server/http}
 
  :system/env
- #profile {:dev  :dev
-           :test :test
-           :prod :prod}
+ #profile {:dev        :dev
+           :dev-no-rpi :dev
+           :test       :test
+           :prod       :prod}
 
  :nrepl/server
  {:port #long #or [#env NREPL_PORT 7000]

@@ -9,7 +9,7 @@
 
 (def DEFAULT_MAX_VOLUME 95)
 
-(defmethod ig/init-key ::db [_ {:keys [path]}]
+(defmethod ig/init-key ::db [_ {:keys [path env]}]
   (log/info "\n-=[starting db]=-")
   (duratom/duratom
    :local-file

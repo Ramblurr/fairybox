@@ -7,6 +7,8 @@
    #_[fairy.box.switchboard :as switchboard]
    #_[fairy.box.core :as main]))
 
+(println "Loading fairy.box.user PROD")
+
 (defn portal-remote []
   (inspect/open {:theme :portal.colors/gruvbox
                  :portal.launcher/host "0.0.0.0"
