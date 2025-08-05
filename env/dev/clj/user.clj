@@ -15,6 +15,15 @@
   (in-ns 'dev)
   :loaded)
 
+(defn rpi?
+  "Are we running on a Raspberry Pi?"
+  []
+  (nil? (System/getenv "NOT_A_RPI")))
+
+(if (rpi?)
+  (System/setProperty "hifi.profile" "dev")
+  (System/setProperty "hifi.profile" "dev-no-rpi"))
+
 (comment
   (dev)
   ;;

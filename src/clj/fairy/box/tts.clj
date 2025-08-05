@@ -11,7 +11,6 @@
    [fairy.box.db :as db]
    [hato.client :as hc]
    [hiccup2.core :as h2]
-   [integrant.core :as ig]
    [jp.nijohando.event :as ev])
   (:import
    (java.nio.file Paths)
@@ -245,16 +244,21 @@
     (start-tts-loop! sys listener)
     sys))
 
-(defmethod ig/init-key ::tts [_ opts]
-  (log/info "\n-=[starting tts]=-")
-  (init-tts! opts))
-
-(defmethod ig/halt-key! ::tts [_ {:keys [emitter listener]}]
-  (log/info "\n-=[goodbye tts]=-")
+(defn stop-tts! [{:keys [emitter listener]}]
   (when emitter
     (async/close! emitter))
   (when listener
     (async/close! listener)))
+
+(def TTSComponent
+  {:donut.system/start (fn [{config :donut.system/config}]
+                         (init-tts! config))
+   :donut.system/stop  (fn [{:donut.system/keys [instance]}]
+                         (stop-tts! instance))
+   :donut.system/config {:env        [:donut.system/ref [:env]]
+                         :bus        [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
+                         :settings   [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
+                         :db-conn    [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})
 
 (comment
 

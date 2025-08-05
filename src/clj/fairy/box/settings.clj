@@ -1,15 +1,17 @@
 ;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.settings
-
   (:require
-   [clojure.tools.logging :as log]
    [clojure.core.async :as async]
-   [jp.nijohando.event :as ev]
-   [integrant.core :as ig]))
+   [integrant.core :as ig]
+   [jp.nijohando.event :as ev]))
 
 (defmethod ig/init-key :fairy.box/settings [_ opts]
   opts)
+
+(def SettingsComponent
+  {:donut.system/start (fn [{config :donut.system/config}] (:opts config))
+   :donut.system/config {:opts [:donut.system/ref [:env :fairy.box/components :fairy.box/settings]]}})
 
 (defn startup! [{:keys [bus]}]
   (let [emitter (async/chan)]
@@ -18,9 +20,21 @@
     (async/put! emitter {:path "/system" :value {:event :system/initialized}})
     {:emitter emitter}))
 
-(defmethod ig/init-key :fairy.box/startup [_ opts]
-  (log/info "\n-=[initialized state reached]=-")
-  (startup! opts))
-
 (defmethod ig/halt-key! :fairy.box/startup [_ {:keys [emitter]}]
   (async/close! emitter))
+
+(def StartupComponent
+  {:donut.system/start (fn [{config :donut.system/config}]
+                         (startup! config))
+   :donut.system/stop (fn [{:donut.system/keys [instance]}]
+                        (async/close! (:emitter instance)))
+   :donut.system/config {:env         [:donut.system/ref [:env]]
+                         ;; :leds        [:donut.system/ref [:fairy.box/components :fairy.box.hardware/leds]]
+                         :bus         [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
+                         ;; :rfid        [:donut.system/ref [:fairy.box/components :fairy.box.hardware/rfid]]
+                         :player      [:donut.system/ref [:fairy.box/components :fairy.box.audio.system2/player]]
+                         :settings    [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
+                         :switchboard [:donut.system/ref [:fairy.box/components :fairy.box.switchboard/switchboard]]
+                         :tts         [:donut.system/ref [:fairy.box/components :fairy.box.tts/tts]]
+                         ;; :http        :server/http
+                         }})

@@ -2,29 +2,16 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.bus
   (:require
-   [jp.nijohando.event :as ev]
-   [clojure.core.async :as async]
    [clojure.tools.logging :as log]
-   [integrant.core :as ig]))
+   [jp.nijohando.event :as ev]))
 
-#_(defn start-test-listener [ch]
-    (async/go-loop []
-      (when-some [event (async/<! ch)]
-        (prn "GOt some event" event)
-        (recur))))
-
-(defn init-bus! [opts]
-  (let [bus (ev/bus)
-        #_#_test-listener (async/chan)]
-    #_(ev/listen bus "/hardware/input/buttons" test-listener)
-    #_(ev/listen bus "/hardware/input/rfid" test-listener)
-    #_(start-test-listener test-listener)
+(defn init-bus! [_]
+  (let [bus (ev/bus)]
     bus))
 
-(defmethod ig/init-key ::bus [_ opts]
-  (log/info "\n-=[starting bus]=-")
-  (init-bus! opts))
-
-(defmethod ig/halt-key! ::bus [_ bus]
-  (log/info "\n-=[goodbye bus]=-")
-  (ev/close! bus))
+(def BusComponent
+  {:donut.system/start (fn [{config :donut.system/config}]
+                         (init-bus! (:opts config)))
+   :donut.system/stop (fn [{:donut.system/keys [instance]}]
+                        (ev/close! instance))
+   :donut.system/config {:opts [:donut.system/ref [:env :fairy.box/components :fairy.box.bus/bus]]}})

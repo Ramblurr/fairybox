@@ -11,8 +11,6 @@
    [fairy.box.env :refer [defaults]]
    [signal.handler :as signal]
    [jp.nijohando.event :as ev]
-   [kit.edge.utils.nrepl]
-   [kit.edge.server.http-kit]
    [fairy.box.web.handler]
    [fairy.box.web.routes.api]
    [fairy.box.web.routes.ui]

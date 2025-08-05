@@ -1,13 +1,14 @@
 {:paths   ["src/clj" "resources"]
  :deps    {org.clojure/clojure                 {:mvn/version "1.12.1"}
            org.clojure/core.async              {:mvn/version "1.8.741"}
-           ;; RPI
+           ;; Raspberry PI GPIO
            com.diozero/diozero-core            {:mvn/version "1.4.1"
                                                 ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
                                                 }
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
            ;; vlc audio player library
            ol/vinyl                            {:local/root "../../clojure-playground/vinyl"}
+           ;; File system munging
            babashka/fs                         {:mvn/version "0.5.26"}
            ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
@@ -33,23 +34,17 @@
                                                 :git/sha "9c96c9fcd6f78c84d14e02829578f6d0dca47689"}
            dev.data-star.clojure/sdk           {:mvn/version "1.0.0-RC1"}
            dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC1"}
+           hifi/system                         {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-system"}
+           hifi/html                           {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
            ;; posix signal handling
            spootnik/signal                     {:mvn/version "0.2.5"}
-           ;; kit Libs
-           io.github.kit-clj/kit-core          {:mvn/version "1.0.9"}
-           io.github.kit-clj/kit-http-kit      {:mvn/version "1.0.5"
-                                                :exclusions  [http-kit/http-kit]}
-           io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
-           ;; making http requests as a client
+           ;; http client requests
            hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.59.2"}
-           com.fulcrologic/statecharts         {:mvn/version "1.2.18"}
-           com.fulcrologic/guardrails          {:mvn/version "1.2.9"}
-           metosin/malli                       {:mvn/version "0.16.4"}}
+           djblue/portal                       {:mvn/version "0.59.2"}}
  :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
                         :ns-default build}
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.6.58"}

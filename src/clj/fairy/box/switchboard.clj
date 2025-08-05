@@ -9,7 +9,6 @@
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
-   [integrant.core :as ig]
    [jp.nijohando.event :as ev]
    [medley.core :as m]))
 
@@ -51,7 +50,7 @@
   (emit-led! emitter {:action :led/pulse :names [:audio/play-pause] :after-set 1.0 :repeat-times 10 :animation-id :card-identification-mode}))
 
 (defn handle-card-id-mode [sys {:keys [button-id]}]
-  (when (and (= button-id :audio/play-pause))
+  (when (= button-id :audio/play-pause)
     (if (= :system-mode/normal (:system-mode @state))
       (when (not= :playing (-> (audio/current-playback!) :state))
         (enter-card-id-mode sys))
@@ -214,11 +213,11 @@
   (async/close! emitter)
   (doseq [channel (keys channels)] (async/close! channel)))
 
-(defmethod ig/init-key ::switchboard [_ opts]
-  (log/info "\n-=[starting switchboard]=-")
-  (reset! state init-state)
-  (init-switchboard! opts))
-
-(defmethod ig/halt-key! ::switchboard [_ opts]
-  (log/info "\n-=[goodbye switchboard]=-")
-  (halt-switchboard! opts))
+(def SwitchboardComponent
+  {:donut.system/start  (fn [{config :donut.system/config}]
+                          (init-switchboard! config))
+   :donut.system/stop   (fn [{:donut.system/keys [instance]}]
+                          (halt-switchboard! instance))
+   :donut.system/config {:bus      [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
+                         :settings [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
+                         :db-conn  [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})

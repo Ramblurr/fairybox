@@ -2,36 +2,41 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.db
   (:require
-   [fairy.box.db.media-meta :as mm]
    [clojure.pprint :as pp]
+   [duratom.core :as duratom]
    [duratom.utils :as dut]
-   [clojure.tools.logging :as log]
-   [integrant.core :as ig]
-   [duratom.core :as duratom]))
+   [fairy.box.db.media-meta :as mm]))
 
 (def DEFAULT_MAX_VOLUME 95)
 
-(defmethod ig/init-key ::db [_ {:keys [path env]}]
-  (log/info "\n-=[starting db]=-")
-  (duratom/duratom
-   :local-file
-   :file-path path
-   :rw {:commit-mode :sync
-        :read  dut/read-edn-object
-        :write (fn [filepath data]
-                 (spit filepath
-                       (with-out-str
-                         (pp/pprint data))))}
-   :init {:_version 1
-          :linked-tags {}
-          :settings {:audio
-                     {:max-volume DEFAULT_MAX_VOLUME
-                      :min-volume 0
-                      :max-volume-day DEFAULT_MAX_VOLUME
-                      :max-volume-night DEFAULT_MAX_VOLUME
-                      :hour-day-start 8
-                      :hour-night-start 19}}
-          :media-metadata {}}))
+(def DbComponent
+  {:donut.system/start  (fn [{config :donut.system/config}]
+                          (let [env  (:env config)
+                                path (-> config :opts :path)]
+                            (assert path "Path is required for the db component")
+                            (assert env "Environment is required for the db component")
+                            (tap> [:db-start :path path :env env])
+                            (duratom/duratom
+                             :local-file
+                             :file-path path
+                             :rw {:commit-mode :sync
+                                  :read        dut/read-edn-object
+                                  :write       (fn [filepath data]
+                                                 (spit filepath
+                                                       (with-out-str
+                                                         (pp/pprint data))))}
+                             :init {:_version       1
+                                    :linked-tags    {}
+                                    :settings       {:audio
+                                                     {:max-volume       DEFAULT_MAX_VOLUME
+                                                      :min-volume       0
+                                                      :max-volume-day   DEFAULT_MAX_VOLUME
+                                                      :max-volume-night DEFAULT_MAX_VOLUME
+                                                      :hour-day-start   8
+                                                      :hour-night-start 19}}
+                                    :media-metadata {}})))
+   :donut.system/config {:env  [:donut.system/ref [:env]]
+                         :opts [:donut.system/ref [:env :fairy.box/components :fairy.box.db/db]]}})
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)

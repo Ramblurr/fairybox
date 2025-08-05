@@ -9,7 +9,6 @@
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
    [fairy.box.util :as util]
-   [integrant.core :as ig]
    [jp.nijohando.event :as ev]
    [ol.vinyl :as mp]))
 
@@ -307,10 +306,12 @@
   (async/close! emitter)
   (async/close! audio-loop))
 
-(defmethod ig/init-key ::player [_ opts]
-  (log/info "\n-=[starting audio]=-")
-  (init-audio! opts))
-
-(defmethod ig/halt-key! ::player [_ opts]
-  (log/info "\n-=[goodbye audio]=-")
-  (halt-player! opts))
+(def AudioSystemComponent
+  {:donut.system/start (fn [{config :donut.system/config}]
+                         (init-audio! config))
+   :donut.system/stop  (fn [{:donut.system/keys [instance]}]
+                         (halt-player! instance))
+   :donut.system/config {:env        [:donut.system/ref [:env]]
+                         :bus        [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
+                         :settings   [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
+                         :db-conn    [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})
