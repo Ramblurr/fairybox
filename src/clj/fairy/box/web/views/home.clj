@@ -11,7 +11,6 @@
    [fairy.box.switchboard :as switchboard]
    [fairy.box.web.routes.utils :as util]
    [fairy.box.util :refer [remove-nils]]
-   [ring.adapter.undertow.websocket :as ws]
    [cheshire.core :as cheshire]
    [fairy.box.audio.browse :as browse]
    [shadow.css :refer (css)]
@@ -41,7 +40,8 @@
 
 (defn broadcast! [msg]
   (doseq [channel @ws-clients]
-    (ws/send msg channel)))
+    nil
+    #_(ws/send msg channel)))
 
 (declare rfid-link-form)
 (declare progress-bar)

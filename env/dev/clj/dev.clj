@@ -6,7 +6,7 @@
    [fairy.box.audio.system2]
    [fairy.box.web.handler]
    [fairy.box.bus]
-   [kit.edge.server.undertow]
+   [kit.edge.server.http-kit]
    [fairy.box.config :as config]
    [fairy.box.db]
    [fairy.box.hardware]
@@ -85,11 +85,13 @@
     (def bus (:fairy.box.bus/bus integrant.repl.state/system))) ;; rcf
 
   (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/play}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 100}})
 
   (async/put! emitter {:path "/player/commands"
                        :value {:action :audio/play-path
                                :item-path
-                                ;; "audiobooks/Arnold Lobel/Days with Frog and Toad"
+                               ;; "audiobooks/Arnold Lobel/Days with Frog and Toad"
                                ;; "/srv/media/audiobooks/Margaret Wise Brown"
                                "audiobooks/From Nonna/"
                                :uid "play1"

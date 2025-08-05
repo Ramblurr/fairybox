@@ -3,19 +3,28 @@
 (ns fairy.box.audio
   "Public interface for audio subsystem"
   (:require
-   [fairy.box.audio.system :as audio]))
+   [fairy.box.audio.system2 :as audio]))
 
-(defn current-play-request! []
-  (audio/current-play-request!))
+(defn current-mixer! []
+  (-> audio/audio-state
+      deref
+      :mixer))
 
 (defn current-track! []
-  (audio/current-track!))
+  (-> audio/audio-state
+      deref
+      :playback
+      :current-track))
 
 (defn current-playback! []
-  (audio/current-playback!))
+  (-> audio/audio-state
+      deref
+      :playback))
 
 (defn current-play-queue! []
-  (audio/current-play-queue!))
+  (-> audio/audio-state
+      deref
+      :queue))
 
 (defn metadata-for [sys item-path]
-  (audio/metadata-for sys item-path))
+  #_(audio/metadata-for sys item-path))

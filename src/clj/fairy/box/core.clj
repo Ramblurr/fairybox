@@ -11,13 +11,9 @@
    [fairy.box.env :refer [defaults]]
    [signal.handler :as signal]
    [jp.nijohando.event :as ev]
-
-   ;; Edges
    [kit.edge.utils.nrepl]
-   [kit.edge.server.undertow]
+   [kit.edge.server.http-kit]
    [fairy.box.web.handler]
-
-   ;; System components
    [fairy.box.web.routes.api]
    [fairy.box.web.routes.ui]
    [fairy.box.db]
@@ -52,7 +48,7 @@
        (ig/init)
        (reset! system))
   (Diozero/initialiseShutdownHook)
-  (.addShutdownHook (Runtime/getRuntime) (Thread. stop-app!)))
+  (.addShutdownHook (Runtime/getRuntime) (Thread.  ^Runnable stop-app!)))
 
 (defn shutdown-loop [{:keys [value] :as event}]
   (if (= :system/shutdown (:event value))

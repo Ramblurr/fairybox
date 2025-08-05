@@ -31,6 +31,8 @@
            com.thheller/shadow-css             {:mvn/version "0.6.1"}
            simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
                                                 :git/sha "9c96c9fcd6f78c84d14e02829578f6d0dca47689"}
+           dev.data-star.clojure/sdk           {:mvn/version "1.0.0-RC1"}
+           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC1"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
@@ -38,8 +40,7 @@
            spootnik/signal                     {:mvn/version "0.2.5"}
            ;; kit Libs
            io.github.kit-clj/kit-core          {:mvn/version "1.0.9"}
-           io.github.kit-clj/kit-undertow      {:mvn/version "1.0.8"}
-           #_#_io.github.kit-clj/kit-http-kit  {:mvn/version "1.0.5"
+           io.github.kit-clj/kit-http-kit      {:mvn/version "1.0.5"
                                                 :exclusions  [http-kit/http-kit]}
            io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
            ;; making http requests as a client

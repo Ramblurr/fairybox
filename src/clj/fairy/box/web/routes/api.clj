@@ -65,13 +65,14 @@
             (http-response/ok {}))}]
 
    ["/ws" (fn [request]
-            {:undertow/websocket
-             {:on-open (fn [{:keys [channel]}]
-                         (home/new-ws-client channel))
-              :on-message (fn [ev]
-                            (home/ws-handler opts ev))
-              :on-close-message (fn [{:keys [channel message]}]
-                                  (home/remove-ws-client channel message))}})]])
+            {:status 500}
+            #_{:undertow/websocket
+               {:on-open (fn [{:keys [channel]}]
+                           (home/new-ws-client channel))
+                :on-message (fn [ev]
+                              (home/ws-handler opts ev))
+                :on-close-message (fn [{:keys [channel message]}]
+                                    (home/remove-ws-client channel message))}})]])
 
 (derive :reitit.routes/api :reitit/routes)
 
