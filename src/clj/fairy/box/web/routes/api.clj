@@ -8,14 +8,11 @@
    [fairy.box.web.controllers.health :as health]
    [fairy.box.web.middleware.exception :as exception]
    [fairy.box.web.middleware.formats :as formats]
-   [fairy.box.web.views.home :as home]
-   [integrant.core :as ig]
    [jp.nijohando.event :as ev]
    [reitit.coercion.malli :as malli]
    [reitit.ring.coercion :as coercion]
    [reitit.ring.middleware.muuntaja :as muuntaja]
-   [reitit.ring.middleware.parameters :as parameters]
-   [ring.util.http-response :as http-response]))
+   [reitit.ring.middleware.parameters :as parameters]))
 
 (def route-data
   {:coercion   malli/coercion
@@ -23,28 +20,23 @@
    #_#_:swagger    {:id ::api}
    :middleware [;; query-params & form-params
                 parameters/parameters-middleware
-                  ;; content-negotiation
+                ;; content-negotiation
                 muuntaja/format-negotiate-middleware
-                  ;; encoding response body
+                ;; encoding response body
                 muuntaja/format-response-middleware
-                  ;; exception handling
+                ;; exception handling
                 coercion/coerce-exceptions-middleware
-                  ;; decoding request body
+                ;; decoding request body
                 muuntaja/format-request-middleware
-                  ;; coercing response bodys
+                ;; coercing response bodys
                 coercion/coerce-response-middleware
-                  ;; coercing request parameters
+                ;; coercing request parameters
                 coercion/coerce-request-middleware
-                  ;; exception handling
+                ;; exception handling
                 exception/wrap-exception]})
 
-;; Routes
-(defn api-routes [{:keys [emitter] :as opts}]
-  [#_["/swagger.json"
-      {:get {:no-doc  true
-             :swagger {:info {:title "fairy.box API"}}
-             :handler (swagger/create-swagger-handler)}}]
-   ["/health"
+(defn routes []
+  [["/health"
     {:get #'health/healthcheck!}]
 
    ["/ready"
@@ -55,38 +47,30 @@
       (artwork/current-artwork request))]
 
    ["/shutdown"
-    {:post (fn [request]
-             (switchboard/initiate-shutdown! emitter)
-             (http-response/ok {}))}]
+    {:post (fn [{:fairy.box/keys [http-bus-emitter]}]
+             (switchboard/initiate-shutdown! http-bus-emitter)
+             {:status 204
+              :headers {}})}]
 
    ["/leds-on"
-    {:get (fn [request]
-            (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
-            (http-response/ok {}))}]
+    {:get (fn [{:fairy.box/keys [http-bus-emitter]}]
+            (switchboard/emit-led! http-bus-emitter {:action :led/set :groups [:all] :value  1.0})
+            {:status 204
+             :headers {}})}]
 
-   ["/ws" (fn [request]
-            {:status 500}
-            #_{:undertow/websocket
+   #_["/ws" (fn [request]
+              {:undertow/websocket
                {:on-open (fn [{:keys [channel]}]
                            (home/new-ws-client channel))
                 :on-message (fn [ev]
                               (home/ws-handler opts ev))
                 :on-close-message (fn [{:keys [channel message]}]
                                     (home/remove-ws-client channel message))}})]])
-
-(derive :reitit.routes/api :reitit/routes)
-
-(defmethod ig/init-key :reitit.routes/api
-  [_ {:keys [base-path]
-      :or   {base-path ""}
-      :as   opts}]
-  [base-path route-data (api-routes opts)])
-
-(defmethod ig/init-key :reitit.routes/bus-emitter [_ {:keys [bus] :as opts}]
-  (let [emitter (async/chan)]
-    (ev/emitize bus emitter)
-    emitter))
-
-(defmethod ig/halt-key! :reitit.routes/bus-emitter [_ emitter]
-  (when emitter
-    (async/close! emitter)))
+(def HttpBusEmitterComponent
+  {:donut.system/start (fn [{config :donut.system/config}]
+                         (let [emitter (async/chan)]
+                           (ev/emitize (:bus config) emitter)
+                           emitter))
+   :donut.system/stop (fn [{:donut.system/keys [instance]}]
+                        (async/close! instance))
+   :donut.system/config {:bus         [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]}})

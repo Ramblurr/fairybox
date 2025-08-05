@@ -20,14 +20,6 @@
    [ol.dev.portal :as my-portal]))
 
 ;; --------------------------------------------------------------------------------------------
-;; System Preparation
-
-(defn rpi?
-  "Are we running on a Raspberry Pi?"
-  []
-  (nil? (System/getenv "NOT_A_RPI")))
-
-;; --------------------------------------------------------------------------------------------
 ;; System Control
 
 (defn restart

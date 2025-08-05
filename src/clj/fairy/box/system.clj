@@ -6,6 +6,7 @@
    [fairy.box.bus :as bus]
    [fairy.box.db :as db]
    [fairy.box.settings :as settings]
+   [fairy.box.web.routes.api :as routes-api]
    [clojure.tools.logging :as log]
    #_[nrepl.cmdline :as nrepl]
    ;; [hifi.config :as config]
@@ -19,34 +20,38 @@
    ))
 
 (defn FairyboxSystemDef []
-  {:fairy.box/components {:fairy.box/settings settings/SettingsComponent
-                          :fairy.box.db/db db/DbComponent
-                          :fairy.box.bus/bus bus/BusComponent
-                          :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
-                          :fairy.box.audio.system2/player audio/AudioSystemComponent
-                          :reitit.routes/bus-emitter nil
-                          :fairy.box.tts/tts tts/TTSComponent
-                          :fairy.box.hardware/enabled nil
-                          :fairy.box.hardware/rfid nil
-                          :fairy.box.hardware/buttons nil
-                          :fairy.box.hardware/leds nil
-                          :fairy.box.mqtt/client nil
-                          :fairy.box/startup  settings/StartupComponent}
-   :hifi/middleware {:fairy.box/middleware (hifi.mw/middleware-component
-                                            {:name    :fairy.box/middleware
-                                             :factory (fn [{:keys [conn]}]
-                                                        (fn [handler]
-                                                          (fn extra-mw [req]
-                                                            (handler (assoc req
-                                                                            :fairy.box/conn conn)))))
-                                             :donut.system/config
-                                             {:conn  nil}})}})
+  {:fairy.box/components {:fairy.box/settings                settings/SettingsComponent
+                          :fairy.box.db/db                   db/DbComponent
+                          :fairy.box.bus/bus                 bus/BusComponent
+                          :fairy.box.switchboard/switchboard switchboard/SwitchboardComponent
+                          :fairy.box.audio.system2/player    audio/AudioSystemComponent
+                          :fairy.box.bus/http-bus-emitter        routes-api/HttpBusEmitterComponent
+                          :fairy.box.tts/tts                 tts/TTSComponent
+                          :fairy.box.hardware/enabled        nil
+                          :fairy.box.hardware/rfid           nil
+                          :fairy.box.hardware/buttons        nil
+                          :fairy.box.hardware/leds           nil
+                          :fairy.box.mqtt/client             nil
+                          :fairy.box/startup                 settings/StartupComponent}
+   :hifi/middleware      {:fairy.box/middleware (hifi.mw/middleware-component
+                                                 {:name    :fairy.box/middleware
+                                                  :factory (fn [{:keys [db-conn http-bus-emitter]}]
+                                                             (fn [handler]
+                                                               (fn extra-mw [req]
+                                                                 (handler (assoc req
+                                                                                 :fairy.box/http-bus-emitter http-bus-emitter
+                                                                                 :fairy.box/db-conn db-conn)))))
+                                                  :donut.system/config
+                                                  {:http-bus-emitter [:donut.system/ref [:fairy.box/components :fairy.box.bus/http-bus-emitter]]
+                                                   :db-conn          [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})}})
 
 (defn routes []
   ["" {:middleware (conj hifi.mw/hypermedia-chain)}
    ["/" {:handler (fn [_]
                     {:status 200
-                     :body "Welcome to the Fairy Box!"})}]])
+                     :body "Welcome to the Fairy Box!"})}]
+   ["/api" routes-api/route-data
+    (routes-api/routes)]])
 
 (defonce system (atom nil))
 
