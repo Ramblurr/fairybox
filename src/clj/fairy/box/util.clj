@@ -56,3 +56,10 @@
         (remove #(nil? %) m)
         :else
         (throw "remove-nils: Not implemented")))
+
+(defmacro thread
+  "Starts a virtual thread. Conveys bindings."
+  [& body]
+  `(Thread/startVirtualThread
+    (bound-fn* ;; binding conveyance
+     (fn [] ~@body))))

@@ -3,8 +3,7 @@
 (ns dev
   (:require
    [clj-reload.core :as clj-reload]
-   [fairy.box.audio.interop :as interop]
-   [fairy.box.audio.system]
+   [fairy.box.audio.system2]
    [fairy.box.web.handler]
    [fairy.box.bus]
    [kit.edge.server.undertow]
@@ -70,40 +69,41 @@
 
 (dev-prep!)
 
+(defonce ps (my-portal/open-portals))
+(comment
+  (reset! my-portal/portal-state nil))
+
 (comment
 
   (do
     (require '[clojure.core.async :as async])
     (def settings (:fairy.box/settings integrant.repl.state/system))
-    (def player (:player (:fairy.box.audio.system/player integrant.repl.state/system)))
-    (def emitter (:emitter (:fairy.box.audio.system/player integrant.repl.state/system)))
+    #_(def player1 (:player (:fairy.box.audio.system/player integrant.repl.state/system)))
+    (def player (:player (:fairy.box.audio.system2/player integrant.repl.state/system)))
+    (def emitter (:emitter (:fairy.box.audio.system2/player integrant.repl.state/system)))
     (def db-conn (:fairy.box.db/db integrant.repl.state/system))
     (def bus (:fairy.box.bus/bus integrant.repl.state/system))) ;; rcf
-
-  (interop/pause! player)
-
-  (interop/unpause! player)
 
   (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
 
   (async/put! emitter {:path "/player/commands"
                        :value {:action :audio/play-path
                                :item-path
-                               ;; "/srv/media/audiobooks/Arnold Lobel/Days with Frog and Toad"
+                                ;; "audiobooks/Arnold Lobel/Days with Frog and Toad"
                                ;; "/srv/media/audiobooks/Margaret Wise Brown"
                                "audiobooks/From Nonna/"
-                               :uid "play1"}})
-  (fairy.box.audio.browse/playable-type settings
-                                        "/home/ramblurr/outside/foo"
-   ;; "/home/ramblurr/src/sparklestories/media/audiobooks/From Nonna"
-   ;; "audiobooks/From Nonna/"
-                                        )
-
+                               :uid "play1"
+                               :announce-per-track? true}})
   (my-portal/open-portals)
   (start)
   (stop)
   (reset)
   (reset-all)
 
+  (require '[com.fulcrologic.statecharts.elements :refer [state transition]])
+  (require '[com.fulcrologic.statecharts :as sc])
+  (clojure.repl.deps/sync-deps)
+;; => nil
+  1
   ;;
   )

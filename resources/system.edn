@@ -13,7 +13,7 @@
  :fairy.box.switchboard/switchboard {:bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
- :fairy.box.audio.system/player     {:env      #ig/ref :system/env
+ :fairy.box.audio.system2/player    {:env      #ig/ref :system/env
                                      :bus      #ig/ref :fairy.box.bus/bus
                                      :settings #ig/ref :fairy.box/settings
                                      :db-conn  #ig/ref :fairy.box.db/db}
@@ -56,7 +56,7 @@
                                                  {:gpio 12 :led-type :pwm :name :audio/play-pause}
                                                  {:gpio 13 :led-type :pwm :name :audio/volume-up}
                                                  {:gpio 15 :led-type :pwm :name :audio/volume-down}
-                                    ;; {:gpio 17 :led-type :led :name :system/power}
+                                                 ;; {:gpio 17 :led-type :led :name :system/power}
                                                  ]
                            :groups              {}}
 
@@ -73,7 +73,7 @@
                      :leds        #ig/ref :fairy.box.hardware/leds
                      :bus         #ig/ref :fairy.box.bus/bus
                      :rfid        #ig/ref :fairy.box.hardware/rfid
-                     :player      #ig/ref :fairy.box.audio.system/player
+                     :player      #ig/ref :fairy.box.audio.system2/player
                      :settings    #ig/ref :fairy.box/settings
                      :switchboard #ig/ref :fairy.box.switchboard/switchboard
                      :tts         #ig/ref :fairy.box.tts/tts

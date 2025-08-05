@@ -23,7 +23,7 @@
    [fairy.box.db]
    [fairy.box.bus]
    [fairy.box.switchboard :as switchboard]
-   [fairy.box.audio.system]
+   [fairy.box.audio.system2]
    [fairy.box.hardware]
    [fairy.box.settings]
    [fairy.box.mqtt]
@@ -83,7 +83,7 @@
   (try
     (log/info "caught SIGTERM, quitting")
     (initiate-shutdown!
-     (:emitter (:fairy.box.audio.system/player @system))
+     (:emitter (:fairy.box.audio.system2/player @system))
      (:fairy.box.bus/bus @system))
     #_(stop-app!)
     #_(log/info "all components shut down")

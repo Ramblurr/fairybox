@@ -6,9 +6,8 @@
                                                 ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
                                                 }
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
-           ;; uk.pigpioj/pigpioj-java             {:mvn/version "2.6.1"}
-           ;; Media
-           uk.co.caprica/vlcj                  {:mvn/version "4.8.2" #_"4.11.0"}
+           ;; vlc audio player library
+           ol/vinyl                            {:local/root "../../clojure-playground/vinyl"}
            babashka/fs                         {:mvn/version "0.5.26"}
            ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
@@ -40,13 +39,16 @@
            ;; kit Libs
            io.github.kit-clj/kit-core          {:mvn/version "1.0.9"}
            io.github.kit-clj/kit-undertow      {:mvn/version "1.0.8"}
-           #_#_io.github.kit-clj/kit-http-kit {:mvn/version "1.0.5"
-                                               :exclusions [http-kit/http-kit]}
+           #_#_io.github.kit-clj/kit-http-kit  {:mvn/version "1.0.5"
+                                                :exclusions  [http-kit/http-kit]}
            io.github.kit-clj/kit-nrepl         {:mvn/version "1.0.5"}
            ;; making http requests as a client
            hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.59.2"}}
+           djblue/portal                       {:mvn/version "0.59.2"}
+           com.fulcrologic/statecharts         {:mvn/version "1.2.18"}
+           com.fulcrologic/guardrails          {:mvn/version "1.2.9"}
+           metosin/malli                       {:mvn/version "0.16.4"}}
  :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
                         :ns-default build}
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.6.58"}
@@ -61,7 +63,9 @@
                                       org.clojure/tools.namespace     {:mvn/version "1.5.0"}
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
-                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow" "-DPIGPIOD_HOST=127.0.0.1"
+                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow"
+                                      "-Dguardrails.enabled=false"
+                                      "-DPIGPIOD_HOST=127.0.0.1"
                                       "-XX:+ZGenerational"
                                       "--add-opens=java.base/java.nio=ALL-UNNAMED"
                                       "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"

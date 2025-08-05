@@ -2,8 +2,8 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.env
   (:require
-    [clojure.tools.logging :as log]
-    [fairy.box.dev-middleware :refer [wrap-dev]]))
+   [clojure.tools.logging :as log]
+   [fairy.box.dev-middleware :refer [wrap-dev]]))
 
 (def defaults
   {:init       (fn []

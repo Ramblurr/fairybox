@@ -66,7 +66,7 @@
       "audio/set-volume" (emit! {:action :audio/set-volume :volume (:volume payload)})
       "audio/set-mute" (emit! {:action :audio/set-mute :muted? (:muted payload)})
       "audio/set-time" (emit! {:action :audio/set-time :milliseconds (:milliseconds payload)})
-      "audio/set-repeat" (emit! {:action :audio/set-repeat :mode (get {"off" :default "all" :repeat "one" :loop} (:mode payload))})
+      "audio/set-repeat" (emit! {:action :audio/set-repeat :mode (get {"off" :none "all" :list "one" :track} (:mode payload))})
       (do
         (tap> {:mqtt-unhandled-cmd payload})
         nil))))
