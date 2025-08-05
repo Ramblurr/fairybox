@@ -122,13 +122,13 @@
         v (max minv (min maxv new-volume))]
     v))
 
+(defn set-volume! [{:keys [player db-conn]} v]
+  (mp/dispatch player :mixer/set-volume :level (wrap-volume db-conn v)))
+
 (defn adjust-volume! [{:keys [player db-conn]} delta]
   (let [current (interop/volume player)
         new-volume (wrap-volume db-conn (+ current delta))]
-    (mp/dispatch player :mixer/set-volume new-volume)))
-
-(defn set-volume! [{:keys [player db-conn]} v]
-  (mp/dispatch player :mixer/set-volume (wrap-volume db-conn v)))
+    (mp/dispatch player :mixer/set-volume :level new-volume)))
 
 (defn play-one-shot! [{:keys [emitter one-shot-player db-conn settings]} {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
@@ -225,7 +225,7 @@
         :audio/volume-up        (adjust-volume! sys (get-in config [:volume-up-step]))
         :audio/volume-down      (adjust-volume! sys (get-in config [:volume-down-step]))
         :audio/adjust-volume    (adjust-volume! sys (get-in value [:delta]))
-        :audio/set-volume       (set-volume! sys (max 0 (min (int (* 100 (get-in value [:volume]))) 100)))
+        :audio/set-volume       (set-volume! sys (get-in value [:volume]))
         :audio/skip-time        (d! :playback/skip-time :delta-ms (get-in value [:milliseconds]))
         :audio/set-time         (d! :playback/set-time :time-ms (get-in value [:milliseconds]))
         :audio/set-pause        (d! :playback/set-pause :paused? (:paused? value))
