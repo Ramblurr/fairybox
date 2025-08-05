@@ -6,7 +6,6 @@
    [clojure.string :as str]
    [clojure.tools.logging :as log]
    [fairy.box.audio.browse :as browse]
-   [fairy.box.audio.interop :as interop]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
    [fairy.box.util :as util]
@@ -15,6 +14,15 @@
    [ol.vinyl :as mp]))
 
 (defonce factory (mp/init!))
+
+(def ^:private audio-init-state {:playback {:state nil}
+                                 :mixer    {:muted? nil
+                                            :volume nil}
+                                 :queue    nil
+                                 :config   {:volume-up-step   5
+                                            :volume-down-step -5}})
+
+(defonce audio-state (atom audio-init-state))
 
 (defn announce-mrl? [sys mrl]
   (when (str/starts-with? (or mrl "") "file://")
@@ -67,6 +75,7 @@
                                  (mapv  #(tts/tts (assoc sys
                                                          :tts-cache-dir (tts/tts-cache-dir (:settings sys))) %)))
               new-tracks (interleave announcements tracks)]
+          (tap> [:ready-announce :new-tracks new-tracks :tracks tracks :announcements announcements])
           (play-now sys new-tracks)))
       (catch Exception e
         (log/error e "Error parsing track metadata for announcement")))))
@@ -96,14 +105,6 @@
   ([db]
    (maximum-volume db (-> (java.time.LocalTime/now) (.getHour)))))
 
-(def ^:private audio-init-state {:playback {:state nil}
-                                 :mixer    {:muted? nil
-                                            :volume nil}
-                                 :config   {:volume-up-step 5
-                                            :volume-down-step -5}})
-
-(defonce ^:private audio-state (atom audio-init-state))
-
 (defn- player-event
   "Constructs a valid event map for a player event"
   [event]
@@ -114,6 +115,9 @@
 
 (defn- set-playback [k val]
   (swap! audio-state assoc-in [:playback k] val))
+
+(defn- set-queue [val]
+  (swap! audio-state assoc-in [:queue] val))
 
 (defn wrap-volume [db-conn new-volume]
   (let [db @db-conn
@@ -126,7 +130,7 @@
   (mp/dispatch player :mixer/set-volume :level (wrap-volume db-conn v)))
 
 (defn adjust-volume! [{:keys [player db-conn]} delta]
-  (let [current (interop/volume player)
+  (let [current (mp/get-volume player)
         new-volume (wrap-volume db-conn (+ current delta))]
     (mp/dispatch player :mixer/set-volume :level new-volume)))
 
@@ -164,12 +168,13 @@
     (throw (ex-info "Could not play. Requested path could not be found in media-dir" {:requested-path item-path
                                                                                       :media-dir (browse/media-dir settings)}))))
 
-(defn internal-event-handler [{:keys [emitter player] :as sys} event]
+(defn internal-event-handler [{:keys [emitter player]} event]
   (let [event-name (or (:ol.vinyl/event event) (:event event))
         emit-player (fn [k & {:as extra}]
                       (async/put! emitter (player-event (merge extra {:event k}))))]
     (try
       (condp = event-name
+        #_#_:vlc/media-changed  (tap> event)
         :vlc/muted            (do
                                 (set-mixer :muted? (:muted? event))
                                 (emit-player :player/muted :muted? :muted? event))
@@ -197,9 +202,14 @@
         :vlc/time-changed     (do
                                 (set-playback :time (:new-time event))
                                 (emit-player :player/time-changed :time (:new-time event)))
-        :playback/repeat-changed (do
-                                   (set-playback :repeat-mode (:mode event))
-                                   (emit-player :player/repeat-changed :mode (:mode event)))
+        :ol.vinyl.playback/repeat-changed (do
+                                            (set-playback :repeat-mode (:mode-after event))
+                                            (emit-player :player/repeat-changed :mode (:mode-after event)))
+        :ol.vinyl.playback/current-track-changed (do
+                                                   (set-playback :current-track (:current-track event))
+                                                   (emit-player :player/current-track-changed :current-track (:current-track event)))
+        :ol.vinyl.playback/queue-changed (do
+                                           (set-queue (:after-queue event)))
 
         nil)
       (catch Exception e
@@ -234,11 +244,7 @@
         :audio/set-mute         (d! :playback/set-mute :muted? (:muted? value))
         :audio/toggle-mute      (d! :playback/mute)
         :audio/play-queue-index (d! :playback/play-from :index (:item-index value))
-        :audio/set-repeat       (when-let [mode (:mode value)]
-                                  (d! :playback/set-repeat :mode mode)
-                                   ;; hack alert: vlcj does not expose any events or state around the repeat mode
-                                   ;; so we have to track it ourselves
-                                  (async/put! internal-ch {:event :playback/repeat-changed :mode (:mode value)}))
+        :audio/set-repeat       (d! :playback/set-repeat :mode (:mode value))
 
         (do
           (log/error "Unknown audio command" action)
