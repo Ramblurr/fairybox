@@ -7,6 +7,7 @@
    [fairy.box.db :as db]
    [fairy.box.settings :as settings]
    [fairy.box.web.routes.api :as routes-api]
+   [fairy.box.web.routes.ui2 :as routes-ui]
    [clojure.tools.logging :as log]
    #_[nrepl.cmdline :as nrepl]
    ;; [hifi.config :as config]
@@ -46,10 +47,8 @@
                                                    :db-conn          [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})}})
 
 (defn routes []
-  ["" {:middleware (conj hifi.mw/hypermedia-chain)}
-   ["/" {:handler (fn [_]
-                    {:status 200
-                     :body "Welcome to the Fairy Box!"})}]
+  [""
+   (routes-ui/routes)
    ["/api" routes-api/route-data
     (routes-api/routes)]])
 

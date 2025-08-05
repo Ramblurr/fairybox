@@ -20,4 +20,5 @@
    :compile (fn [{:keys [settings] :as _route-data} _route-opts]
               (fn [handler]
                 (fn [request]
+                  (assert settings "Settings not defined in route data")
                   (handler (assoc request :settings settings)))))})

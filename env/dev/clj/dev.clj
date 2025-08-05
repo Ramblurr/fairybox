@@ -2,11 +2,11 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns dev
   (:require
+   [hifi.config :as config]
    [hifi.system :as hifi]
    [clj-reload.core :as clj-reload]
    [fairy.box.system :as app]
    ;; [fairy.box.audio.system2]
-   ;; [fairy.box.web.handler]
    ;; [fairy.box.bus]
    ;; [fairy.box.config :as config]
    ;; [fairy.box.db]

@@ -20,9 +20,13 @@
   []
   (nil? (System/getenv "NOT_A_RPI")))
 
+(require '[hifi.config :as hifi.config])
+
+(derive :fairy.box/dev-no-rpi :hifi.config/dev)
+
 (if (rpi?)
-  (System/setProperty "hifi.profile" "dev")
-  (System/setProperty "hifi.profile" "dev-no-rpi"))
+  (hifi.config/set-env! :dev)
+  (hifi.config/set-env! :fairy.box/dev-no-rpi))
 
 (comment
   (dev)
