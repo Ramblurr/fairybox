@@ -33,7 +33,7 @@
       (str (when (> days 0) (format "%02dd " days)) (when (> hours 0) (format "%02d:" hours)) (format "%02d" minutes) ":" (format "%02d" rounded-seconds)))))
 
 (defn progress-bar [current-position]
-  (let [dur-str (if (float? current-position) (format "%.2f" (* 100 current-position)) "0%")]
+  (let [dur-str (if (float? current-position) (format "%.2f" (* 100 current-position)) "0")]
     [:div {:id "progress-bar" :class (cs "progress-container" (css :relative))
            :data-signals-progress dur-str}
      [:input {:type :range :class (cs "progress-bar") :min 0 :max 100 :step 1
@@ -61,10 +61,11 @@
    (format-duration duration)])
 
 (defn time-left [current-time duration]
-  [:div {:id "current-length" :data-length (str duration) :class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
-   (if (not current-time)
-     (format-duration duration)
-     (str "-" (format-duration (- duration current-time))))])
+  (when duration
+    [:div {:id "current-length" :data-length (str duration) :class (css :transition-all :duration-500  :text-smoky-500 [:dark :text-smoky-500])}
+     (if (not current-time)
+       (format-duration duration)
+       (str "-" (format-duration (- duration current-time))))]))
 
 (defn play-pause-button [state]
   (let [icon (condp = state
