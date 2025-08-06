@@ -32,7 +32,7 @@
       [:div {:class (css :flex :flex-row :gap-x-2)}
        [:div {:class (css :self-center)}
         [:span {:class (css :inline-flex :items-center :rounded-full :px-2 :py-1 :text-xs :font-medium :ring-1 :ring-offset-0 :ring-inset
-                            :ring-smoky-600 :text-smoky-600)} (inc nat-idx) " (" index ")"]]
+                            :ring-smoky-600 :text-smoky-600)} (inc nat-idx)]]
        [:div {:class (css :flex :flex-col)}
         [:div {:class (css :font-bold :text-base :text-smoky-800 [:dark :text-smoky-300])} title]
         [:div {:class (css :flex :items-center :gap-x-1 :text-sm :font-semibold :text-smoky-700 [:dark :text-smoky-400])}
