@@ -1,6 +1,6 @@
 (ns fairy.box.audio.current
-  (:require [fairy.box.audio.system2 :as audio]
-            [clojure.string :as str]))
+  (:require
+   [fairy.box.audio.system2 :as audio]))
 
 (defn current! []
   @audio/audio-state)
@@ -54,7 +54,7 @@
   (get-in c [:playback :state]))
 
 (defn playing? [c]
-  (#{:opening :playing} (state c)))
+  (#{:opening :playing :paused} (state c)))
 
 (defn repeat-mode [c]
   (get-in c [:playback :repeat-mode] :none))
@@ -69,11 +69,4 @@
   (get-in c [:queue :history]))
 
 (defn full-queue [c]
-  (let [{:keys [history current priority normal]} (get-in c [:queue])]
-    (->>
-     (concat
-      (map-indexed #(assoc %2 :index (- (- (count history) %1))) history)
-      (when current [(assoc current :index 0)])
-      (map-indexed #(assoc %2 :index (+ 1 %1)) priority)
-      (map-indexed #(assoc %2 :index (+ 1 (count priority) %1)) normal))
-     (remove nil?))))
+  (get-in c [:queue :tracks]))

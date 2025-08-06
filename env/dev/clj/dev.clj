@@ -63,7 +63,7 @@
 
   (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
   (async/put! emitter {:path "/player/commands" :value {:action :audio/play}})
-  (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 0}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 80}})
 
   (async/put! emitter {:path "/player/commands"
                        :value {:action :audio/play-path
