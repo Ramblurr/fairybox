@@ -21,7 +21,7 @@
              first
              str)))
 
-(defn artwork-attachment-to-path [{:keys [album album-artist artist]}]
+(defn artwork-attachment-to-path [{:meta/keys [album album-artist artist]}]
   (if (or (str/blank? artist) (str/blank? album))
     ;; If artist or album are missing, it was cached by title MD5 hash
     nil
@@ -38,10 +38,10 @@
       nil)))
 
 (defn get-current-artwork-path! []
-  (let [{:keys [artwork-url] :as current-track} (audio/current-track!)]
+  (let [{:meta/keys [artwork-url] :as meta} (:meta (audio/current-track!))]
     (when artwork-url
       (cond
-        (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path current-track)
+        (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path meta)
         (str/starts-with? artwork-url "file://") (artwork-file-url-to-path artwork-url)
         :else (do (log/error "Unhandled VLC artwork path type" {:url artwork-url})
                   nil)))))
