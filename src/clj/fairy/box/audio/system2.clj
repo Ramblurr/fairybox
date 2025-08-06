@@ -75,7 +75,6 @@
                                  (mapv  #(tts/tts (assoc sys
                                                          :tts-cache-dir (tts/tts-cache-dir (:settings sys))) %)))
               new-tracks (interleave announcements tracks)]
-          (tap> [:ready-announce :new-tracks new-tracks :tracks tracks :announcements announcements])
           (play-now sys new-tracks)))
       (catch Exception e
         (log/error e "Error parsing track metadata for announcement")))))
