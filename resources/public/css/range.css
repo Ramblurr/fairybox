@@ -86,13 +86,13 @@
 /* Progress Bar */
 .progress-container {
   width: 100%;
-  max-width: 500px;
   --bg-color: #3d3448;
   --track-color: #524760;
   --thumb-color: var(--range-fg);
   --progress-color: var(--range-fill);
 
   .progress-bar {
+    --value: 0%;
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
@@ -106,7 +106,6 @@
     );
     border-radius: 3px;
     outline: none;
-    --value: 10%;
   }
 
   .progress-bar::-webkit-slider-thumb {

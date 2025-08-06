@@ -34,7 +34,7 @@
 
 (defn progress-bar [current-position]
   (let [dur-str (if (float? current-position) (format "%.2f" (* 100 current-position)) "0")]
-    [:div {:id "progress-bar" :class (cs "progress-container" (css :relative))
+    [:div {:id "progress-bar" :class "progress-container"
            :data-signals-progress dur-str}
      [:input {:type :range :class (cs "progress-bar") :min 0 :max 100 :step 1
               :data-on-change (uic/player-cmd "set-position" :position "$progress")
