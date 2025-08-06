@@ -1,6 +1,13 @@
 (ns fairy.box.web.routes.ui2
   (:require
-   [fairy.box.web.views.home2 :as home]
+
+   [clojure.tools.logging :as log]
+   [clojure.core.async :as async]
+   [jp.nijohando.event :as ev]
+   [fairy.box.web.routes.commands :as commands]
+   [fairy.box.web.views.player :as player]
+   [fairy.box.web.views.settings :as settings]
+   [fairy.box.web.views.queue :as queue]
    [hifi.config :as config]
    [hifi.datastar :as datastar]
    [hifi.datastar.http-kit :as d*http-kit]
@@ -9,8 +16,9 @@
    [hifi.util.assets :as assets]))
 
 (defn pages []
-  {:app.home/home {:path   "/"
-                   :render home/render}})
+  {:page/home {:path  "/" :render #'player/render}
+   :page/queue {:path  "/queue" :render #'queue/render}
+   :page/settings {:path  "/settings" :render #'settings/render}})
 
 (def static-asset (partial assets/static-asset (config/dev?)))
 (def !css0 (static-asset {:resource-path "public/css/tailwind.css" :route-path "/tailwind.css" :content-type "text/css"}))
@@ -20,16 +28,17 @@
 (def !css4 (static-asset {:resource-path "public/css/fairybox.css" :route-path "/fairybox.css" :content-type "text/css"}))
 (def !datastar datastar/!datastar-asset)
 (def !datastar-inspector (static-asset {:resource-path "public/js/datastar-inspector.js" :route-path "/datastar-inspector.js" :content-type "application/javascript"}))
-(def !fairybox-js (static-asset {:resource-path "public/js/fairybox.js" :route-path "/fairybox.js" :content-type "application/javascript"}))
-(def shim-assets (list (html/script {:defer true :type "module" :!asset !datastar})
-                       (html/script {:defer true :type "module" :!asset !fairybox-js})
-                       (html/stylesheet {:!asset !css0})
-                       (html/stylesheet {:!asset !css1})
-                       (html/stylesheet {:!asset !css2})
-                       (html/stylesheet {:!asset !css3})
-                       (html/stylesheet {:!asset !css4})
-                       (when (config/dev?)
-                         (html/script {:defer true :type "module" :!asset !datastar-inspector}))))
+(def shim-assets (list
+                  [:meta {:name "color-scheme" :content "dark"}]
+                  [:meta {:name "darkreader-lock"}]
+                  (html/script {:defer true :type "module" :!asset !datastar})
+                  (html/stylesheet {:!asset !css0})
+                  (html/stylesheet {:!asset !css1})
+                  (html/stylesheet {:!asset !css2})
+                  (html/stylesheet {:!asset !css3})
+                  (html/stylesheet {:!asset !css4})
+                  (when (config/dev?)
+                    (html/script {:defer true :type "module" :!asset !datastar-inspector}))))
 
 (def shim-response (html/shim-page-resp {:body
                                          (html/shim-document
@@ -64,6 +73,49 @@
    (assets/asset->route !css3)
    (assets/asset->route !css4)
    (assets/asset->route !datastar)
-   (assets/asset->route !fairybox-js)
+   commands/commands
    (when (config/dev?)
      (assets/asset->route !datastar-inspector))])
+
+(defn handle-event [opts event]
+  (datastar/rerender-all!))
+
+(defn start-loop! [{:keys [bus db-conn settings env <emitter <listener] :as opts}]
+  (async/go-loop []
+    (when-some [event (async/<! <listener)]
+      (try
+        (handle-event opts event)
+        (catch Exception e
+          (log/error e "sse broadcaster: error handling event" event)))
+      (recur))))
+
+(defn init-sse-broacast! [{:keys [bus db-conn settings env] :as opts}]
+  (let [<listener (async/chan)
+        <emitter (async/chan)]
+    (ev/emitize bus <emitter)
+    (ev/listen bus "/hardware/input/rfid" <listener)
+    (ev/listen bus "/player/events" <listener)
+
+    (start-loop! (-> opts
+                     (assoc
+                      :<listener <listener
+                      :<emitter <emitter)))
+    {:<listener <listener
+     :<emitter <emitter}))
+
+(defn stop-sse-broadcast! [{:keys [<emitter <listener]}]
+  (when <emitter
+    (async/close! <emitter))
+  (when <listener
+    (async/close! <listener)))
+
+(def SSEBroadcastComponent
+  "Component that listens to events from the bus and emits them over SSE to clients"
+  {:donut.system/start  (fn [{config :donut.system/config}]
+                          (init-sse-broacast! config))
+   :donut.system/stop   (fn [{:donut.system/keys [instance]}]
+                          (stop-sse-broadcast! instance))
+   :donut.system/config {:env        [:donut.system/ref [:env]]
+                         :bus        [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
+                         :settings   [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
+                         :db-conn    [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})

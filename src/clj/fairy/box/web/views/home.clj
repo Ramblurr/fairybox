@@ -86,42 +86,6 @@
                                         (the-time current-time))))
     nil))
 
-(defn ^:export ws-handler [{:keys [emitter]} {:keys [channel data]}]
-  (let [payload (<-json data)]
-    #_(tap> {:data payload})
-    (condp = (:action payload)
-      "play-pause" (async/put! emitter {:path "/player/commands"
-                                        :value {:action :audio/play-pause}})
-      "previous" (async/put! emitter {:path "/player/commands"
-                                      :value {:action :audio/prev}})
-      "next" (async/put! emitter {:path "/player/commands"
-                                  :value {:action :audio/next}})
-      "skip-back" (async/put! emitter {:path "/player/commands"
-                                       :value {:action :audio/skip-time
-                                               :milliseconds (* -10 1000)}})
-      "skip-forward" (async/put! emitter {:path "/player/commands"
-                                          :value {:action :audio/skip-time
-                                                  :milliseconds (* 10 1000)}})
-
-      "set-time" (async/put! emitter {:path "/player/commands"
-                                      :value {:action :audio/set-time
-                                              :milliseconds (:milliseconds payload)}})
-      "volume-up-step" (async/put! emitter {:path "/player/commands"
-                                            :value {:action :audio/adjust-volume
-                                                    :delta 5}})
-      "volume-down-step" (async/put! emitter {:path "/player/commands"
-                                              :value {:action :audio/adjust-volume
-                                                      :delta -5}})
-      "set-volume" (async/put! emitter {:path "/player/commands"
-                                        :value {:action :audio/set-volume
-                                                :volume (parse-double (:volume payload))}})
-      "toggle-mute" (async/put! emitter {:path "/player/commands"
-                                         :value {:action :audio/toggle-mute}})
-      "play-queue-item" (async/put! emitter {:path "/player/commands"
-                                             :value {:action :audio/play-queue-index :item-index (parse-long (:item-index payload))}})
-
-      nil)))
-
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
    [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]

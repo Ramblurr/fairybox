@@ -26,8 +26,9 @@
                           :fairy.box.bus/bus                 bus/BusComponent
                           :fairy.box.switchboard/switchboard switchboard/SwitchboardComponent
                           :fairy.box.audio.system2/player    audio/AudioSystemComponent
-                          :fairy.box.bus/http-bus-emitter        routes-api/HttpBusEmitterComponent
+                          :fairy.box.bus/http-bus-emitter    routes-api/HttpBusEmitterComponent
                           :fairy.box.tts/tts                 tts/TTSComponent
+                          :fairy.box.web/sse-broadcaster     routes-ui/SSEBroadcastComponent
                           :fairy.box.hardware/enabled        nil
                           :fairy.box.hardware/rfid           nil
                           :fairy.box.hardware/buttons        nil

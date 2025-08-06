@@ -52,7 +52,8 @@
       (str "<speak><say-as interpret-as=\"cardinal\">" track-number "</say-as> " title "</speak>"))))
 
 (defn- play-now [{:keys [player] :as _sys} paths]
-  (mp/dispatch player :playback/clear-upcoming)
+  (tap> [:playing-now paths])
+  (mp/dispatch player :playback/clear-all)
   (mp/dispatch player :playback/append :paths paths)
   (mp/dispatch player :playback/advance))
 
@@ -123,7 +124,7 @@
         minv (db/min-volume db)
         maxv (maximum-volume db)
         v (max minv (min maxv new-volume))]
-    v))
+    (int v)))
 
 (defn set-volume! [{:keys [player db-conn]} v]
   (mp/dispatch player :mixer/set-volume :level (wrap-volume db-conn v)))
@@ -136,6 +137,7 @@
 (defn play-one-shot! [{:keys [emitter one-shot-player db-conn settings]} {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
   ;; we do this because we want to handle the events separate from the normal player
+  (tap> [:one-shot-play item-path id :final-path (browse/canonicalize-path settings item-path)])
   (if-let [path (browse/canonicalize-path settings item-path)]
     (util/thread
       (try
@@ -177,13 +179,14 @@
         :vlc/muted            (do
                                 (set-mixer :muted? (:muted? event))
                                 (emit-player :player/muted :muted? :muted? event))
-        :vlc/volume-changed   (let [new-volume (:new-volume event)]
+        :vlc/volume-changed   (let [;; vlc sends volume in range 0.0 to 1.0, we convert it to 0-100
+                                    ;; this is strange, because the volume setter expects 0-100
+                                    new-volume (int (* 100 (:new-volume event)))]
                                 (when (>= new-volume 0) ;; sometimes vlc sends -1 which we should just ignore
                                   (set-mixer :volume new-volume)
                                   (emit-player :player/volume-changed :volume new-volume)))
         :vlc/playing          (do
                                 (set-playback :state :playing)
-                                (set-mixer :volume (float (/ (mp/get-volume player) 100)))
                                 (emit-player :player/state-changed :state :playing))
         :vlc/paused           (do
                                 (set-playback :state :paused)
@@ -237,11 +240,12 @@
         :audio/set-volume       (set-volume! sys (get-in value [:volume]))
         :audio/skip-time        (d! :playback/skip-time :delta-ms (get-in value [:milliseconds]))
         :audio/set-time         (d! :playback/set-time :time-ms (get-in value [:milliseconds]))
+        :audio/set-position     (d! :playback/set-position :position (get-in value [:position]))
         :audio/set-pause        (d! :playback/set-pause :paused? (:paused? value))
         :audio/play             (d! :playback/play)
         :audio/pause            (d! :playback/pause)
         :audio/set-mute         (d! :playback/set-mute :muted? (:muted? value))
-        :audio/toggle-mute      (d! :playback/mute)
+        :audio/toggle-mute      (d! :mixer/mute)
         :audio/play-queue-index (d! :playback/play-from :index (:item-index value))
         :audio/set-repeat       (d! :playback/set-repeat :mode (:mode value))
 
@@ -278,6 +282,7 @@
                    (recur)))))
 
 (defn- init-audio! [{:keys [bus settings db-conn]}]
+  (reset! audio-state audio-init-state)
   (let [emitter (async/chan (async/sliding-buffer 512))
         commands-ch (async/chan (async/sliding-buffer 512))
         internal-ch (async/chan (async/sliding-buffer 512))
@@ -304,7 +309,8 @@
   (async/close! commands-ch)
   (async/close! internal-ch)
   (async/close! emitter)
-  (async/close! audio-loop))
+  (async/close! audio-loop)
+  (reset! audio-state audio-init-state))
 
 (def AudioSystemComponent
   {:donut.system/start (fn [{config :donut.system/config}]

@@ -27,10 +27,10 @@
 (defn ^:export dev-watch [_]
   (async/thread
     (css/on-start!))
-  (async/thread
-    (sync/on-start!))
+  #_(async/thread
+      (sync/on-start!))
   (doseq [path css-watch-paths]
     (new-watcher (watch-handler css/on-watch-event!) path))
-  (doseq [path sync-watch-paths]
-    (new-watcher (watch-handler sync/on-watch-event!) path))
+  #_(doseq [path sync-watch-paths]
+      (new-watcher (watch-handler sync/on-watch-event!) path))
   (deref (promise)))
