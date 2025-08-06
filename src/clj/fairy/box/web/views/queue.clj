@@ -38,24 +38,22 @@
         [:div {:class (css :flex :items-center :gap-x-1 :text-sm :font-semibold :text-smoky-700 [:dark :text-smoky-400])}
          (artist-dot-album artist album)]]]]]))
 
-(defn play-queue-list [req]
-  (let [tracks (player/full-queue (:current req))]
-    [:div {:id "play-queue" :class "fade-in-out"}
-     [:div {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800 [:dark :text-smoky-300])}
-      [:div
-       [:p {:class (css :text-lg :font-bold)} "Tracks"]]
-      [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
-       (map-indexed play-queue-item tracks)]]]))
-
-(defn play-queue-tab [req]
-  [:div {:id "active-tab"} (play-queue-list req)])
+(defn play-queue-list [{:keys [tracks]}]
+  [:div {:id "play-queue" :class "fade-in-out"}
+   [:div {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800 [:dark :text-smoky-300])}
+    [:div
+     [:p {:class (css :text-lg :font-bold)} "Tracks"]]
+    [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
+     (map-indexed play-queue-item tracks)]]])
 
 (defn render [req]
-  (let [req  (assoc req :current (player/current!))]
+  (let [req  (assoc req :tracks (player/full-queue (player/current!)))]
     (html/->str
      [:main#morph.main
       [:div
        (uic/player-tabs req :page/queue)
-       (play-queue-tab req)]])))
+       [:div {:id "active-tab"}
+        [:div {:class "fade-in-out"}
+         (play-queue-list req)]]]])))
 
 (datastar/rerender-all!)

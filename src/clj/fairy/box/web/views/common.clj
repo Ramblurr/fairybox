@@ -1,12 +1,8 @@
 (ns fairy.box.web.views.common
   (:require
-   [fairy.box.web.views.icon :as icon]
    [clojure.string :as str]
-   [shadow.css :refer (css)]
-   [fairy.box.switchboard :as switchboard]
-   [fairy.box.audio.current :as player]
-   [hifi.datastar :as datastar]
-   [hifi.html :as html]))
+   [fairy.box.web.views.icon :as icon]
+   [shadow.css :refer (css)]))
 
 (defn cs [& names]
   (str/join " " (filter identity names)))
@@ -28,7 +24,7 @@
   [:div {:id "player-tabs" :class (css :pt-2 :px-2 :max-w-5xl)}
    [:nav {:class (css :isolate :flex  :rounded-lg :shadow :mb-2), :aria-label "Tabs"}
     (tab :page/controls (url-for :page/home) "Now Playing" active-tab nil)
-    (tab :page/play-queue (url-for :page/queue) "Play Queue" active-tab nil)
+    (tab :page/queue (url-for :page/queue) "Play Queue" active-tab nil)
     (tab :page/settings (url-for :page/settings)
          (icon/cog {:class (css :w-8 :h-8)})
          active-tab
