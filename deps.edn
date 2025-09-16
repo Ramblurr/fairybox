@@ -1,5 +1,5 @@
 {:paths   ["src/clj" "resources"]
- :deps    {org.clojure/clojure                 {:mvn/version "1.12.1"}
+ :deps    {org.clojure/clojure                 {:mvn/version "1.12.2"}
            org.clojure/core.async              {:mvn/version "1.8.741"}
            ;; Raspberry PI GPIO
            com.diozero/diozero-core            {:mvn/version "1.4.1"
@@ -9,7 +9,7 @@
            ;; vlc audio player library
            ol/vinyl                            {:local/root "../../clojure-playground/vinyl"}
            ;; File system munging
-           babashka/fs                         {:mvn/version "0.5.26"}
+           babashka/fs                         {:mvn/version "0.5.27"}
            ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
            ;; Database
@@ -20,20 +20,20 @@
            metosin/reitit                      {:mvn/version "0.9.1"}
            ;; Ring
            metosin/ring-http-response          {:mvn/version "0.9.5"}
-           ring/ring-core                      {:mvn/version "1.14.2"}
-           ring/ring-defaults                  {:mvn/version "0.6.0"}
+           ring/ring-core                      {:mvn/version "1.15.2"}
+           ring/ring-defaults                  {:mvn/version "0.7.0"}
            ;; Logging
            ch.qos.logback/logback-classic      {:mvn/version "1.5.18"}
            ;; Data coercion
            luminus-transit/luminus-transit     {:mvn/version "0.1.6"}
            metosin/muuntaja                    {:mvn/version "0.6.11"}
-           cheshire/cheshire                   {:mvn/version "6.0.0"}
+           cheshire/cheshire                   {:mvn/version "6.1.0"}
            ;; HTML and CSS
-           com.thheller/shadow-css             {:mvn/version "0.6.1"}
+           com.thheller/shadow-css             {:mvn/version "0.6.2"}
            simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
                                                 :git/sha "9c96c9fcd6f78c84d14e02829578f6d0dca47689"}
-           dev.data-star.clojure/sdk           {:mvn/version "1.0.0-RC1"}
-           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC1"}
+           dev.data-star.clojure/sdk           {:mvn/version "1.0.0-RC3"}
+           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC3"}
            hifi/system                         {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-system"}
            hifi/html                           {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
            ;; Events
@@ -44,18 +44,18 @@
            ;; http client requests
            hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.59.2"}
-           nrepl/nrepl                   {:mvn/version "1.3.1"}}
- :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
+           djblue/portal                       {:mvn/version "0.61.0"}
+           nrepl/nrepl                   {:mvn/version "1.4.0"}}
+ :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
                         :ns-default build}
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.6.58"}
                                       criterium/criterium             {:mvn/version "0.4.6"}
                                       expound/expound                 {:mvn/version "0.9.0"}
-                                      integrant/repl                  {:mvn/version "0.4.0"}
+                                      integrant/repl                  {:mvn/version "0.5.0"}
                                       mvxcvi/cljstyle                 {:mvn/version "0.17.642"}
                                       pjstadig/humane-test-output     {:mvn/version "0.11.0"}
-                                      ring/ring-devel                 {:mvn/version "1.14.2"}
-                                      ring/ring-mock                  {:mvn/version "0.6.1"}
+                                      ring/ring-devel                 {:mvn/version "1.15.2"}
+                                      ring/ring-mock                  {:mvn/version "0.6.2"}
                                       io.github.kit-clj/kit-generator {:mvn/version "0.2.5"}
                                       org.clojure/tools.namespace     {:mvn/version "1.5.0"}
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}}
@@ -69,7 +69,7 @@
                                       "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       ]}
            :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
-                                     nrepl/nrepl                   {:mvn/version "1.3.1"}
+                                     nrepl/nrepl                   {:mvn/version "1.4.0"}
                                      cider/cider-nrepl             {:mvn/version "0.57.0"}}
                         :main-opts  ["-m" "nrepl.cmdline"
                                      "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware,portal.nrepl/wrap-portal]"
@@ -77,13 +77,13 @@
                                      "--port" "7002"]}
            :test       {:extra-deps  {criterium/criterium                  {:mvn/version "0.4.6"}
                                       expound/expound                      {:mvn/version "0.9.0"}
-                                      integrant/repl                       {:mvn/version "0.4.0"}
+                                      integrant/repl                       {:mvn/version "0.5.0"}
                                       io.github.cognitect-labs/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                                                             :git/tag "v0.5.1"
                                                                             :git/sha "dfb30dd"}
                                       pjstadig/humane-test-output          {:mvn/version "0.11.0"}
-                                      ring/ring-devel                      {:mvn/version "1.14.2"}
-                                      ring/ring-mock                       {:mvn/version "0.6.1"}
+                                      ring/ring-devel                      {:mvn/version "1.15.2"}
+                                      ring/ring-mock                       {:mvn/version "0.6.2"}
                                       io.github.kit-clj/kit-generator      {:mvn/version "0.2.5"}
                                       org.clojure/tools.namespace          {:mvn/version "1.5.0"}
                                       com.lambdaisland/classpath           {:mvn/version "0.6.58"}}

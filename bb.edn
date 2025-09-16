@@ -3,7 +3,7 @@
  :deps  {failjure/failjure       {:mvn/version "2.3.0"}
          com.thheller/shadow-css {;; :git/url "https://github.com/thheller/shadow-css.git"
                                   ;; :git/sha "b3c97fe3caf16fab1a90fb93a7baad76fe15aa46"
-                                  :mvn/version "0.6.1"}}
+                                  :mvn/version "0.6.2"}}
  :pods  {org.babashka/fswatcher {:version "0.0.5"}}
  :paths ["resources" "scripts"]
  :tasks {:requires         ([babashka.fs :as fs]
