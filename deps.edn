@@ -1,6 +1,6 @@
 {:paths   ["src/clj" "resources"]
- :deps    {org.clojure/clojure                 {:mvn/version "1.12.2"}
-           org.clojure/core.async              {:mvn/version "1.8.741"}
+ :deps    {org.clojure/clojure                 {:mvn/version "1.12.5"}
+           org.clojure/core.async              {:mvn/version "1.9.865"}
            ;; Raspberry PI GPIO
            com.diozero/diozero-core            {:mvn/version "1.4.1"
                                                 ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
@@ -9,7 +9,7 @@
            ;; vlc audio player library
            ol/vinyl                            {:local/root "../../clojure-playground/vinyl"}
            ;; File system munging
-           babashka/fs                         {:mvn/version "0.5.27"}
+           babashka/fs                         {:mvn/version "0.5.34"}
            ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
            ;; Database
@@ -17,25 +17,28 @@
            ;; Util
            medley/medley                       {:mvn/version "1.4.0"}
            ;; Routing
-           metosin/reitit                      {:mvn/version "0.9.1"}
+           metosin/reitit                      {:mvn/version "0.10.1"}
            ;; Ring
            metosin/ring-http-response          {:mvn/version "0.9.5"}
-           ring/ring-core                      {:mvn/version "1.15.2"}
-           ring/ring-defaults                  {:mvn/version "0.7.0"}
-           ;; Logging
-           ch.qos.logback/logback-classic      {:mvn/version "1.5.18"}
+           ring/ring-core                      {:mvn/version "1.15.5"}
+           ring/ring-defaults                  {:mvn/version "0.7.1"}
            ;; Data coercion
            luminus-transit/luminus-transit     {:mvn/version "0.1.6"}
            metosin/muuntaja                    {:mvn/version "0.6.11"}
-           cheshire/cheshire                   {:mvn/version "6.1.0"}
+           cheshire/cheshire                   {:mvn/version "6.2.0"}
            ;; HTML and CSS
-           com.thheller/shadow-css             {:mvn/version "0.6.2"}
+           com.thheller/shadow-css             {:mvn/version "0.6.4"}
            simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
-                                                :git/sha "9c96c9fcd6f78c84d14e02829578f6d0dca47689"}
-           dev.data-star.clojure/sdk           {:mvn/version "1.0.0-RC3"}
-           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC3"}
-           hifi/system                         {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-system"}
-           hifi/html                           {:local/root "../../clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
+                                                :git/sha "6bdb99e17eb7b0c719440f8dd81f3107f969552f"}
+           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC11"}
+           ;;hifi/assets                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-assets"}
+           ;;hifi/config                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-config"}
+           ;;hifi/core                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-core"}
+           ;;hifi/datastar                       {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-datastar"}
+           ;;hifi/html                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
+           ;;hifi/logging                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-logging"}
+           ;;hifi/repl                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-repl"}
+           ;;hifi/web                            {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-web"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
@@ -44,50 +47,58 @@
            ;; http client requests
            hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.61.0"}
-           nrepl/nrepl                   {:mvn/version "1.4.0"}}
- :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
+           djblue/portal                       {:mvn/version "0.67.0"}
+           nrepl/nrepl                         {:mvn/version "1.7.0"}}
+ :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
                         :ns-default build}
-           :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.6.58"}
+           :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.8.70"}
                                       criterium/criterium             {:mvn/version "0.4.6"}
                                       expound/expound                 {:mvn/version "0.9.0"}
-                                      integrant/repl                  {:mvn/version "0.5.0"}
+                                      integrant/repl                  {:mvn/version "0.5.1"}
                                       mvxcvi/cljstyle                 {:mvn/version "0.17.642"}
                                       pjstadig/humane-test-output     {:mvn/version "0.11.0"}
-                                      ring/ring-devel                 {:mvn/version "1.15.2"}
+                                      ring/ring-devel                 {:mvn/version "1.15.5"}
                                       ring/ring-mock                  {:mvn/version "0.6.2"}
-                                      io.github.kit-clj/kit-generator {:mvn/version "0.2.5"}
-                                      org.clojure/tools.namespace     {:mvn/version "1.5.0"}
-                                      com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}}
+                                      io.github.kit-clj/kit-generator {:mvn/version "0.2.9"}
+                                      org.clojure/tools.namespace     {:mvn/version "1.5.1"}
+                                      com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}
+                                      dev.weavejester/hashp           {:mvn/version "0.5.1"}
+                                      ;; hifi/dev                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-dev"}
+                                      }
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
-                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow"
-                                      "-Dguardrails.enabled=false"
+                        :jvm-opts    ["-Dhifi.profile=dev"
+                                      "-Dguardrails.enabled=true"
+                                      "-XX:-OmitStackTraceInFastThrow"
+                                      "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       "-DPIGPIOD_HOST=127.0.0.1"
                                       "-XX:+ZGenerational"
+                                      "-XX:+UseZGC"
                                       "--add-opens=java.base/java.nio=ALL-UNNAMED"
-                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
-                                      "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
-                                      ]}
-           :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
-                                     nrepl/nrepl                   {:mvn/version "1.4.0"}
-                                     cider/cider-nrepl             {:mvn/version "0.57.0"}}
+                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+           :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.14.0"}
+                                     nrepl/nrepl                   {:mvn/version "1.7.0"}
+                                     cider/cider-nrepl             {:mvn/version "0.62.2"}}
                         :main-opts  ["-m" "nrepl.cmdline"
                                      "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware,portal.nrepl/wrap-portal]"
                                      "--bind" "0.0.0.0"
                                      "--port" "7002"]}
            :test       {:extra-deps  {criterium/criterium                  {:mvn/version "0.4.6"}
                                       expound/expound                      {:mvn/version "0.9.0"}
-                                      integrant/repl                       {:mvn/version "0.5.0"}
+                                      integrant/repl                       {:mvn/version "0.5.1"}
                                       io.github.cognitect-labs/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                                                             :git/tag "v0.5.1"
                                                                             :git/sha "dfb30dd"}
                                       pjstadig/humane-test-output          {:mvn/version "0.11.0"}
-                                      ring/ring-devel                      {:mvn/version "1.15.2"}
+                                      ring/ring-devel                      {:mvn/version "1.15.5"}
                                       ring/ring-mock                       {:mvn/version "0.6.2"}
-                                      io.github.kit-clj/kit-generator      {:mvn/version "0.2.5"}
-                                      org.clojure/tools.namespace          {:mvn/version "1.5.0"}
-                                      com.lambdaisland/classpath           {:mvn/version "0.6.58"}}
+                                      io.github.kit-clj/kit-generator      {:mvn/version "0.2.9"}
+                                      org.clojure/tools.namespace          {:mvn/version "1.5.1"}
+                                      com.lambdaisland/classpath           {:mvn/version "0.8.70"}}
                         :exec-fn     cognitect.test-runner.api/test
                         :extra-paths ["env/dev/clj" "env/dev/resources" "env/test/resources" "test/clj"]
                         :main-opts   ["-e" "(require 'pjstadig.humane-test-output) (pjstadig.humane-test-output/activate!)"
-                                      "-m" "cognitect.test-runner"]}}}
+                                      "-m" "cognitect.test-runner"]}
+          ;; :hifi       {:extra-deps {hifi/cli              {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-cli"}
+          ;;                           dev.weavejester/hashp {:mvn/version "0.5.1"}}
+          ;;              :main-opts  ["-m" "hifi.cli"]}
+           }}
