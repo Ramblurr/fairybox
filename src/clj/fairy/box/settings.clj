@@ -11,7 +11,7 @@
 
 (def SettingsComponent
   {:donut.system/start (fn [{config :donut.system/config}] (:opts config))
-   :donut.system/config {:opts [:donut.system/ref [:env :fairy.box/components :fairy.box/settings]]}})
+   :donut.system/config {:opts [:donut.system/ref [:config :fairy.box/components :fairy.box/settings]]}})
 
 (defn startup! [{:keys [bus]}]
   (let [emitter (async/chan)]
@@ -28,7 +28,7 @@
                          (startup! config))
    :donut.system/stop (fn [{:donut.system/keys [instance]}]
                         (async/close! (:emitter instance)))
-   :donut.system/config {:env         [:donut.system/ref [:env]]
+   :donut.system/config {:config         [:donut.system/ref [:config]]
                          ;; :leds        [:donut.system/ref [:fairy.box/components :fairy.box.hardware/leds]]
                          :bus         [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
                          ;; :rfid        [:donut.system/ref [:fairy.box/components :fairy.box.hardware/rfid]]

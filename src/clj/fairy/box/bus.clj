@@ -14,4 +14,4 @@
                          (init-bus! (:opts config)))
    :donut.system/stop (fn [{:donut.system/keys [instance]}]
                         (ev/close! instance))
-   :donut.system/config {:opts [:donut.system/ref [:env :fairy.box/components :fairy.box.bus/bus]]}})
+   :donut.system/config {:opts [:donut.system/ref [:config :fairy.box/components :fairy.box.bus/bus]]}})

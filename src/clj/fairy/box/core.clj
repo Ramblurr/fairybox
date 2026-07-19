@@ -26,7 +26,7 @@
 
 (defn -main []
   (let [system                  (system/start)
-        {:keys [enabled? args]} (get-in system [:donut.system/instances :env :hifi/repl])]
+        {:keys [enabled? args]} (get-in system [:donut.system/instances :config :hifi/repl])]
     (shutdown/add-shutdown-hook! ::stop stop-jvm)
     (when enabled?
       (if args

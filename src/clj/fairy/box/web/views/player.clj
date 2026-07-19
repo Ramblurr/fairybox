@@ -35,9 +35,9 @@
 (defn progress-bar [current-position]
   (let [dur-str (if (float? current-position) (format "%.2f" (* 100 current-position)) "0")]
     [:div {:id "progress-bar" :class "progress-container"
-           :data-signals-progress dur-str}
+           :data-signals:progress dur-str}
      [:input {:type :range :class (cs "progress-bar") :min 0 :max 100 :step 1
-              :data-on-change (uic/player-cmd "set-position" :position "$progress")
+              :data-on:change (uic/player-cmd "set-position" :position "$progress")
               :data-bind "progress"
               :data-style "{'--value': $progress + '%'}"}]]))
 
@@ -75,7 +75,7 @@
                :opening :pause
                :finished :play)]
     [:button {:id "play-pause"
-              :data-on-click (uic/player-cmd "play-pause")
+              :data-on:click (uic/player-cmd "play-pause")
               :class (css :transition-all :ease-out :duration-100 :flex-none
                           :w-20 :h-20 :rounded-full :ring-1  :shadow-md :flex :items-center :justify-center
                           ;; :bg-white
@@ -98,7 +98,7 @@
 (defn volume-bar [volume]
   [:input {:id "volume-slider" :type :range
            :min 0 :max 100 :step 1
-           :data-on-change (uic/player-cmd "set-volume" :volume "evt.target.value")
+           :data-on:change (uic/player-cmd "set-volume" :volume "evt.target.value")
            :name "volume"
            :value volume
            :class (uic/cs "range-sm" (css :w-full :h-1 :rounded-lg  :appearance-none :cursor-pointer
@@ -155,28 +155,28 @@
         ;; button wrapper
          [:div {:class (css :flex :justify-center :transition-all :duration-500 :gap-x-8)}
          ;; previous
-          [:button {:data-on-click (uic/player-cmd "previous")
+          [:button {:data-on:click (uic/player-cmd "previous")
                     :class (cs $button-base) :aria-label "Previous" :title "Previous"}
            icon/prev]
          ;; skip back
-          [:button {:data-on-click (uic/player-cmd "skip-back") :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
+          [:button {:data-on:click (uic/player-cmd "skip-back") :aria-label "Rewind 10 seconds" :title "Rewind 10 seconds"
                     :class (cs $button-base)}
            icon/skip-back]
          ;; play/pause
           (play-pause-button (player/state current))
-          [:button {:data-on-click (uic/player-cmd "skip-forward") :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
+          [:button {:data-on:click (uic/player-cmd "skip-forward") :aria-label "Skip 10 seconds" :title "Skip 10 seconds"
                     :class (cs $button-base)}
            icon/skip-forward]
 
-          [:button {:data-on-click (uic/player-cmd "next") :class (cs $button-base) :aria-label "Next" :title "Next"}
-           icon/next]]
+          [:button {:data-on:click (uic/player-cmd "next") :class (cs $button-base) :aria-label "Next" :title "Next"}
+           icon/skip]]
         ;; volume slider wrapper
          [:div {:class (cs "volume-bar" (css :my-6 :flex :flex-row :items-center :gap-x-4))}
-          [:button {:data-on-click (uic/player-cmd "toggle-mute") :class (cs $button-base)} (volume-icon (player/volume current) (player/muted? current))]
+          [:button {:data-on:click (uic/player-cmd "toggle-mute") :class (cs $button-base)} (volume-icon (player/volume current) (player/muted? current))]
           (volume-bar (player/volume current))
-          [:button {:data-on-click (uic/player-cmd "volume-down-step") :class (cs $button-base)}
+          [:button {:data-on:click (uic/player-cmd "volume-down-step") :class (cs $button-base)}
            icon/volume-down]
-          [:button {:data-on-click (uic/player-cmd "volume-up-step") :class (cs $button-base)}
+          [:button {:data-on:click (uic/player-cmd "volume-up-step") :class (cs $button-base)}
            icon/volume-up]]]]
        [:div
         [:div {:class (css :flex :justify-center :items-center :mt-10)}
@@ -197,10 +197,10 @@
 
 (defn render [req]
   (let [req  (assoc req :current (player/current!))]
-    (html/->str
-     [:main#morph.main
-      [:div
-       (uic/player-tabs req :page/controls)
-       (player-controls-tab req)]])))
+    (html/render req
+                 [:main#morph.main
+                  [:div
+                   (uic/player-tabs req :page/controls)
+                   (player-controls-tab req)]])))
 
 (datastar/rerender-all!)

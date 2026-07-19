@@ -135,7 +135,7 @@
     (str (Paths/get (media-dir settings) (into-array [rel-path])))))
 
 (defn sfx-path [settings key]
-  (let [path (-> settings :sfx key)]
+  (when-let [path (-> settings :sfx key)]
     (str (media-dir settings) "/" path)))
 
 (comment

@@ -2,6 +2,8 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns user)
 
+((requiring-resolve 'hashp.install/install!))
+
 ;; --------------------------------------------------------------------------------------------
 ;; Toggle Dev-time flags
 

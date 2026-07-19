@@ -1,4 +1,5 @@
 (ns fairy.box.audio.current
+  (:refer-clojure :exclude [time])
   (:require
    [fairy.box.audio.system2 :as audio]))
 

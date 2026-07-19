@@ -49,7 +49,8 @@
                                 :normal (css :h-5 :w-5)
                                 :large (css :h-5 :w-5)
                                 :xlarge (css :h-5 :w5)})
-(defn button [&  {:keys [type tag label disabled? class attr icon icon-class priority centered? size hx-target hx-get hx-put hx-post hx-delete hx-vals hx-confirm hx-boost hx-push-url hx-swap form tabindex href spinner? id title name value]
+(defn button [&  {:keys [type tag label disabled? class attr icon icon-class priority centered? size
+                         tabindex href spinner? id title name value]
                   :or   {class ""
                          icon-class ""
                          type :button
@@ -59,8 +60,7 @@
                          tag :button}}]
   [tag
    (merge
-    (util/remove-nils {:hx-target hx-target :hx-swap hx-swap :hx-get hx-get :hx-post hx-post :hx-put hx-put :hx-delete hx-delete :hx-vals hx-vals :hx-confirm hx-confirm :hx-push-url (when hx-push-url "true") :form form :tabindex tabindex
-                       :hx-boost  (when hx-boost "true")
+    (util/remove-nils {:tabindex tabindex
                        :id        id
                        :name      name
                        :value     value

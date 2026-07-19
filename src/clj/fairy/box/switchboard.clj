@@ -144,8 +144,8 @@
       :system/warming-up (do
                            (swap! state assoc :system-state :system-state/warming-up)
                            (emit-led! emitter {:action :led/set :groups [:all] :value  1.0})
-                           (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound
-                                                  :item-path (browse/sfx-path settings :startup)}))
+                           (when-let [sfx (browse/sfx-path settings :startup)]
+                             (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
       :system/warmed-up (when (= :system-state/warming-up (system-state!))
                           (swap! state assoc :system-state :system-state/ready)
                           (emit-system! emitter {:event :system/ready}))
@@ -153,8 +153,8 @@
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
                              (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
-                             (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff)
-                                                    :item-path (browse/sfx-path settings :shutdown)}))
+                             (when-let [sfx (browse/sfx-path settings :shutdown)]
+                               (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff) :item-path sfx})))
       :system/shutdown (when (= :system-state/cooling-down (system-state!))
                          (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
                          (swap! state assoc :system-state :system-state/shutdown)

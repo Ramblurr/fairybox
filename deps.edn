@@ -7,7 +7,7 @@
                                                 }
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
            ;; vlc audio player library
-           ol/vinyl                            {:local/root "../../clojure-playground/vinyl"}
+           ol/vinyl                            {:local/root "/home/ramblurr/src/github.com/ramblurr/vinyl"}
            ;; File system munging
            babashka/fs                         {:mvn/version "0.5.34"}
            ;; Homeassistant integration via MQTT
@@ -31,14 +31,14 @@
            simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
                                                 :git/sha "6bdb99e17eb7b0c719440f8dd81f3107f969552f"}
            dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC11"}
-           ;;hifi/assets                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-assets"}
-           ;;hifi/config                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-config"}
-           ;;hifi/core                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-core"}
-           ;;hifi/datastar                       {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-datastar"}
-           ;;hifi/html                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
-           ;;hifi/logging                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-logging"}
-           ;;hifi/repl                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-repl"}
-           ;;hifi/web                            {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-web"}
+           hifi/assets                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-assets"}
+           hifi/config                         {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-config"}
+           hifi/core                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-core"}
+           hifi/datastar                       {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-datastar"}
+           hifi/html                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-html"}
+           hifi/logging                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-logging"}
+           hifi/repl                           {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-repl"}
+           hifi/web                            {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-web"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
@@ -63,18 +63,15 @@
                                       org.clojure/tools.namespace     {:mvn/version "1.5.1"}
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}
                                       dev.weavejester/hashp           {:mvn/version "0.5.1"}
-                                      ;; hifi/dev                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-dev"}
-                                      }
+                                      hifi/dev                        {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-dev"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
                         :jvm-opts    ["-Dhifi.profile=dev"
                                       "-Dguardrails.enabled=true"
                                       "-XX:-OmitStackTraceInFastThrow"
                                       "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       "-DPIGPIOD_HOST=127.0.0.1"
-                                      "-XX:+ZGenerational"
                                       "-XX:+UseZGC"
-                                      "--add-opens=java.base/java.nio=ALL-UNNAMED"
-                                      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}
+                                      "--enable-native-access=ALL-UNNAMED"]}
            :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.14.0"}
                                      nrepl/nrepl                   {:mvn/version "1.7.0"}
                                      cider/cider-nrepl             {:mvn/version "0.62.2"}}
@@ -98,7 +95,14 @@
                         :extra-paths ["env/dev/clj" "env/dev/resources" "env/test/resources" "test/clj"]
                         :main-opts   ["-e" "(require 'pjstadig.humane-test-output) (pjstadig.humane-test-output/activate!)"
                                       "-m" "cognitect.test-runner"]}
-          ;; :hifi       {:extra-deps {hifi/cli              {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-cli"}
-          ;;                           dev.weavejester/hashp {:mvn/version "0.5.1"}}
-          ;;              :main-opts  ["-m" "hifi.cli"]}
-           }}
+           :hifi       {:extra-deps {hifi/cli              {:local/root "/home/ramblurr/src/clojure-playground/hyperlith-is-for-crud/libs/hifi-cli"}
+                                     dev.weavejester/hashp {:mvn/version "0.5.1"}}
+                        :main-opts  ["-m" "hifi.cli"]
+
+                        :jvm-opts    ["-Dhifi.profile=dev"
+                                      "-Dguardrails.enabled=true"
+                                      "-XX:-OmitStackTraceInFastThrow"
+                                      "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
+                                      "-DPIGPIOD_HOST=127.0.0.1"
+                                      "-XX:+UseZGC"
+                                      "--enable-native-access=ALL-UNNAMED"]}}}

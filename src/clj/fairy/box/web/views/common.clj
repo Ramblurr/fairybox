@@ -1,5 +1,8 @@
 (ns fairy.box.web.views.common
   (:require
+   [fairy.box.audio.browse :as browse]
+   [fairy.box.web.views.icon :as icon]
+   [fairy.box.db :as db]
    [clojure.string :as str]
    [fairy.box.web.views.icon :as icon]
    [shadow.css :refer (css)]))
@@ -37,3 +40,92 @@
             (if (seq args)
               (apply str expr (map #(format "+'&%s='+%s" (name (first %)) (second %)) args))
               expr))))
+
+(defn file-icon-for [{:keys [dir? media-file? playlist-file?]}]
+  (cond
+    dir? icon/folder-solid
+    playlist-file? icon/file-audio
+    media-file? icon/file-audio
+    :else icon/file-solid))
+
+(defn file-row [req {:keys [mode active-value] :as target-params} root-dir current-dir idx {:keys [name rel-path abs-path dir? media-file?] :as file}]
+  (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
+        $icon-size (css :h-5 :w-5)
+        $hover (css  [:hover :bg-smoky-300] [:dark [:hover :bg-smoky-800]])]
+    [:tr
+     [:td {:class (cs (css :py-4 :pl-0 :pr-3 :text-sm :font-medium  [:sm :pl-6] [:lg :pl-8]
+                           :text-smoky-900
+                           [:dark :text-smoky-300])
+                      (when dir? $hover))}
+      [(if dir? :button :div) (merge {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
+                                     (when dir? {:hx-get "traverse-dir" :hx-target "#file-picker"
+                                                 :hx-vals
+                                                 {:current-dir current-dir :root-dir root-dir :target-dir abs-path :target-params (pr-str target-params)}}
+                                           #_{:hx-post endpoint
+                                              :hx-target (or target "#file-picker")
+                                              :hx-vals (merge values {:selected-path abs-path})}))
+       ((file-icon-for file) {:class (cs $icon-color $icon-size (css :mr-2))}) name]]
+
+     [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
+      (condp = mode
+        :play (when (browse/playable-type (:fairy.box/settings req) abs-path)
+                [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+                 (icon/play {:class (cs $icon-color $icon-size)})])
+
+        :choose  (when (browse/playable-type (:fairy.box/settings req) abs-path)
+                   [:input {:id       (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
+                            :required true
+                            :checked  (= active-value rel-path)
+                            :value    rel-path}]
+
+                   #_[:button {:hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+                      "CHOOSE"]))]]))
+
+(defn file-table [req  target-params root-dir current-dir files]
+  [:table {:class (css :min-w-full :divide-y :divide-smoky-400)}
+   [:thead {:class (css :text-smoky-900 [:dark :text-smoky-300])}
+    [:th {:class (css :py-3.5 :pl-0 :pr-3 :text-left :text-sm :font-semibold [:sm :pl-6] [:lg :pl-8])} "Name"]
+    [:th {:class (css :px-3 :py-3.5 :text-left :text-sm :font-semibold)} ""]]
+   [:tbody {:class (css :divide-y :divide-smoky-400)}
+    (map-indexed (partial file-row req target-params root-dir current-dir) files)]])
+
+(defn file-breadcrumb [target-params root-dir current-dir]
+  [:nav {:class (css :flex :pl-0 :py-2 [:sm :pl-6]), :aria-label "Breadcrumb"}
+   [:ol {:role "list", :class (css :flex :items-center :space-x-0)}
+    (map (fn [path]
+           (let [name (browse/basename path)]
+             [:li
+              [:div {:class (css :flex :items-center :text-sm :font-medium :text-smoky-900  [:dark :text-smoky-300])}
+               [:svg {:class (css :h-5 :w-5 :flex-shrink-0 :text-gray-300), :xmlns "http://www.w3.org/2000/svg", :fill "currentColor", :viewbox "0 0 20 20", :aria-hidden "true"}
+                [:path {:d "M5.555 17.776l8-16 .894.448-8 16-.894-.448z"}]]
+               (if (browse/validate-base-path root-dir path)
+                 [:button {:hx-get "traverse-dir" :hx-target "#file-picker"
+                           :hx-vals {:current-dir current-dir :root-dir root-dir :target-dir path :target-params (pr-str target-params)}
+                           :class (css :ml-0 [:hover :text-smoky-600])} name]
+                 name)]]))
+         (browse/component-paths current-dir))]])
+
+(defn- file-picker-main
+  [req target-params root-dir current-dir]
+  (let [current-dir-exists? (browse/valid-dir? (:fairy.box/settings req) current-dir)
+        files (if current-dir-exists?
+                (browse/list-contents root-dir current-dir)
+                (browse/list-contents root-dir root-dir))
+        current-dir (if current-dir-exists? current-dir root-dir)
+        _ (tap> {:current-dir-exists? current-dir-exists? :root-dir root-dir :current-dir current-dir :files files})]
+
+    [:div {:id "file-picker"}
+     (file-breadcrumb target-params root-dir current-dir)
+     (file-table req target-params root-dir current-dir files)]))
+
+(defn browse-media-folder [req target-params current-dir]
+  (let [media-base-path (browse/media-dir (:fairy.box/settings req))]
+    (file-picker-main req
+                      (merge {:endpoint        nil
+                              :values          nil
+                              :mode            :play
+                              :target          nil
+                              :cancel-endpoint nil
+                              :cancel-target   nil} target-params)
+                      media-base-path
+                      (or current-dir media-base-path))))

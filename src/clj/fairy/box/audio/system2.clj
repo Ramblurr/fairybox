@@ -316,7 +316,7 @@
                          (init-audio! config))
    :donut.system/stop  (fn [{:donut.system/keys [instance]}]
                          (halt-player! instance))
-   :donut.system/config {:env        [:donut.system/ref [:env]]
+   :donut.system/config {:config        [:donut.system/ref [:config]]
                          :bus        [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
                          :settings   [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
                          :db-conn    [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})

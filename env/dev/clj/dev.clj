@@ -78,6 +78,8 @@
   ;; Stop the system
   (hifi/stop @app/system)
 
+  (hifi/stop @app/system)
+
   ;; Restart the system
   (restart)
   ;; Reset the system
@@ -85,6 +87,7 @@
   (reset)
   ;; You can pass options to clj-reload to control the reload behavior.
   (reset {:only :all})
+  (clj-reload/reload {:only :all})
 
 ;;; Adding/Modifying Dependencies in deps.edn
   ;; If you add or modify your dependencies, you can run this to sync them.

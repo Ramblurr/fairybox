@@ -11,11 +11,11 @@
 
 (def DbComponent
   {:donut.system/start  (fn [{config :donut.system/config}]
-                          (let [env  (:env config)
+                          (let [env  (:config config)
                                 path (-> config :opts :path)]
                             (assert path "Path is required for the db component")
                             (assert env "Environment is required for the db component")
-                            (tap> [:db-start :path path :env env])
+                            (tap> [:db-start :path path :config config])
                             (duratom/duratom
                              :local-file
                              :file-path path
@@ -35,8 +35,8 @@
                                                       :hour-day-start   8
                                                       :hour-night-start 19}}
                                     :media-metadata {}})))
-   :donut.system/config {:env  [:donut.system/ref [:env]]
-                         :opts [:donut.system/ref [:env :fairy.box/components :fairy.box.db/db]]}})
+   :donut.system/config {:config  [:donut.system/ref [:config]]
+                         :opts [:donut.system/ref [:config :fairy.box/components :fairy.box.db/db]]}})
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)

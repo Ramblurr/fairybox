@@ -98,9 +98,7 @@
                     :repeat-times repeat-times
                     :cancel-ch cancel-ch)))
   ([led-handles leds repeat-times animation-id]
-   (pulse led-handles leds repeat-times 500 500 animation-id))
-  ([led-handles leds]
-   (pulse led-handles leds 1 500 500)))
+   (pulse led-handles leds repeat-times 500 500 animation-id)))
 
 (defn clamp [v]
   (max (min v 1.0) 0))

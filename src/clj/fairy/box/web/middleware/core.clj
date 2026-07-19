@@ -15,7 +15,7 @@
               (assoc-in site-defaults-config [:session :store] cookie-store))))))
 
 (def wrap-settings
-  {:name ::env
+  {:name ::config
    :description "Middleware for injecting settings into request"
    :compile (fn [{:keys [settings] :as _route-data} _route-opts]
               (fn [handler]

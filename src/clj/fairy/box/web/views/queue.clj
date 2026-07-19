@@ -28,7 +28,7 @@
         $base (css :flex  :items-center :justify-between :gap-x-6 :gap-y-2 :py-2 :pl-2 :rounded-lg :shadow)
         $current (css :bg-smoky-300 [:dark :bg-smoky-900])]
     [:li {:class (cs $base (when (= 0 index) $current))}
-     [:button {:class (css :text-left) :data-on-click (uic/player-cmd "play-queue-item" :item-index index)}
+     [:button {:class (css :text-left) :data-on:click (uic/player-cmd "play-queue-item" :item-index index)}
       [:div {:class (css :flex :flex-row :gap-x-2)}
        [:div {:class (css :self-center)}
         [:span {:class (css :inline-flex :items-center :rounded-full :px-2 :py-1 :text-xs :font-medium :ring-1 :ring-offset-0 :ring-inset
@@ -48,7 +48,7 @@
 
 (defn render [req]
   (let [req  (assoc req :tracks (player/full-queue (player/current!)))]
-    (html/->str
+    (html/hiccup->str
      [:main#morph.main
       [:div
        (uic/player-tabs req :page/queue)
