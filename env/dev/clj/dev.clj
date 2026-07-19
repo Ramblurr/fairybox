@@ -2,8 +2,6 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns dev
   (:require
-   [hifi.config :as config]
-   [hifi.system :as hifi]
    [clj-reload.core :as clj-reload]
    [fairy.box.system :as app]
    ;; [fairy.box.audio.system2]
@@ -24,15 +22,15 @@
 (defn restart
   "Restart the application system."
   []
-  (hifi/stop @app/system)
-  (app/start))
+  #_(hifi/stop @app/system)
+  #_(app/start))
 
 (defn reset
   "Reset the application system by stopping the system, reloading all code, then starting the system again."
   [& args]
-  (hifi/stop @app/system)
+  #_(hifi/stop @app/system)
   (apply clj-reload/reload args)
-  (app/start))
+  #_(app/start))
 
 ;; --------------------------------------------------------------------------------------------
 ;; REPL and Inspector

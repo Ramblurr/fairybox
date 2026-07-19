@@ -20,15 +20,24 @@
   []
   (nil? (System/getenv "NOT_A_RPI")))
 
-(require '[hifi.config :as hifi.config])
-
-(derive :fairy.box/dev-no-rpi :hifi.config/dev)
-
-(if (rpi?)
-  (hifi.config/set-env! :dev)
-  (hifi.config/set-env! :fairy.box/dev-no-rpi))
-
 (comment
   (dev)
+  (clojure.repl.deps/sync-deps)
+  ;;
+  )
+
+(comment
+  (do
+    (require
+     '[portal.colors]
+     '[portal.api :as p])
+    (p/open {:theme :portal.colors/gruvbox})
+    (add-tap p/submit)
+    (require '[clj-reload.core :as clj-reload])
+    (clj-reload/init {:dirs ["src" "dev" "test"]}))
+
+  (clj-reload/reload)
+
+  (clojure.repl.deps/sync-deps)
   ;;
   )

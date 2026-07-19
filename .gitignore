@@ -8,16 +8,12 @@ log/
 .shadow-cljs/
 node_modules/
 modules/
-
-# IntelliJ
 *.iml
 .idea/
-
-# clj-kondo
-.clj-kondo/.cache/
+.clj-kondo
+!.clj-kondo/config.edn
 .calva/output-window/
 .lsp/.cache/
-
 resources/public/css/generated.css
 resources/public/css/tailwind.css
 archive
