@@ -3,6 +3,7 @@
 (ns dev
   (:require
    [clj-reload.core :as clj-reload]
+   [fairy.box.hardware.rfid :as rfid]
    [fairy.box.system :as sys]
    [ol.dev.portal :as my-portal]))
 
@@ -22,6 +23,14 @@
   (when @sys/app_ ((@sys/app_ :stop)))
   (clj-reload/reload)
   (sys/-main))
+
+(defn rfid-comp [] (get-in @sys/app_ [:ctx :donut.system/instances :fairy.box/components :fairy.box.hardware/rfid]))
+
+(comment
+  (rfid/place! (rfid-comp) "dev-card-001")
+  (rfid/remove! (rfid-comp))
+
+  :rcf)
 
 ;; --------------------------------------------------------------------------------------------
 ;; REPL and Inspector

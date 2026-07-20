@@ -1,61 +1,93 @@
 (ns fairy.box.web.views.settings
   (:require
-   [fairy.box.ui3 :as ui3]
+   [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
+   [fairy.box.settings :as app-settings]
+   [fairy.box.ui3 :as ui3]
+   [fairy.box.web.rfid :as rfid]
    [fairy.box.web.views.common :as uic]
    [fairy.box.web.views.icon :as icon]
    [fairy.box.web.views.ui :as ui]
    [hyperlith.core :as h :refer [defaction defview]]
    [shadow.css :refer [css]]))
 
-(defonce ^:private rfid-cache (atom {}))
+(defn- component [req component-key]
+  (get-in req [:donut.system/instances
+               :fairy.box/components
+               component-key]))
+
+(defaction link-rfid-folder [req]
+  (let [presence (component req :fairy.box.web/rfid-presence)
+        uid (rfid/current-uid presence)
+        selected-folder (get-in req [:body :selected_folder])
+        settings (app-settings/settings req)
+        db-conn (component req :fairy.box.db/db)]
+    (when (and uid (seq selected-folder))
+      (when-let [canonical-path
+                 (browse/canonicalize-path settings selected-folder)]
+        (when (browse/playable-type settings canonical-path)
+          (db/link-rfid-tag! db-conn
+                             uid
+                             (browse/media-relative-path settings
+                                                         canonical-path))
+          (rfid/refresh! presence))))))
 
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
-   [:input {:type :hidden :value  rfid-uid :name "rfid-uid"}]
    [:dl {:class (css :max-w-2xl :border-dashed :border-2 :border-gray-300)}
     [:div {:class (css :px-2 :py-2 [:sm :grid :grid-cols-3 :gap-4])}
-     [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600 [:dark :text-gray-400])} "RFID Tag"]
-     [:dd {:class (css :mt-1 :text-sm :leading-6 [:sm  :col-span-2 :mt-0] :text-gray-600 [:dark :text-gray-400])} (or rfid-uid "Not Present")]]
+     [:dt {:class (css :text-sm :font-medium :leading-6 :text-gray-600
+                       [:dark :text-gray-400])}
+      "RFID Tag"]
+     [:dd {:class (css :mt-1 :text-sm :leading-6 [:sm :col-span-2 :mt-0]
+                       :text-gray-600 [:dark :text-gray-400])}
+      (or rfid-uid "Not Present")]]
     (when (and rfid-uid linked-folder)
       [:div {:class (css :px-1 :py-2 [:sm :grid :grid-cols-3 :gap-4 :px-0])}
        [:dt {:class (css :text-sm :font-medium :leading-6)} "Linked Folder"]
-       [:dd {:class (css :mt-1 :text-sm :leading-6  [:sm  :col-span-2 :mt-0])} linked-folder]])]])
+       [:dd {:class (css :mt-1 :text-sm :leading-6
+                         [:sm :col-span-2 :mt-0])}
+        linked-folder]])]])
 
 (defn rfid-link-form [req uid linked-folder]
-  [:div {:class [ui/$page-margin]}
+  [:form {:class [ui/$page-margin]
+          :data-signals:selected_folder__ifmissing (or linked-folder "")
+          :data-on:submit (str "evt.preventDefault(); @post('" link-rfid-folder "')")}
    (ui/setting-heading :label "RFID Tags")
    [:div
     [:div {:class (css :mt-8 :space-y-10)}
      [:fieldset
-      [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Current RFID Tag"]
-      [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Place an RFID tag on your Fairybox, and the ID number will appear here. Then you can link it to a folder or playlist below using the file browser."]
+      [:legend {:class (css :text-sm :font-semibold :leading-6
+                            :text-gray-900 [:dark :text-gray-300])}
+       "Current RFID Tag"]
+      [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600
+                       [:dark :text-gray-400])}
+       "Place an RFID tag on your Fairybox, and the ID number will appear here. Then you can link it to a folder or playlist below using the file browser."]
       [:div {:class (css :mt-6 :space-y-2)}
        (current-rfid uid linked-folder)]]]
     [:div {:class (css :mt-2 :space-y-2)}
      [:fieldset
-       ;; [:legend {:class (css :text-sm :font-semibold :leading-6 :text-gray-900 [:dark :text-gray-300])} "Audio Folders"]
-
-       ;; [:p {:class (css :mt-1 :text-sm :leading-6 :text-gray-600 [:dark :text-gray-400])} "Choose a folder below to link the current RFID tag."]
       (uic/browse-media-folder req
                                {:mode :choose :active-value linked-folder}
-                               (get-in req [:query-params "dir"] nil))
-      #_(audio-folder-select settings linked-folder)]]
+                               (get-in req [:query-params "dir"]))]]
 
     [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-     (ui/button :priority :link :label "Back"
-                :hx-get "settings" :hx-target "#active-tab"
-                :hx-push-url "settings")
-     (ui/button :type :submit :priority :primary
+     (ui/button :tag :a
+                :href "/settings"
+                :priority :link
+                :label "Back")
+     (ui/button :type :submit
+                :priority :primary
                 :disabled? (nil? uid)
                 :label "Link To Folder")]]])
 
-(defn rfid-link [{:fairy.box/keys [db-conn] :as req}]
-  (let [{:keys [uid action]} @rfid-cache
-        linked-folder (db/linked-folder db-conn uid)]
-    [:div {:id "active-tab"} (if (= action :placed)
-                               (rfid-link-form req uid linked-folder)
-                               (rfid-link-form req nil nil))]))
+(defn rfid-link [req]
+  (let [presence (component req :fairy.box.web/rfid-presence)
+        uid (rfid/current-uid presence)
+        db-conn (component req :fairy.box.db/db)
+        linked-folder (db/linked-folder @db-conn uid)]
+    [:div {:id "active-tab"}
+     (rfid-link-form req uid linked-folder)]))
 
 (defn settings-option [label icon href]
   [:li #_"<!-- Current: \"bg-gray-50 text-indigo-600\", Default: \"text-gray-700 hover:text-indigo-600 hover:bg-gray-50\" -->"

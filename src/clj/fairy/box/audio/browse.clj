@@ -15,11 +15,10 @@
   (-> settings :media :media-dir fs/path fs/canonicalize str))
 
 (defn validate-base-path
-  "Helper to prevent path traversal attacks. If full-path is not contained inside base-path, will return false, otherwise true"
+  "Returns true when canonical `full-path` is contained by canonical `base-path`."
   [base-path full-path]
-  (str/starts-with? (-> (fs/file full-path)
-                        (.getCanonicalPath))
-                    base-path))
+  (fs/starts-with? (fs/canonicalize (fs/path full-path))
+                   (fs/canonicalize (fs/path base-path))))
 
 (defn dir-item [^java.nio.file.Path root ^java.io.File f]
   {:name (.getName f)
@@ -57,12 +56,18 @@
        (map :abs-path)))
 
 (defn canonicalize-path
-  "Returns the canonical path of the given path, ensuring it is within the media directory. If the path is within the media-dir, returns nil."
+  "Returns the canonical path for `path` when it is within the media directory."
   [settings path]
   (let [media-base (media-dir settings)
         abs-path (fs/canonicalize (fs/path media-base path))]
     (when (validate-base-path media-base abs-path)
       (str abs-path))))
+
+(defn media-relative-path
+  "Returns the canonical media-root-relative representation of `path`."
+  [settings path]
+  (when-let [abs-path (canonicalize-path settings path)]
+    (str (fs/relativize (media-dir settings) abs-path))))
 
 (defn playable-type
   "Returns :dir, :playlist, or :file if the path is a playable media path, otherwise nil."

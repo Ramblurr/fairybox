@@ -1,18 +1,19 @@
 (ns fairy.box.system
-  (:require
-   [fairy.box.css :as css]
-   [fairy.box.web.views :as views]
+  (:require ;; [fairy.box.web.routes.api :as api]
+ ;; [fairy.box.web.routes.ui2 :as ui]
    [aero.core :as aero]
    [donut.system :as ds]
    [fairy.box.audio.system2 :as audio]
    [fairy.box.bus :as bus]
+   [fairy.box.css :as css]
    [fairy.box.db :as db]
+   [fairy.box.hardware.rfid :as rfid]
    [fairy.box.settings :as settings]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.tts :as tts]
-   [hyperlith.core :as h :refer [defaction defview]]
-   ;; [fairy.box.web.routes.api :as api]
-   ;; [fairy.box.web.routes.ui2 :as ui]
+   [fairy.box.web.rfid :as web-rfid]
+   [fairy.box.web.views :as views]
+   [hyperlith.core :as h] ;; [fairy.box.web.routes.api :as api]
    ))
 
 (defn system []
@@ -25,9 +26,10 @@
                            :fairy.box.audio.system2/player    audio/AudioSystemComponent
                           ;; :fairy.box.bus/http-bus-emitter    api/HttpBusEmitterComponent
                            :fairy.box.tts/tts                 tts/TTSComponent
+                           :fairy.box.web/rfid-presence         web-rfid/RfidPresenceComponent
                           ;; :fairy.box.web/sse-broadcaster     ui/SSEBroadcastComponent
                            :fairy.box.hardware/enabled        nil
-                           :fairy.box.hardware/rfid           nil
+                           :fairy.box.hardware/rfid           rfid/RfidComponent
                            :fairy.box.hardware/buttons        nil
                            :fairy.box.hardware/leds           nil
                            :fairy.box.mqtt/client             nil

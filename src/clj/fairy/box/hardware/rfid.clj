@@ -2,13 +2,14 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.hardware.rfid
   (:require
-   [jp.nijohando.event :as ev]
+   [clojure.core.async :as async]
    [clojure.tools.logging :as log]
-   [clojure.core.async :as async])
+   [donut.system :as ds]
+   [jp.nijohando.event :as ev])
   (:import
-   [com.diozero.util Diozero]
    [com.diozero.devices MFRC522]
-   [com.diozero.util SleepUtil Hex]))
+   [com.diozero.util Diozero]
+   [com.diozero.util Hex SleepUtil]))
 
 (def SUPPORTED-RFID-TYPES #{:mfrc522})
 
@@ -130,12 +131,13 @@
             (async/close! emitter)
             (log/debug "rfid :: poller stopping")))))))
 
-(defn init-rfid! [{:keys [rfid-type bus] :as opts}]
+(defn init-rfid! [{:keys [rfid-type] :as opts}]
   (when-not (SUPPORTED-RFID-TYPES rfid-type)
     (throw (Exception. (format "Unsupported RFID type: %s" rfid-type))))
-  {:poller-future (start-poller! opts)})
+  {:type :mfrc522
+   :poller-future (start-poller! opts)})
 
-(defn release-rfid! [{:keys [poller-future]}]
+(defn- release-hardware-rfid! [{:keys [poller-future]}]
   (reset! poller-active? false)
   (SleepUtil/sleepMillis absent-poll-delay)
   (try
@@ -143,3 +145,88 @@
     (deref poller-future 10000 nil)
     (catch Exception e
       (log/error e "Encountered exception when stopping rfid poller"))))
+
+(defn- init-simulated-rfid! [{:keys [bus]}]
+  (let [emitter (async/chan)]
+    (ev/emitize bus emitter)
+    (reset! rfid-state {:status :absent :uid nil :at (System/nanoTime)})
+    {:type :simulated
+     :emitter emitter
+     :state rfid-state}))
+
+(defn- release-simulated-rfid! [{:keys [emitter]}]
+  (async/close! emitter)
+  (reset! rfid-state {:status :absent :uid nil :at (System/nanoTime)}))
+
+(defn release-rfid! [{:keys [type] :as rfid}]
+  (case type
+    :simulated (release-simulated-rfid! rfid)
+    (release-hardware-rfid! rfid)))
+
+(defn- emit-simulated-events! [{:keys [emitter]} events]
+  (doseq [event events]
+    (when-not (async/>!! emitter event)
+      (throw (ex-info "Simulated RFID is stopped" {}))))
+  events)
+
+(defn place!
+  "Places simulated RFID `uid` on `rfid`."
+  [{:keys [state type] :as rfid} uid]
+  {:pre [(string? uid) (seq uid)]}
+  (when-not (= :simulated type)
+    (throw (ex-info "RFID component is not simulated" {:type type})))
+  (let [previous-uid (:uid @state)]
+    (when-not (= uid previous-uid)
+      (let [events (cond-> []
+                     previous-uid
+                     (conj (rfid-event previous-uid
+                                       :removed
+                                       (System/nanoTime)))
+
+                     true
+                     (conj (rfid-event uid
+                                       :placed
+                                       (System/nanoTime))))]
+        (emit-simulated-events! rfid events)
+        (reset! state {:status :present
+                       :uid uid
+                       :at (System/nanoTime)})
+        (last events)))))
+
+(defn remove!
+  "Removes the currently placed tag from simulated `rfid`."
+  [{:keys [state type] :as rfid}]
+  (when-not (= :simulated type)
+    (throw (ex-info "RFID component is not simulated" {:type type})))
+  (when-let [uid (:uid @state)]
+    (let [event (rfid-event uid :removed (System/nanoTime))]
+      (emit-simulated-events! rfid [event])
+      (reset! state {:status :absent
+                     :uid nil
+                     :at (System/nanoTime)})
+      event)))
+
+(defn component-type
+  "Returns the RFID component type selected by `not-a-rpi`."
+  [not-a-rpi]
+  (if (some? not-a-rpi)
+    :simulated
+    :mfrc522))
+
+(defn start-component!
+  "Starts an RFID component from resolved Donut `config`."
+  [{:keys [not-a-rpi] :as config}]
+  (case (component-type not-a-rpi)
+    :simulated (init-simulated-rfid! config)
+    :mfrc522 (init-rfid! config)))
+
+(def RfidComponent
+  {::ds/start (fn [{config ::ds/config}]
+                (start-component! config))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (release-rfid! instance))
+   ::ds/config {:bus [:donut.system/ref
+                      [:fairy.box/components :fairy.box.bus/bus]]
+                :not-a-rpi (System/getenv "NOT_A_RPI")
+                :rfid-type :mfrc522
+                :mfrc522 {:reset-gpio 25}}})
