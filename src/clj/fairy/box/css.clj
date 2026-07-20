@@ -255,11 +255,13 @@
             (cb/generate-color-aliases)
             (cb/generate-spacing-aliases)
             (cb/generate '{:tailwind {:include [fairy.*]}})
-            (cb/write-outputs-to (io/file css-out-dir)))
+            #_(cb/write-outputs-to (io/file css-out-dir)))
         css-str (str (generated-css (:colors @css-ref))
                      (get-in result [:chunks :tailwind :css]))]
     (doseq [mod (:outputs result)
             {:keys [warning-type] :as warning} (:warnings mod)]
+      (println (name warning-type))
+      (println (dissoc warning :warning-type))
       (tap> [:CSS (name warning-type) (dissoc warning :warning-type)]))
     css-str))
 

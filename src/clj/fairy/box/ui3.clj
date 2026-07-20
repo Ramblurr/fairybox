@@ -11,20 +11,19 @@
         :margin     0
         :padding    0}]]))
 
-(defn compile-css! [in out]
-  (let [{:keys [exit err]} (shell/sh "lightningcss"
-                                     "--bundle"
-                                     "--custom-media"
-                                     "--targets" "defaults"
-                                     in
-                                     "-o" out)]
+(defn compile-css! [in]
+  (let [{:keys [exit err out]} (shell/sh "lightningcss"
+                                         "--bundle"
+                                         "--custom-media"
+                                         "--targets" "defaults"
+                                         in)]
     (when-not (zero? exit)
       (throw (ex-info "Lightning CSS compilation failed"
                       {:exit exit :stderr err})))
-    (slurp out)))
+    out))
 
 #_(def tailwind-css (h/static-asset {:body (h/load-resource "public/css/tailwind.css") :content-type "text/css"}))
-(defn fairybox-css [] (h/static-asset {:body (compile-css! "resources/public/css/fairybox.css" "resources/public/css/generated.css") :content-type "text/css"}))
+(defn fairybox-css [] (h/static-asset {:body (compile-css! "resources/public/css/fairybox.css") :content-type "text/css"}))
 (defn shadow-css [] (h/static-asset {:body (css/generate-css) :content-type "text/css"}))
 
 (def shim-headers
