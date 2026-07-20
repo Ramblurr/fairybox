@@ -7,7 +7,7 @@
    [ring.middleware.session.cookie :as cookie]))
 
 (defn wrap-base
-  [{:keys [metrics site-defaults-config cookie-secret] :as opts}]
+  [{:keys [site-defaults-config cookie-secret] _metrics :metrics :as opts}]
   (let [cookie-store (cookie/cookie-store {:key (.getBytes ^String cookie-secret)})]
     (fn [handler]
       (cond-> ((:middleware env/defaults) handler opts)

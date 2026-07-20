@@ -87,7 +87,6 @@
   ;;     :status 200}
   (render/walk-attrs
    [:button {:hx-vals {:action "play-pause"} :type :submit}])
-  (require '[hiccup.util :as hiccup.util])
   (page
    [:button {:hx-vals (hiccup.util/raw-string "{\"action\":\"play-pause\"}"), :type :submit}])
   ;;

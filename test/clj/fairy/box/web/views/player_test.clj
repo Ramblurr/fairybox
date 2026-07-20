@@ -370,7 +370,6 @@
             (not= (artwork-src state) (artwork-src next-state))}))))
 
 (deftest resolves-artwork-from-current-hyperlith-player-state
-  #_{:clj-kondo/ignore [:invalid-arity]}
   (fs/with-temp-dir [temp-dir]
     (let [image-path (fs/path temp-dir "cover.png")]
       (spit (str image-path) "png")

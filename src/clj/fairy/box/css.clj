@@ -248,7 +248,7 @@
              (if (string? styles)
                css
                (str css
-                    (str "." (name class) " {\n")
+                    "." (name class) " {\n"
                     (reduce str
                             ""
                             (map style->str styles))

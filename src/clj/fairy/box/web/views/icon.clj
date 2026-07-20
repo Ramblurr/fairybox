@@ -4,7 +4,7 @@
   (:require [clojure.string :as str]))
 
 (defn deficon [svg]
-  (fn [{class :class or {class ""}}]
+  (fn [{class :class :or {class ""}}]
     (update-in svg [1 :class]
                (fn [existing new]
                  (let [new-str (if (sequential? new)

@@ -26,5 +26,5 @@
       deref
       :queue))
 
-(defn metadata-for [sys item-path]
+(defn metadata-for [_sys _item-path]
   #_(audio/metadata-for sys item-path))

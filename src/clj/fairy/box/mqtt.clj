@@ -15,12 +15,11 @@
 
 (comment
 
-  (do
-    (def conn (mh/connect "tcp://10.9.4.3:1883"))) ;; rcf
+  (def conn (mh/connect "tcp://10.9.4.3:1883")) ;; rcf
 
-  (mh/subscribe conn {"homeassistant/binary_sensor/garden/state" 0} (fn [^String topic _ ^bytes payload]
+  (mh/subscribe conn {"homeassistant/binary_sensor/garden/state" 0} (fn [^String _topic _ ^bytes payload]
                                                                       (tap> (String. payload "UTF-8"))))
-  (mh/subscribe conn {"fairybox/test/command" 0} (fn [^String topic _ ^bytes payload]
+  (mh/subscribe conn {"fairybox/test/command" 0} (fn [^String _topic _ ^bytes payload]
                                                    (tap>
                                                     (<-json
                                                      (String. payload "UTF-8")))))
@@ -66,9 +65,7 @@
       "audio/set-mute" (emit! {:action :audio/set-mute :muted? (:muted payload)})
       "audio/set-time" (emit! {:action :audio/set-time :milliseconds (:milliseconds payload)})
       "audio/set-repeat" (emit! {:action :audio/set-repeat :mode (get {"off" :none "all" :list "one" :track} (:mode payload))})
-      (do
-        (tap> {:mqtt-unhandled-cmd payload})
-        nil))))
+      (tap> {:mqtt-unhandled-cmd payload}))))
 
 (def public-events #{:player/muted
                      :player/volume-changed
@@ -96,7 +93,7 @@
     (start-publish-loop! (assoc opts :topic topic) listener)
     {:listener listener}))
 
-(defn halt-publisher! [{:keys [listener] :as opts}]
+(defn halt-publisher! [{:keys [listener] :as _opts}]
   (when listener
     (log/info "mqtt halt-subscriber!")
     (async/close! listener)
@@ -110,7 +107,7 @@
         topic   (format "fairybox/%s/command" (:fairybox-id settings))]
     (ev/emitize bus emitter)
     (mh/subscribe client {topic qos}
-                  (fn [^String topic _ ^bytes payload]
+                  (fn [^String _topic _ ^bytes payload]
                     (let [emit! (partial emit! emitter)]
                       (command-handler! emit! (<-json (String. payload "UTF-8"))))))
     {:emitter emitter

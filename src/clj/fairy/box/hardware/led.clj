@@ -131,10 +131,10 @@
   ;; rcf
   ;;
 
-  (pulse leds [:audio/prev])
+  (pulse leds [:audio/prev] 1 nil)
   (led-value! (get leds :audio/prev) 1.0)
 
-  (let [pulse-chan (pulse leds [:audio/play-pause])]
+  (let [pulse-chan (pulse leds [:audio/play-pause] 1 nil)]
     (async/<!! pulse-chan)
     (led-value! (get leds :audio/play-pause) 1.0))
 
@@ -182,7 +182,7 @@
         names           [:audio/volume-up]]
     (set (distinct (reduce into names (map groups affected-groups))))))
 
-(defn events-handler! [{:keys [groups leds]} {:keys [value] :as ev}]
+(defn events-handler! [{:keys [groups leds]} {:keys [value] :as _ev}]
   (let [led-names (set (distinct (reduce into (:names value) (map groups (:groups value)))))]
     ;; (tap> [:LEDS ev groups leds])
     (condp = (:action value)
@@ -210,7 +210,7 @@
                       (when (nil? (async/<! fade-chan))
                         (doseq [name led-names]
                           (led-value! (get leds name) after-set))))))
-      :led/set (let [{:keys [value animation-id]} value]
+      :led/set (let [{:keys [value] _animation-id :animation-id} value]
                  (doseq [name led-names]
                    (led-value! (get leds name) value))))))
 
@@ -238,7 +238,7 @@
     (when (seq dup)
       (throw (ex-info "Duplicate LED names" {:names dup})))))
 
-(defn init-leds! [{:keys [groups leds bus] :as opts}]
+(defn init-leds! [{:keys [groups leds bus]}]
   (let [listener (async/chan)
         leds     (open-handles! leds)
         groups   (merge groups {:all (keys leds)})

@@ -8,7 +8,7 @@
    [java.util Date]))
 
 (defn ready?
-  [req]
+  [_req]
   (let [system-state (switchboard/system-state!)
         body         {:system-state (name system-state)}]
     (if (= system-state  :system-state/ready)
@@ -16,7 +16,7 @@
       (http-response/service-unavailable body))))
 
 (defn healthcheck!
-  [req]
+  [_req]
   (http-response/ok
    {:time     (str (Date. (System/currentTimeMillis)))
     :up-since (str (Date. (.getStartTime (java.lang.management.ManagementFactory/getRuntimeMXBean))))

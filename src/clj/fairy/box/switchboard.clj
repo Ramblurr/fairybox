@@ -56,7 +56,7 @@
         (enter-card-id-mode sys))
       (exit-card-id-mode sys))))
 
-(defn handle-button-press [{:keys [emitter] :as sys} {:keys [button-id]}]
+(defn handle-button-press [{:keys [emitter] :as _sys} {:keys [button-id]}]
   (let [{:keys [system-mode rfid]} @state
         normal-mode?               (= :system-mode/normal system-mode)
         rfid-present?              (= :placed  (:action rfid))]
@@ -75,9 +75,9 @@
       :audio/volume-down (async/put! emitter {:path  "/player/commands"
                                               :value {:action :audio/volume-down}}))))
 
-(defn button-handler [{:keys [emitter] :as sys} {:keys [value] :as ev}]
+(defn button-handler [{_emitter :emitter :as sys} {:keys [value] :as _ev}]
   (when (= :system-state/ready (system-state!))
-    (let [{:keys [button-id action]} value]
+    (let [{:keys [action] _button-id :button-id} value]
       #_(tap> [:button button-id action])
       (condp = action
         :button/single-press (handle-button-press sys value)
@@ -134,7 +134,7 @@
   ([emitter poweroff?]
    (emit-system! emitter {:event :system/cooling-down :poweroff? poweroff?})))
 
-(defn system-handler [{:keys [emitter settings]} {:keys [value] :as ev}]
+(defn system-handler [{:keys [emitter settings]} {:keys [value] :as _ev}]
   ;; (tap> {:system ev})
   (let [{:keys [event poweroff?]} value]
     (condp = event
@@ -162,7 +162,7 @@
                            (shell/sh "systemctl" "poweroff")))
       nil)))
 
-(defn player-handler [{:keys [emitter]} {:keys [value] :as ev}]
+(defn player-handler [{:keys [emitter]} {:keys [value] :as _ev}]
   (when (#{:system-state/warming-up :system-state/cooling-down} (system-state!))
     ;; (prn "player-handler " ev)
     (when (= :player/one-shot-finished (:event value))

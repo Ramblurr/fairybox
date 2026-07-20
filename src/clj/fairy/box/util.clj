@@ -55,7 +55,7 @@
         (sequential? m)
         (remove #(nil? %) m)
         :else
-        (throw "remove-nils: Not implemented")))
+        (throw (ex-info "remove-nils: Not implemented" {:value m}))))
 
 (defmacro thread
   "Starts a virtual thread. Conveys bindings."

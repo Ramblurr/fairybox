@@ -72,14 +72,14 @@
       (io/copy in out))
     (.getAbsolutePath dest-file)))
 
-(defn caching-home-assistant-tts  [{:keys [db tts-cache-dir] :as sys} text]
+(defn caching-home-assistant-tts [{:keys [tts-cache-dir] :as sys} text]
   (if-let [local-url (cache-get tts-cache-dir text)]
     local-url
     (let [remote-url (home-assistant-tts sys text)]
       (future (cache-file tts-cache-dir text remote-url))
       remote-url)))
 
-(defn mimic3-tts [sys text]
+(defn mimic3-tts [_sys text]
   (->
    (hc/get "http://10.9.4.3:59125/api/tts"
            {:query-params {"text"        text
@@ -179,13 +179,10 @@
 (defn metadata->ssml [metadata]
   (let [album  (choose-album metadata)
         titles (map :title metadata)
-        text   (if album
-                 (str "This one is " album "")
-                 (str "This one has "))
         ssml   [:speak
                 [:s (if album
                       (str "This one is " album "")
-                      (str "This one has "))]
+                      "This one has ")]
                 [:break {:time "1s"}]
                 (if (> (count titles) 1)
                   (concat
@@ -197,7 +194,7 @@
                    [[:s " and " (count titles) ", " [:break {:time "500ms"}] (last titles)]])
                   [:s (first titles)])]]
 
-    (str (h2/html {:mode :xml} ssml))))
+    (h2/html {:mode :xml} ssml)))
 
 (defn tts-track-text [{:keys [title] :as metadata} {:keys [with-artist? with-album? index] :or {with-artist? false with-album? false}}]
   (let [ssml [:speak
@@ -208,7 +205,7 @@
               (when with-album?
                 [:s " from the album " (:album metadata)])]]
 
-    (str (h2/html {:mode :xml} ssml))))
+    (h2/html {:mode :xml} ssml)))
 
 (defn tts-track [sys metadata opts]
   (try
@@ -219,7 +216,7 @@
       (log/error e)
       nil)))
 
-(defn events-handler! [sys {:keys [value] :as ev}]
+(defn events-handler! [sys {:keys [value] :as _ev}]
   (condp = (:action value)
     :tts/speak (tts-speak sys
                           (select-keys value [:text :audio/play-one-shot]))))
@@ -233,7 +230,7 @@
           (log/error e "Encountered exception when handling tts events")))
       (recur))))
 
-(defn init-tts! [{:keys [bus db-conn settings] :as opts}]
+(defn init-tts! [{:keys [bus db-conn settings]}]
   (let [listener (async/chan)
         emitter  (async/chan)
         sys      {:listener listener :emitter emitter :db-conn db-conn :settings settings :tts-cache-dir (tts-cache-dir settings)}]
@@ -268,7 +265,7 @@
   (do
     (require '[fairy.box.system :as system])
     (def sys (system/component :fairy.box.tts/tts)))
-  (def url1 (text->audio-url nil "hello"))
+  (def url1 (tts sys "hello"))
   (db/tts-engine (:db (with-db sys)))
 
   (tts (with-db sys) "This is a test of the tts system")

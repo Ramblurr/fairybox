@@ -95,7 +95,7 @@
      (when raise-new-error?
        (rfid-event nil :error now test-result))]))
 
-(defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn test-fn]
+(defn poller-loop [{:keys [poll-delay uid status] _at :at :as state} device get-card-uid-fn test-fn]
   (SleepUtil/sleepMillis poll-delay)
   (let [now         (System/nanoTime)
         test-result (test-fn device)]

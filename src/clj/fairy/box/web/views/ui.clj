@@ -49,15 +49,15 @@
                                 :normal (css :h-5 :w-5)
                                 :large  (css :h-5 :w-5)
                                 :xlarge (css :h-5 :w5)})
-(defn button [&  {:keys [type tag label disabled? class attr icon icon-class priority centered? size
-                         tabindex href spinner? id title name value]
-                  :or   {class      ""
-                         icon-class ""
-                         type       :button
-                         priority   :primary
-                         size       :large
-                         disabled?  false
-                         tag        :button}}]
+(defn button [& {:keys [type tag label disabled? class icon icon-class priority centered? size
+                        tabindex href id title name value]
+                 :or   {class      ""
+                        icon-class ""
+                        type       :button
+                        priority   :primary
+                        size       :large
+                        disabled?  false
+                        tag        :button}}]
   [tag
    (merge
     (util/remove-nils {:tabindex tabindex
@@ -82,14 +82,13 @@
         (when class class)])})
 
    (when icon
-     (let [$label-offset (css :-ml-1 :mr-2)]
-       (icon  {:class [#_(size button-icon-sizes-classes)
-                       #_(when label $label-offset)
-                       icon-class]})))
+     (icon {:class [#_(size button-icon-sizes-classes)
+                    #_(when label (css :-ml-1 :mr-2))
+                    icon-class]}))
    [:span {:class "button-label"} label]])
 
-(defn integer-input [& {:keys [name value label required? hint error min max step id autocomplete data-bind]
-                        :or   {required? true step 1 min 0 max 100}}]
+(defn integer-input [& {:keys [name value label min max step id autocomplete data-bind]
+                        :or   {step 1 min 0 max 100}}]
   [:div {:class (css [:sm :col-span-4])}
    [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
    [:div {:class (css :mt-2)}

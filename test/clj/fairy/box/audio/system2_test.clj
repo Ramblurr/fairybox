@@ -52,7 +52,6 @@
         (async/close! events)))))
 
 (deftest records-and-clears-media-relative-queue-source
-  #_{:clj-kondo/ignore [:invalid-arity]}
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-queue-source-"}]
     (let [tree (media/populate-media-tree! temp-dir)
           sys  {:settings (:settings tree) :player :fake-player}]

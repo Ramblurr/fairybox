@@ -38,8 +38,8 @@
 ;; These are low level handlers that try to smooth out the the electrical noise from the raw events
 ;; they must return the button-states map and an optional external event that will be published on the bus
 
-(defn long-press-handler [button-states button-id at orig-nanotime]
-  (let [{:keys [state at] :as wtf} (get button-states button-id)]
+(defn long-press-handler [button-states button-id _at orig-nanotime]
+  (let [{:keys [state at]} (get button-states button-id)]
     (if (and (= :pressed state) (= at orig-nanotime))
       [(assoc button-states button-id {:state :held :at at})
        (button-event button-id :button/hold)]
@@ -56,8 +56,7 @@
       [button-states nil])))
 
 (defn release-handler [button-states button-id nanotime]
-  (let [{:keys [state at]} (get button-states button-id)
-        delta              (- nanotime at)]
+  (let [{:keys [state]} (get button-states button-id)]
     (if (#{:held :pressed} state)
       [(assoc button-states button-id {:state :released :at nanotime})
        (button-event button-id (condp = state :held :button/hold-release :pressed :button/single-press))]
@@ -99,10 +98,10 @@
   "Connect the raw button press listeners"
   [button-event-chan ^Button button action]
   (.whenPressed button (reify LongConsumer
-                         (accept [this value]
+                         (accept [_this value]
                            (raw-press-handler button-event-chan action value))))
   (.whenReleased button (reify LongConsumer
-                          (accept [this value]
+                          (accept [_this value]
                             (raw-release-handler button-event-chan action value)))))
 
 (defn release-raw-button-listener!
@@ -141,7 +140,7 @@
   (async/close! emitter)
   (async/close! debounced-event-chan)
   (async/close! event-handler-exit-chan)
-  (doseq [{:keys [^Button button action]} buttons]
+  (doseq [{:keys [^Button button] _action :action} buttons]
     (when button
       (release-raw-button-listener! button)
       (.close button))))
