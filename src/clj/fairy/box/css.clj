@@ -2,10 +2,31 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.css
   (:require
-   [clojure.string :as str]
-   [fairy.box.colors :refer [prefixed-colors css-color-vars]]
+   [clojure.edn :as edn]
    [clojure.java.io :as io]
+   [clojure.string :as str]
    [shadow.css.build :as cb]))
+
+(def raw-colors (-> "colors.edn" io/resource slurp edn/read-string))
+
+(def prefixed-colors
+  (update-keys
+   (update-vals raw-colors (fn [color-map]
+                             (update-keys color-map #(str "-" %))))
+   name))
+
+(defn css-color-vars [colors]
+  (str
+   (->> colors
+        (map (fn [[color-name values]]
+               (->> values
+                    (map (fn [[weight hex]]
+                           (str "--" (name color-name) weight ": " hex ";")))
+                    sort
+                    (str/join "\n  "))))
+        (str/join "\n  ")
+        (str ":root {\n  "))
+   "}"))
 
 (def index-path "src/clj")
 (def css-out-dir "resources/public/css")
