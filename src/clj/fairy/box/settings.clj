@@ -41,5 +41,5 @@
                          :tts         [:donut.system/ref [:fairy.box/components :fairy.box.tts/tts]]
                          ;; :http        :server/http
                          }})
-(defn settings [req]
-  (get-in req [:donut.system/instances :fairy.box/components :fairy.box/settings]))
+(defn settings [{:fairy.box/keys [component]}]
+  (component :fairy.box/settings))

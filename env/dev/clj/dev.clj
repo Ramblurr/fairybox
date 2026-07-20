@@ -29,8 +29,8 @@
 (comment
   (rfid/place! (rfid-comp) "dev-card-001")
   (rfid/remove! (rfid-comp))
-
-  :rcf)
+  ;;
+  )
 
 ;; --------------------------------------------------------------------------------------------
 ;; REPL and Inspector

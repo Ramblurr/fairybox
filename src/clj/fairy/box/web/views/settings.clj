@@ -3,6 +3,7 @@
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.settings :as app-settings]
+   [fairy.box.switchboard :as switchboard]
    [fairy.box.ui3 :as ui3]
    [fairy.box.web.rfid :as rfid]
    [fairy.box.web.views.common :as uic]
@@ -11,17 +12,30 @@
    [hyperlith.core :as h :refer [defaction defview]]
    [shadow.css :refer [css]]))
 
-(defn- component [req component-key]
-  (get-in req [:donut.system/instances
-               :fairy.box/components
-               component-key]))
 
-(defaction link-rfid-folder [req]
-  (let [presence (component req :fairy.box.web/rfid-presence)
+(defaction play-audio-path [{:fairy.box/keys [component] :as req}]
+  (let [selected-path (get-in req [:query-params "path"])
+        settings (app-settings/settings req)
+        controller (component :fairy.box.switchboard/switchboard)]
+    (when (and controller (seq selected-path))
+      (when-let [canonical-path
+                 (browse/canonicalize-path settings selected-path)]
+        (when (browse/playable-type settings canonical-path)
+          (switchboard/emit-player!
+           (:emitter controller)
+           {:action :audio/play-path
+            :item-path canonical-path
+            :uid nil})
+          (h/execute-expr
+           (format "window.location.assign('%s')"
+                   ((:url-for req) :page/home))))))))
+
+(defaction link-rfid-folder [{:fairy.box/keys [component] :as req}]
+  (let [presence (component :fairy.box.web/rfid-presence)
         uid (rfid/current-uid presence)
         selected-folder (get-in req [:body :selected_folder])
         settings (app-settings/settings req)
-        db-conn (component req :fairy.box.db/db)]
+        db-conn (component :fairy.box.db/db)]
     (when (and uid (seq selected-folder))
       (when-let [canonical-path
                  (browse/canonicalize-path settings selected-folder)]
@@ -81,10 +95,10 @@
                 :disabled? (nil? uid)
                 :label "Link To Folder")]]])
 
-(defn rfid-link [req]
-  (let [presence (component req :fairy.box.web/rfid-presence)
+(defn rfid-link [{:fairy.box/keys [component] :as req}]
+  (let [presence (component :fairy.box.web/rfid-presence)
         uid (rfid/current-uid presence)
-        db-conn (component req :fairy.box.db/db)
+        db-conn (component :fairy.box.db/db)
         linked-folder (db/linked-folder @db-conn uid)]
     [:div {:id "active-tab"}
      (rfid-link-form req uid linked-folder)]))
@@ -109,6 +123,18 @@
       (settings-option "Browse Audio" icon/file-audio (url-for :page.settings/browse))
       (settings-option "Playback" icon/play (url-for :page.settings/playback))]]]])
 
+(defn browse-audio [req]
+  [:div {:id "active-tab"}
+   [:div {:class [(css :max-w-5xl) ui/$page-margin]}
+    [:div
+     [:p {:class (css :text-lg :font-bold :text-smoky-900
+                      [:dark :text-smoky-300])}
+      "Fairybox Audio Folders"]]
+    (uic/browse-media-folder req
+                             {:mode :play
+                              :play-action play-audio-path}
+                             (get-in req [:query-params "dir"]))]])
+
 (defview render-playback {:path "/settings/playback" :shim-headers ui3/shim-headers} [req]
   (h/html
    (ui3/css-reload)
@@ -124,12 +150,9 @@
   (h/html
    (ui3/css-reload)
    [:main#morph.main
-    [:div
+    [:div {}
      (uic/player-tabs req :page/settings)
-     [:div {:id "active-tab"}
-      [:div {:class "fade-in-out"}
-       ;; TODO port browse page from htmx
-       (settings-view req)]]]]))
+     (browse-audio req)]]))
 
 (defview render-rfid {:path "/settings/rfid" :shim-headers ui3/shim-headers}
   [req]

@@ -39,11 +39,17 @@
   (aero/read-config "config/env.edn")
   ;
   )
+(defn- component-lookup-fn [running-system]
+  (fn [component-key]
+    (ds/instance running-system
+                 [:fairy.box/components component-key])))
+
 (defn ctx-start []
   (css/start)
-  (->
-   (ds/start (system))
-   (assoc :url-for views/url-for)))
+  (let [running-system (ds/start (system))]
+    (assoc running-system
+           :url-for views/url-for
+           :fairy.box/component (component-lookup-fn running-system))))
 
 (defn ctx-stop [running-system]
   (ds/signal running-system ::ds/stop))

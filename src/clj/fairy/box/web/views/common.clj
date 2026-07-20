@@ -54,7 +54,7 @@
          (h/url-query-string {:dir rel-path}))))
 
 (defn file-row
-  [req {:keys [mode active-value]} idx
+  [req {:keys [mode active-value play-action]} idx
    {:keys [name rel-path abs-path dir?] :as file}]
   (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
         $icon-size (css :h-5 :w-5)
@@ -82,7 +82,10 @@
         (when (browse/playable-type (settings/settings req) abs-path)
           [:button
            {:class (css :p-1 :transform-all :duration-200
-                        [:hover-mouse [:hover :scale-125]])}
+                        [:hover-mouse [:hover :scale-125]])
+            :data-on:click (str "@post('" play-action
+                                (h/url-query-string {:path rel-path})
+                                "')")}
            (icon/play {:class (cs $icon-color $icon-size)})])
 
         :choose

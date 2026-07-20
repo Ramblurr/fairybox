@@ -19,12 +19,12 @@
 
 (defn request
   [{:keys [settings]} dir]
-  {:uri "/settings/rfid"
-   :query-params (cond-> {} dir (assoc "dir" dir))
-   :donut.system/instances
-   {:fairy.box/components
-    {:fairy.box/settings settings
-     :fairy.box.db/db (atom {:linked-tags {}})
-     :fairy.box.web/rfid-presence
-     {:state (atom {:action :removed :uid nil})
-      :refresh! (constantly nil)}}}})
+  (let [components
+        {:fairy.box/settings settings
+         :fairy.box.db/db (atom {:linked-tags {}})
+         :fairy.box.web/rfid-presence
+         {:state (atom {:action :removed :uid nil})
+          :refresh! (constantly nil)}}]
+    {:uri "/settings/rfid"
+     :query-params (cond-> {} dir (assoc "dir" dir))
+     :fairy.box/component components}))
