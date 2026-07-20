@@ -3,6 +3,7 @@
    [clojure.core.async :as async]
    [clojure.tools.logging :as log]
    [donut.system :as ds]
+   [fairy.box.util :as util]
    [hyperlith.core :as h]
    [jp.nijohando.event :as ev]))
 
@@ -25,9 +26,10 @@
   (assert refresh! "refresh function is required")
   (let [listener (async/chan (async/sliding-buffer 1)
                              (filter refresh-event?))
+        throttled (util/throttle listener 500)
         worker (async/thread
                  (loop []
-                   (when-some [_ (async/<!! listener)]
+                   (when-some [_ (async/<!! throttled)]
                      (try
                        (refresh!)
                        (catch Exception error
@@ -36,11 +38,14 @@
                      (recur))))]
     (ev/listen bus "/player/events" listener)
     {:listener listener
+     :throttled throttled
      :refresh! refresh!
      :worker worker}))
 
-(defn stop-player-refresh! [{:keys [listener worker]}]
+(defn stop-player-refresh! [{:keys [listener throttled worker]}]
   (async/close! listener)
+  (when throttled
+    (async/close! throttled))
   (when worker
     (async/alts!! [worker (async/timeout 1000)]))
   nil)

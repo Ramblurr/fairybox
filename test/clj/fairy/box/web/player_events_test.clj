@@ -71,6 +71,53 @@
         (async/close! refreshes)
         (ev/close! bus)))))
 
+(deftest stops-refresher-started-before-throttling-was-added
+  (let [listener (async/chan)]
+    (try
+      (is (= :stopped
+             (try
+               (player-events/stop-player-refresh!
+                {:listener listener :worker nil})
+               :stopped
+               (catch Exception _
+                 :threw))))
+      (finally
+        (async/close! listener)))))
+
+(deftest throttles-player-refreshes-to-500-ms
+  (let [bus (ev/bus)
+        emitter (async/chan 2)
+        refreshes (async/chan 2)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :refresh! #(async/>!! refreshes (System/nanoTime))})]
+    (try
+      (ev/emitize bus emitter)
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/time-changed}})
+      (let [first-refresh (await-value refreshes 1000)]
+        (async/>!! emitter
+                   {:path "/player/events"
+                    :value {:event :player/position-changed}})
+        (let [premature-refresh (await-value refreshes 350)
+              second-refresh (or premature-refresh
+                                 (await-value refreshes 1000))
+              elapsed-ms (when second-refresh
+                           (quot (- second-refresh first-refresh)
+                                 1000000))]
+          (is (= {:premature-refresh? false
+                  :elapsed-at-least-450-ms? true}
+                 {:premature-refresh? (some? premature-refresh)
+                  :elapsed-at-least-450-ms?
+                  (and elapsed-ms (>= elapsed-ms 450))}))))
+      (finally
+        (player-events/stop-player-refresh! refresher)
+        (async/close! emitter)
+        (async/close! refreshes)
+        (ev/close! bus)))))
+
 (deftest coalesces-relevant-refreshes-without-blocking-the-event-bus
   (let [bus (ev/bus)
         emitter (async/chan)
