@@ -1,12 +1,12 @@
 (ns fairy.box.web.views.player
   (:require
+   [fairy.box.ui3 :as ui3]
+   [hyperlith.core :as h :refer [defaction defview]]
    [fairy.box.audio.current :as player]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.web.views.common :as uic :refer [cs]]
    [fairy.box.web.views.icon :as icon]
-   [hifi.datastar :as datastar]
-   [hifi.html :as html]
-   [shadow.css :refer (css)]))
+   [shadow.css :refer [css]]))
 
 (defn duration-data
   [^long duration-in-millis]
@@ -195,12 +195,16 @@
    [:div {:class "fade-in-out"}
     (player s)]])
 
-(defn render [req]
-  (let [req  (assoc req :current (player/current!))]
-    (html/render req
-                 [:main#morph.main
-                  [:div
-                   (uic/player-tabs req :page/controls)
-                   (player-controls-tab req)]])))
+(defn render [req])
 
-(datastar/rerender-all!)
+(defview render-home {:path "/" :shim-headers ui3/shim-headers}
+  [req]
+  (let [req (assoc req :current (player/current!))]
+    (h/html
+     (ui3/css-reload)
+     [:main#morph.main
+      [:div
+       (uic/player-tabs req :page/controls)
+       (player-controls-tab req)]])))
+
+(h/refresh-all!)

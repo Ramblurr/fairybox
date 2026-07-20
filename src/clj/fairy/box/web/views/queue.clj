@@ -1,11 +1,11 @@
 (ns fairy.box.web.views.queue
   (:require
+   [fairy.box.ui3 :as ui3]
+   [hyperlith.core :as h :refer [defaction defview]]
    [clojure.string :as str]
    [shadow.css :refer [css]]
    [fairy.box.audio.current :as player]
-   [fairy.box.web.views.common :as uic :refer [cs]]
-   [hifi.datastar :as datastar]
-   [hifi.html :as html]))
+   [fairy.box.web.views.common :as uic :refer [cs]]))
 
 (defn icon-dot [$class]
   [:svg {:viewbox "0 0 2 2", :class (cs (css :fill-current) $class)} [:circle {:cx "1", :cy "1", :r "1"}]])
@@ -46,9 +46,11 @@
     [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
      (map-indexed play-queue-item tracks)]]])
 
-(defn render [req]
-  (let [req  (assoc req :tracks (player/full-queue (player/current!)))]
-    (html/hiccup->str
+(defview render-queue {:path "/queue" :shim-headers ui3/shim-headers}
+  [req]
+  (let [req (assoc req :tracks (player/full-queue (player/current!)))]
+    (h/html
+     (ui3/css-reload)
      [:main#morph.main
       [:div
        (uic/player-tabs req :page/queue)
@@ -56,4 +58,4 @@
         [:div {:class "fade-in-out"}
          (play-queue-list req)]]]])))
 
-(datastar/rerender-all!)
+(h/refresh-all!)

@@ -1,5 +1,7 @@
 (ns fairy.box.web.views.common
   (:require
+   [hyperlith.core :as h]
+   [fairy.box.settings :as settings]
    [fairy.box.audio.browse :as browse]
    [fairy.box.web.views.icon :as icon]
    [fairy.box.db :as db]
@@ -57,28 +59,21 @@
                            :text-smoky-900
                            [:dark :text-smoky-300])
                       (when dir? $hover))}
-      [(if dir? :button :div) (merge {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
-                                     (when dir? {:hx-get "traverse-dir" :hx-target "#file-picker"
-                                                 :hx-vals
-                                                 {:current-dir current-dir :root-dir root-dir :target-dir abs-path :target-params (pr-str target-params)}}
-                                           #_{:hx-post endpoint
-                                              :hx-target (or target "#file-picker")
-                                              :hx-vals (merge values {:selected-path abs-path})}))
+      [(if dir? :button :div) {:class (cs (if dir? (css :cursor-pointer) (css :cursor-default)) (css  :flex :w-full))}
        ((file-icon-for file) {:class (cs $icon-color $icon-size (css :mr-2))}) name]]
 
      [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
       (condp = mode
-        :play (when (browse/playable-type (:fairy.box/settings req) abs-path)
-                [:button {:hx-post "play-path!" :hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+        :play (when (browse/playable-type (settings/settings req) abs-path)
+                [:button {:class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
                  (icon/play {:class (cs $icon-color $icon-size)})])
 
-        :choose  (when (browse/playable-type (:fairy.box/settings req) abs-path)
+        :choose  (when (browse/playable-type (settings/settings req) abs-path)
                    [:input {:id       (str idx name), :name "folder-item", :type "radio", :class (css :h-4 :w-4 :border-gray-300)
                             :required true
                             :checked  (= active-value rel-path)
                             :value    rel-path}]
-
-                   #_[:button {:hx-vals {:item-path abs-path} :class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
+                   #_[:button {:class (css :p-1 :transform-all :duration-200 [:hover-mouse [:hover :scale-125]])}
                       "CHOOSE"]))]]))
 
 (defn file-table [req  target-params root-dir current-dir files]
@@ -99,15 +94,13 @@
                [:svg {:class (css :h-5 :w-5 :flex-shrink-0 :text-gray-300), :xmlns "http://www.w3.org/2000/svg", :fill "currentColor", :viewbox "0 0 20 20", :aria-hidden "true"}
                 [:path {:d "M5.555 17.776l8-16 .894.448-8 16-.894-.448z"}]]
                (if (browse/validate-base-path root-dir path)
-                 [:button {:hx-get "traverse-dir" :hx-target "#file-picker"
-                           :hx-vals {:current-dir current-dir :root-dir root-dir :target-dir path :target-params (pr-str target-params)}
-                           :class (css :ml-0 [:hover :text-smoky-600])} name]
+                 [:button {:class (css :ml-0 [:hover :text-smoky-600])} name]
                  name)]]))
          (browse/component-paths current-dir))]])
 
 (defn- file-picker-main
   [req target-params root-dir current-dir]
-  (let [current-dir-exists? (browse/valid-dir? (:fairy.box/settings req) current-dir)
+  (let [current-dir-exists? (browse/valid-dir? (settings/settings req) current-dir)
         files (if current-dir-exists?
                 (browse/list-contents root-dir current-dir)
                 (browse/list-contents root-dir root-dir))
@@ -119,7 +112,8 @@
      (file-table req target-params root-dir current-dir files)]))
 
 (defn browse-media-folder [req target-params current-dir]
-  (let [media-base-path (browse/media-dir (:fairy.box/settings req))]
+  (tap> [:browse-media-folder :param target-params :current-dir current-dir :req req])
+  (let [media-base-path (browse/media-dir (settings/settings req))]
     (file-picker-main req
                       (merge {:endpoint        nil
                               :values          nil
@@ -129,3 +123,5 @@
                               :cancel-target   nil} target-params)
                       media-base-path
                       (or current-dir media-base-path))))
+
+(h/refresh-all!)

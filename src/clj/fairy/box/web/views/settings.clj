@@ -1,14 +1,12 @@
 (ns fairy.box.web.views.settings
   (:require
+   [fairy.box.ui3 :as ui3]
    [fairy.box.db :as db]
+   [fairy.box.web.views.common :as uic]
+   [fairy.box.web.views.icon :as icon]
    [fairy.box.web.views.ui :as ui]
-   [clojure.string :as str]
-   [shadow.css :refer [css]]
-   [fairy.box.audio.current :as player]
-   [fairy.box.web.views.common :as uic :refer [cs]]
-   [hifi.datastar :as datastar]
-   [hifi.html :as html]
-   [fairy.box.web.views.icon :as icon]))
+   [hyperlith.core :as h :refer [defaction defview]]
+   [shadow.css :refer [css]]))
 
 (defonce ^:private rfid-cache (atom {}))
 
@@ -79,44 +77,48 @@
       (settings-option "Browse Audio" icon/file-audio (url-for :page.settings/browse))
       (settings-option "Playback" icon/play (url-for :page.settings/playback))]]]])
 
-(defn render-playback [req]
-  (let [req  req]
-    (html/hiccup->str
-     [:main#morph.main
-      [:div
-       (uic/player-tabs req :page/settings)
-       [:div {:id "active-tab"}
-        [:div {:class "fade-in-out"}
-         (settings-view req)]]]])))
+(defview render-playback {:path "/settings/playback" :shim-headers ui3/shim-headers} [req]
+  (h/html
+   (ui3/css-reload)
+   [:main#morph.main
+    [:div
+     (uic/player-tabs req :page/settings)
+     [:div {:id "active-tab"}
+      [:div {:class "fade-in-out"}
+       ;; TODO port playback settings from htmx
+       (settings-view req)]]]]))
 
-(defn render-browse [req]
-  (let [req  req]
-    (html/hiccup->str
-     [:main#morph.main
-      [:div
-       (uic/player-tabs req :page/settings)
-       [:div {:id "active-tab"}
-        [:div {:class "fade-in-out"}
-         (settings-view req)]]]])))
+(defview render-browse {:path "/settings/browse" :shim-headers ui3/shim-headers} [req]
+  (h/html
+   (ui3/css-reload)
+   [:main#morph.main
+    [:div
+     (uic/player-tabs req :page/settings)
+     [:div {:id "active-tab"}
+      [:div {:class "fade-in-out"}
+       ;; TODO port browse page from htmx
+       (settings-view req)]]]]))
 
-(defn render-rfid [req]
-  (let [req  req]
-    (html/hiccup->str
-     [:main#morph.main
-      [:div
-       (uic/player-tabs req :page/settings)
-       [:div {:id "active-tab"}
-        [:div {:class "fade-in-out"}
-         (rfid-link req)]]]])))
+(defview render-rfid {:path "/settings/rfid" :shim-headers ui3/shim-headers}
+  [req]
+  (h/html
+   (ui3/css-reload)
+   [:main#morph.main
+    [:div
+     (uic/player-tabs req :page/settings)
+     [:div {:id "active-tab"}
+      [:div {:class "fade-in-out"}
+       (rfid-link req)]]]]))
 
-(defn render [req]
-  (let [req  req]
-    (html/hiccup->str
-     [:main#morph.main
-      [:div
-       (uic/player-tabs req :page/settings)
-       [:div {:id "active-tab"}
-        [:div {:class "fade-in-out"}
-         (settings-view req)]]]])))
+(defview render-settings {:path "/settings" :shim-headers ui3/shim-headers}
+  [req]
+  (h/html
+   (ui3/css-reload)
+   [:main#morph.main
+    [:div
+     (uic/player-tabs req :page/settings)
+     [:div {:id "active-tab"}
+      [:div {:class "fade-in-out"}
+       (settings-view req)]]]]))
 
-(datastar/rerender-all!)
+(h/refresh-all!)

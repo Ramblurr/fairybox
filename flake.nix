@@ -30,6 +30,7 @@
             pkgs.babashka
             pkgs.git
             pkgs.vlc
+            pkgs.lightningcss
           ];
           env.NOT_A_RPI = "1";
           env.LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath libraries;

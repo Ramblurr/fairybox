@@ -24,10 +24,10 @@
 
 (defn hash-text [text]
   (str
-   (.encodeToString (Base64/getUrlEncoder) (.getBytes (str (hash text))))
+   (.encodeToString (Base64/getUrlEncoder) (.getBytes ^String (str (hash text))))
    ".tts-cache"))
 
-(defn b64->input-stream [b64]
+(defn b64->input-stream [^String b64]
   (io/input-stream (.decode (Base64/getDecoder) (.getBytes b64))))
 
 (defn cache-get

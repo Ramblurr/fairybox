@@ -1,6 +1,6 @@
-@import "generated.css";
-@import "vars.css";
+@import "tokens.css";
 @import "range.css";
+
 html {
   font-family:
     "Noto Sans",

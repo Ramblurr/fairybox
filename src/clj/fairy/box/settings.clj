@@ -20,6 +20,9 @@
     (async/put! emitter {:path "/system" :value {:event :system/initialized}})
     {:emitter emitter}))
 
+(defn stop! [instance]
+  (async/close! (:emitter instance)))
+
 (defmethod ig/halt-key! :fairy.box/startup [_ {:keys [emitter]}]
   (async/close! emitter))
 
@@ -27,7 +30,7 @@
   {:donut.system/start (fn [{config :donut.system/config}]
                          (startup! config))
    :donut.system/stop (fn [{:donut.system/keys [instance]}]
-                        (async/close! (:emitter instance)))
+                        (stop! instance))
    :donut.system/config {:config         [:donut.system/ref [:config]]
                          ;; :leds        [:donut.system/ref [:fairy.box/components :fairy.box.hardware/leds]]
                          :bus         [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
@@ -38,3 +41,5 @@
                          :tts         [:donut.system/ref [:fairy.box/components :fairy.box.tts/tts]]
                          ;; :http        :server/http
                          }})
+(defn settings [req]
+  (get-in req [:donut.system/instances :fairy.box/components :fairy.box/settings]))

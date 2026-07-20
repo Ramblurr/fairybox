@@ -1,16 +1,14 @@
 ;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
 ;; SPDX-License-Identifier: EUPL-1.2
-(ns css
+(ns fairy.box.css
   (:require
-   [colors :refer [prefixed-colors css-color-vars]]
+   [clojure.string :as str]
+   [fairy.box.colors :refer [prefixed-colors css-color-vars]]
    [clojure.java.io :as io]
    [shadow.css.build :as cb]))
 
-(def watch-paths ["src/clj"])
 (def index-path "src/clj")
-(def watch-extensions ["cljs" "cljc" "clj"])
 (def css-out-dir "resources/public/css")
-(def generated-css-out (format "%s/generated.css" css-out-dir))
 
 (def aliases {:dark             "@media (prefers-color-scheme: dark)"
               :light            "@media (prefers-color-scheme: light)"
@@ -230,8 +228,8 @@
                             (map style->str styles))
                     "}\n"))) "" aliases)))
 
-(defn write-to! [f css]
-  (spit f css))
+#_(defn write-to! [f css]
+    (spit f css))
 
 (defonce css-ref (atom nil))
 (defonce css-watch-ref (atom nil))
@@ -244,6 +242,7 @@
         (cb/generate-spacing-aliases)
 
         (cb/generate '{:tailwind {:include [fairy.*]}}))))
+
 (defn generate-css []
   (let [result
         (-> @css-ref
@@ -251,54 +250,45 @@
             (cb/generate-color-aliases)
             (cb/generate-spacing-aliases)
             (cb/generate '{:tailwind {:include [fairy.*]}})
-            (cb/write-outputs-to (io/file css-out-dir)))]
-    (css/write-to! (io/file generated-css-out) (css/generated-css (:colors @css-ref)))
-    (prn generated-css-out)
-    (prn :CSS-GENERATED)
+            (cb/write-outputs-to (io/file css-out-dir)))
+        css-str (str (generated-css (:colors @css-ref))
+                     (get-in result [:chunks :tailwind :css]))]
     (doseq [mod (:outputs result)
             {:keys [warning-type] :as warning} (:warnings mod)]
-      (prn [:CSS (name warning-type) (dissoc warning :warning-type)]))
-    (println)))
+      (tap> [:CSS (name warning-type) (dissoc warning :warning-type)]))
+    css-str))
 
-(defn on-start! []
-  (let [build-state (->  (cb/start)
-                         (update-config))]
-    ;; (tap> build-state)
-    ;; first initialize my css
-    (reset! css-ref
-            (-> build-state
-                (cb/index-path (io/file index-path) {}))))
+(-> @css-ref
+    (update-config)
+    (cb/generate-color-aliases)
+    (cb/generate-spacing-aliases)
+    (cb/generate '{:tailwind {:include [fairy.*]}})
+    :chunks :tailwind :css (str/includes? "fairy_box_web_views_settings__L67_C2"))
 
-  ;; then build it once
-  (generate-css))
+#_(generate-css)
 
-(defn on-watch-event! [path]
-  (try
-    (swap! css-ref cb/index-file path)
-    (generate-css)
-    (catch Exception e
-      (prn :css-build-failure)
-      (prn e))))
+(defn start []
+  (reset! css-ref
+          (-> (cb/start)
+              (update-config)
+              (cb/index-path (io/file index-path) {}))))
 
-(defn ^:export css-dev [& args]
-  (on-start!))
+#_(defn css-release
+    "Build CSS for production releases"
+    [& args]
+    (let [build-state
+          (-> (cb/start)
+              (update-config)
+              (cb/generate-color-aliases)
+              (cb/generate-spacing-aliases)
+              (cb/index-path (io/file index-path) {})
+              (cb/generate
+               '{:tailwind {:include [fairy.*]}})
+              (cb/write-outputs-to (io/file css-out-dir)))]
 
-(defn ^:export css-release
-  "Build CSS for production releases"
-  [& args]
-  (let [build-state
-        (-> (cb/start)
-            (update-config)
-            (cb/generate-color-aliases)
-            (cb/generate-spacing-aliases)
-            (cb/index-path (io/file index-path) {})
-            (cb/generate
-             '{:tailwind {:include [fairy.*]}})
-            (cb/write-outputs-to (io/file css-out-dir)))]
+      #_(write-to! (io/file generated-css-out) (css/generated-css (:colors build-state)))
 
-    (css/write-to! (io/file generated-css-out) (css/generated-css (:colors build-state)))
+      (doseq [mod                                (:outputs build-state)
+              {:keys [warning-type] :as warning} (:warnings mod)]
 
-    (doseq [mod (:outputs build-state)
-            {:keys [warning-type] :as warning} (:warnings mod)]
-
-      (prn [:CSS (name warning-type) (dissoc warning :warning-type)]))))
+        (prn [:CSS (name warning-type) (dissoc warning :warning-type)]))))
