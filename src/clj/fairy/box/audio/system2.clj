@@ -158,7 +158,7 @@
     (util/thread
       (try
         (let [unsubscribe_ (promise)
-              handler (fn [{:ol.vinyl/keys [event] :as E}]
+              handler (fn [{:ol.vinyl/keys [event]}]
                         (try
                           (case event
                             :vlc/finished
@@ -185,7 +185,7 @@
     (throw (ex-info "Could not play. Requested path could not be found in media-dir" {:requested-path item-path
                                                                                       :media-dir (browse/media-dir settings)}))))
 
-(defn internal-event-handler [{:keys [emitter player]} event]
+(defn internal-event-handler [{:keys [emitter]} event]
   (let [event-name (or (:ol.vinyl/event event) (:event event))
         emit-player (fn [k & {:as extra}]
                       (async/put! emitter (player-event (merge extra {:event k}))))]
@@ -223,6 +223,9 @@
         :ol.vinyl.playback/repeat-changed (do
                                             (set-playback :repeat-mode (:mode-after event))
                                             (emit-player :player/repeat-changed :mode (:mode-after event)))
+        :ol.vinyl.playback/shuffle-changed (do
+                                             (set-playback :shuffle? (:shuffle? event))
+                                             (emit-player :player/shuffle-changed :shuffle? (:shuffle? event)))
         :ol.vinyl.playback/current-track-changed (do
                                                    (set-playback :current-track (:current-track event))
                                                    (emit-player :player/current-track-changed :current-track (:current-track event)))
@@ -235,7 +238,7 @@
       (catch Exception e
         (log/error e "internal event error")))))
 
-(defn command-handler [{:keys [player internal-ch] :as sys} {:keys [value] :as _event}]
+(defn command-handler [{:keys [player] :as sys} {:keys [value] :as _event}]
   (try
     (let [{:keys [action]} value
           {:keys [config]} @audio-state
@@ -268,6 +271,7 @@
         :audio/toggle-mute      (d! :mixer/mute)
         :audio/play-queue-index (d! :playback/play-from :index (:item-index value))
         :audio/set-repeat       (d! :playback/set-repeat :mode (:mode value))
+        :audio/set-shuffle      (d! :playback/set-shuffle :shuffle? (:shuffle? value))
 
         (do
           (log/error "Unknown audio command" action)
@@ -324,7 +328,7 @@
     (ev/emitize bus emitter)
     (assoc sys :audio-loop (audio-loop sys))))
 
-(defn- halt-player! [{:keys [internal-ch exit-ch commands-ch emitter audio-loop player]}]
+(defn- halt-player! [{:keys [internal-ch exit-ch commands-ch emitter audio-loop]}]
   (async/put! exit-ch true)
   (async/close! commands-ch)
   (async/close! internal-ch)

@@ -10,7 +10,7 @@
   (get-in c [:playback :current-track :duration]))
 
 (defn artist [c]
-  (get-in c [:playback :current-track :duration :meta :meta/artist]))
+  (get-in c [:playback :current-track :meta :meta/artist]))
 
 (defn track-title [c]
   (get-in c [:playback :current-track :meta :meta/title]))
@@ -37,7 +37,7 @@
   (get-in c [:playback :current-track :meta :meta/genre]))
 
 (defn mrl [c]
-  (get-in c [:playback :mrl]))
+  (get-in c [:playback :current-track :mrl]))
 
 (defn volume [c]
   (get-in c [:mixer :volume]))

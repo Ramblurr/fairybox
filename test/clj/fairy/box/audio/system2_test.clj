@@ -52,6 +52,7 @@
         (async/close! events)))))
 
 (deftest records-and-clears-media-relative-queue-source
+  #_{:clj-kondo/ignore [:invalid-arity]}
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-queue-source-"}]
     (let [tree (media/populate-media-tree! temp-dir)
           sys {:settings (:settings tree) :player :fake-player}]
@@ -82,3 +83,44 @@
                     :source-after-clear
                     (select-keys (:queue @audio/audio-state)
                                  [:source-type :source-path])}))))))))
+
+(deftest publishes-shuffle-change-after-updating-state
+  (let [events (async/chan 1)]
+    (try
+      (reset! audio/audio-state
+              {:playback {:state :playing :shuffle? false}
+               :mixer {}
+               :queue nil
+               :config {}})
+      (audio/internal-event-handler
+       {:emitter events}
+       {:ol.vinyl/event :ol.vinyl.playback/shuffle-changed
+        :shuffle? true})
+      (let [[event port] (async/alts!! [events (async/timeout 1000)])]
+        (is (= {:event {:path "/player/events"
+                        :value {:event :player/shuffle-changed
+                                :shuffle? true}}
+                :received? true
+                :shuffle? true}
+               {:event event
+                :received? (= port events)
+                :shuffle? (get-in @audio/audio-state
+                                  [:playback :shuffle?])})))
+      (finally
+        (async/close! events)))))
+
+(deftest dispatches-repeat-and-shuffle-commands
+  (let [dispatches (atom [])
+        sys {:player :player}]
+    (with-redefs [mp/dispatch
+                  (fn [player command payload]
+                    (swap! dispatches conj [player command payload]))]
+      (audio/command-handler
+       sys
+       {:value {:action :audio/set-repeat :mode :track}})
+      (audio/command-handler
+       sys
+       {:value {:action :audio/set-shuffle :shuffle? true}}))
+    (is (= [[:player :playback/set-repeat {:mode :track}]
+            [:player :playback/set-shuffle {:shuffle? true}]]
+           @dispatches))))

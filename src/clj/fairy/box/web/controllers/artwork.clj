@@ -5,10 +5,10 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [fairy.box.audio :as audio])
+   [fairy.box.audio.current :as current])
   (:import
-   (java.net MalformedURLException URL URLDecoder)
-   (java.nio.file Paths)))
+   [java.net MalformedURLException URL URLDecoder]
+   [java.nio.file Paths]))
 
 (def ART_DIR (str (Paths/get (System/getProperty "user.home") (into-array String [".cache/vlc/art"]))))
 
@@ -17,11 +17,11 @@
     (some->> possible-extensions
              (map (fn [ext] (str path ext)))
              (map io/file)
-             (filter #(.exists %))
+             (filter #(.exists ^java.io.File %))
              first
              str)))
 
-(defn artwork-attachment-to-path [{:meta/keys [album album-artist artist]}]
+(defn artwork-attachment-to-path [{:meta/keys [album artist]}]
   (if (or (str/blank? artist) (str/blank? album))
     ;; If artist or album are missing, it was cached by title MD5 hash
     nil
@@ -38,7 +38,8 @@
       nil)))
 
 (defn get-current-artwork-path! []
-  (let [{:meta/keys [artwork-url] :as meta} (:meta (audio/current-track!))]
+  (let [{:meta/keys [artwork-url] :as meta}
+        (get-in (current/current!) [:playback :current-track :meta])]
     (when artwork-url
       (cond
         (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path meta)
@@ -62,12 +63,13 @@
 (defn actual-artwork
   "Returns [file img-type] if the artwork exists, otherwise nil."
   []
-  (when-let [image-path (get-current-artwork-path!)]
-    (let [img-file (io/file image-path)
-          img-type (str/lower-case (subs image-path (inc (.lastIndexOf image-path "."))))]
+  (when-let [^String image-path (get-current-artwork-path!)]
+    (let [^java.io.File img-file (io/file image-path)
+          img-type (str/lower-case
+                    (subs image-path (inc (.lastIndexOf image-path "."))))]
       (when (.exists img-file)
         [img-file img-type]))))
 
-(defn current-artwork [req]
+(defn current-artwork [_req]
   (let [[img-file img-type] (or (actual-artwork) (default-artwork))]
     (img-response (io/input-stream img-file) img-type)))

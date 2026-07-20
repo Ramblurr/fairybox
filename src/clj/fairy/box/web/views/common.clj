@@ -33,14 +33,6 @@
          active-tab
          (css :grow-0 :shrink :min-w-min))]])
 
-;; @post('/player-cmd?action=set-volume'+'&volume='evt.target.value)
-(defn player-cmd [cmd & {:as args}]
-  (let [expr (format "'/player-cmd?action=%s'" cmd)]
-    (format "@post(%s)"
-            (if (seq args)
-              (apply str expr (map #(format "+'&%s='+%s" (name (first %)) (second %)) args))
-              expr))))
-
 (defn file-icon-for [{:keys [dir? media-file? playlist-file?]}]
   (cond
     dir? icon/folder-solid
