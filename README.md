@@ -94,10 +94,10 @@ This will load up (it takes awhile) and expose an nrepl port on port `7002`. Usi
 Once connected open the [`env/dev/clj/dev.clj`](./env/dev/clj/dev.clj) file, and start the server with:
 
 ```clojure
-(go)
+(restart)
 ```
 
-System configuration is available under `resources/system.edn`.
+System configuration is available under `resources/env.edn`.
 
 To reload changes:
 

@@ -1,6 +1,7 @@
 {:paths   ["src/clj" "resources"]
  :deps    {org.clojure/clojure                 {:mvn/version "1.12.5"}
            org.clojure/core.async              {:mvn/version "1.9.865"}
+           org.clojure/tools.logging           {:mvn/version "1.3.1"}
            party.donut/system                  {:mvn/version "1.0.259"}
            aero/aero                           {:mvn/version "1.1.6"}
            ;; Raspberry PI GPIO
@@ -49,7 +50,6 @@
            :dev        {:extra-deps  {com.lambdaisland/classpath      {:mvn/version "0.8.70"}
                                       criterium/criterium             {:mvn/version "0.4.6"}
                                       expound/expound                 {:mvn/version "0.9.0"}
-                                      integrant/repl                  {:mvn/version "0.5.1"}
                                       mvxcvi/cljstyle                 {:mvn/version "0.17.642"}
                                       pjstadig/humane-test-output     {:mvn/version "0.11.0"}
                                       ring/ring-devel                 {:mvn/version "1.15.5"}

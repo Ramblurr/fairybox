@@ -161,8 +161,9 @@
 
 (defn release-rfid! [{:keys [type] :as rfid}]
   (case type
+    :disabled nil
     :simulated (release-simulated-rfid! rfid)
-    (release-hardware-rfid! rfid)))
+    :mfrc522 (release-hardware-rfid! rfid)))
 
 (defn- emit-simulated-events! [{:keys [emitter]} events]
   (doseq [event events]
@@ -208,26 +209,38 @@
       event)))
 
 (defn component-type
-  "Returns the RFID component type selected by `not-a-rpi`."
-  [not-a-rpi]
-  (if (some? not-a-rpi)
+  "Returns the supported RFID component type selected by `rfid-type`."
+  [rfid-type]
+  (if (= :simulated rfid-type)
     :simulated
     :mfrc522))
 
 (defn start-component!
   "Starts an RFID component from resolved Donut `config`."
-  [{:keys [not-a-rpi] :as config}]
-  (case (component-type not-a-rpi)
-    :simulated (init-simulated-rfid! config)
-    :mfrc522 (init-rfid! config)))
+  [{:keys [hardware-enablement rfid-type] :as config}]
+  (if (:rfid hardware-enablement)
+    (assoc (case (component-type rfid-type)
+             :simulated (init-simulated-rfid! config)
+             :mfrc522 (init-rfid! config))
+           :enabled? true)
+    {:enabled? false
+     :type :disabled}))
 
 (def RfidComponent
   {::ds/start (fn [{config ::ds/config}]
                 (start-component! config))
    ::ds/stop (fn [{instance ::ds/instance}]
                (release-rfid! instance))
-   ::ds/config {:bus [:donut.system/ref
-                      [:fairy.box/components :fairy.box.bus/bus]]
-                :not-a-rpi (System/getenv "NOT_A_RPI")
-                :rfid-type :mfrc522
-                :mfrc522 {:reset-gpio 25}}})
+   ::ds/config {:hardware-enablement (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/enabled])
+                :bus (ds/ref [:fairy.box/components
+                              :fairy.box.bus/bus])
+                :rfid-type (ds/ref [:config
+                                    :fairy.box/components
+                                    :fairy.box.hardware/rfid
+                                    :rfid-type])
+                :mfrc522 (ds/ref [:config
+                                  :fairy.box/components
+                                  :fairy.box.hardware/rfid
+                                  :mfrc522])}})

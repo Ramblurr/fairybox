@@ -5,6 +5,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [donut.system :as ds]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
@@ -337,11 +338,13 @@
   (reset! audio-state audio-init-state))
 
 (def AudioSystemComponent
-  {:donut.system/start (fn [{config :donut.system/config}]
-                         (init-audio! config))
-   :donut.system/stop  (fn [{:donut.system/keys [instance]}]
-                         (halt-player! instance))
-   :donut.system/config {:config        [:donut.system/ref [:config]]
-                         :bus        [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
-                         :settings   [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
-                         :db-conn    [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})
+  {::ds/start (fn [{config ::ds/config}]
+                (init-audio! config))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (halt-player! instance))
+   ::ds/config {:bus (ds/ref [:fairy.box/components
+                              :fairy.box.bus/bus])
+                :settings (ds/ref [:fairy.box/components
+                                   :fairy.box/settings])
+                :db-conn (ds/ref [:fairy.box/components
+                                  :fairy.box.db/db])}})

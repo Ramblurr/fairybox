@@ -2,15 +2,15 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.hardware.buttons
   (:require
+   [clojure.core.async :as async]
+   [donut.system :as ds]
    [fairy.box.util :refer [debounce]]
-   [jp.nijohando.event :as ev]
-   [clojure.core.async :as async])
+   [jp.nijohando.event :as ev])
   (:import
-   [java.util.function LongConsumer]
-   [com.diozero.util SleepUtil]
    [com.diozero.api GpioPullUpDown]
-   [com.diozero.util Diozero]
-   [com.diozero.devices Button]))
+   [com.diozero.devices Button]
+   [com.diozero.util Diozero SleepUtil]
+   [java.util.function LongConsumer]))
 
 (def debounce-delay
   "Time in nanoseconds to wait before a press->release is considered a single press."
@@ -145,3 +145,28 @@
     (when button
       (release-raw-button-listener! button)
       (.close button))))
+
+(defn start-component! [{:keys [hardware-enablement] :as config}]
+  (if (:buttons hardware-enablement)
+    (assoc (init-buttons! config) :enabled? true)
+    {:enabled? false
+     :buttons []}))
+
+(defn stop-component! [{:keys [enabled?] :as instance}]
+  (when enabled?
+    (release-buttons! instance)))
+
+(def ButtonsComponent
+  {::ds/start (fn [{config ::ds/config}]
+                (start-component! config))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (stop-component! instance))
+   ::ds/config {:hardware-enablement (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/enabled])
+                :bus (ds/ref [:fairy.box/components
+                              :fairy.box.bus/bus])
+                :buttons (ds/ref [:config
+                                  :fairy.box/components
+                                  :fairy.box.hardware/buttons
+                                  :buttons])}})

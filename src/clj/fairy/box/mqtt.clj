@@ -2,14 +2,13 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.mqtt
   (:require
-   [fairy.box.util :as util]
-   [clojure.core.async :as async]
-   [jp.nijohando.event :as ev]
-
-   [clojure.tools.logging :as log]
-   [integrant.core :as ig]
    [cheshire.core :as cheshire]
-   [clojurewerkz.machine-head.client :as mh]))
+   [clojure.core.async :as async]
+   [clojure.tools.logging :as log]
+   [clojurewerkz.machine-head.client :as mh]
+   [donut.system :as ds]
+   [fairy.box.util :as util]
+   [jp.nijohando.event :as ev]))
 
 (def ->json cheshire/generate-string)
 (def <-json #(cheshire/parse-string % true))
@@ -135,74 +134,119 @@
     (catch Exception _)))
 
 (declare try-connect!)
-(defn mqtt-connect! [{:keys [uri mqtt-opts] :as opts}]
-  (mh/connect uri {:opts mqtt-opts
-                   :on-connect-complete (fn [client _ _]
-                                          (log/info "mqtt connection complete")
-                                          (let [opts (assoc opts :client client)]
-                                            (swap! mqtt-state (fn [state]
-                                                                (-> state
-                                                                    (assoc :client client)
-                                                                    (assoc :connected? true)
-                                                                    (assoc :subscriber-state (init-subscriber! opts))
-                                                                    (assoc :publisher-state (init-publisher! opts)))))))
 
-                   :on-connection-lost (fn [reason]
-                                         (log/warn reason "mqtt connection lost")
-                                         (swap! mqtt-state (fn [state]
-                                                             (-> state
-                                                                 (assoc :connected? false)
-                                                                 (assoc :subscriber-state (halt-subscriber! (:subscriber-state state)))
-                                                                 (assoc :publisher-state (halt-publisher! (:publisher-state state))))))
-                                         (try-connect! opts))}))
+(defn mqtt-connect! [{:keys [stopped? uri mqtt-opts] :as opts}]
+  (mh/connect uri {:opts mqtt-opts
+                   :on-connect-complete
+                   (fn [client _ _]
+                     (if @stopped?
+                       (close-client! client)
+                       (do
+                         (log/info "mqtt connection complete")
+                         (let [opts (assoc opts :client client)]
+                           (swap! mqtt-state
+                                  (fn [state]
+                                    (-> state
+                                        (assoc :client client)
+                                        (assoc :connected? true)
+                                        (assoc :subscriber-state
+                                               (init-subscriber! opts))
+                                        (assoc :publisher-state
+                                               (init-publisher! opts)))))))))
+
+                   :on-connection-lost
+                   (fn [reason]
+                     (when-not @stopped?
+                       (log/warn reason "mqtt connection lost")
+                       (swap! mqtt-state
+                              (fn [state]
+                                (-> state
+                                    (assoc :connected? false)
+                                    (assoc :subscriber-state
+                                           (halt-subscriber!
+                                            (:subscriber-state state)))
+                                    (assoc :publisher-state
+                                           (halt-publisher!
+                                            (:publisher-state state))))))
+                       (try-connect! opts)))}))
 
 (defn try-connect!
-  "Attempts repeated retried to re-establish connection."
-  [{:keys [exit-ch] :as opts}]
+  "Attempts repeated retries to establish a connection."
+  [{:keys [exit-ch stopped?] :as opts}]
   (log/info "Attempting to establish mqtt connection")
   (async/go-loop [retries 1]
-    (let [retry-timeout (min (* retries 1000) 60000) ;; timeout maxes at 60s
-          conn (try (mqtt-connect! opts)
-                    (catch Exception e e))]
-      (when (util/exception? conn)
-        (log/info "Unable to establish mqtt connection, retrying in " retry-timeout "ms. "
-                  "Reported exception: " (ex-message conn))
-        (when (= :timeout (async/alt!
-                            (async/timeout retry-timeout) :timeout
-                            exit-ch :exit))
-          (recur (inc retries)))))))
+    (when-not @stopped?
+      (let [retry-timeout (min (* retries 1000) 60000)
+            conn (try
+                   (mqtt-connect! opts)
+                   (catch Exception e
+                     e))]
+        (when (and (util/exception? conn)
+                   (not @stopped?))
+          (log/info "Unable to establish mqtt connection, retrying in "
+                    retry-timeout
+                    "ms. Reported exception: "
+                    (ex-message conn))
+          (when (= :timeout
+                   (async/alt!
+                     (async/timeout retry-timeout) :timeout
+                     exit-ch :exit))
+            (recur (inc retries))))))))
 
-(defn init-client! [opts]
+(defn init-client! [{:keys [settings uri] :as opts}]
   (reset! mqtt-state mqtt-init-state)
+  (if-not uri
+    (do
+      (log/info "mqtt not connecting because uri is nil")
+      {:enabled? false})
+    (let [fairybox-id (:fairybox-id settings)
+          _ (assert (and (string? fairybox-id)
+                         (seq fairybox-id))
+                    "fairybox-id must be set!")
+          exit-ch (async/chan)
+          stopped? (atom false)
+          runtime-opts (assoc opts
+                              :exit-ch exit-ch
+                              :stopped? stopped?)
+          connector (try-connect! runtime-opts)]
+      {:enabled? true
+       :connector connector
+       :exit-ch exit-ch
+       :stopped? stopped?})))
 
-  (let [exit-ch (async/chan)
-        opts (-> opts
-                 (assoc :uri "tcp://home.int.socozy.casa:1883")
-                 (assoc-in [:settings :fairybox-id] "fairybox1")
-                 (assoc-in [:mqtt-opts :username] "phoniebox")
-                 (assoc-in [:mqtt-opts :password] "frostbite-enlarging-pretext-stingily-gosling-task-osmosis-flirt"))]
-
-    (prn opts)
-    (if (:uri opts)
-      (do
-        (let [fairybox-id (get-in opts [:settings :fairybox-id])]
-          (assert (and (some? fairybox-id) (not= "" fairybox-id)) "fairybox-id must be set!"))
-        (try-connect! (assoc opts :exit-ch exit-ch))
-        {:exit-ch exit-ch})
-      (log/info "mqtt not connecting uri is nil"))))
-
-(defn halt-client! [{:keys [exit-ch]}]
-  (when exit-ch
+(defn halt-client! [{:keys [connector enabled? exit-ch stopped?]}]
+  (when enabled?
+    (reset! stopped? true)
     (async/put! exit-ch :exit)
     (halt-subscriber! (:subscriber-state @mqtt-state))
     (halt-publisher! (:publisher-state @mqtt-state))
-    (close-client! (:client @mqtt-state)))
-  (reset! mqtt-state mqtt-init-state))
+    (close-client! (:client @mqtt-state))
+    (when connector
+      (async/alts!! [connector (async/timeout 1000)]))
+    (async/close! exit-ch))
+  (reset! mqtt-state mqtt-init-state)
+  nil)
 
-(defmethod ig/init-key ::client [_ opts]
-  (log/info "\n-=[starting mqtt client]=-")
-  (init-client! opts))
-
-(defmethod ig/halt-key! ::client [_ opts]
-  (log/info "\n-=[goodbye mqtt client]=-")
-  (halt-client! opts))
+(def MqttComponent
+  {::ds/start (fn [{config ::ds/config}]
+                (log/info "\n-=[starting mqtt client]=-")
+                (init-client! config))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (log/info "\n-=[goodbye mqtt client]=-")
+               (halt-client! instance))
+   ::ds/config {:bus (ds/ref [:fairy.box/components
+                              :fairy.box.bus/bus])
+                :settings (ds/ref [:fairy.box/components
+                                   :fairy.box/settings])
+                :uri (ds/ref [:config
+                              :fairy.box/components
+                              :fairy.box.mqtt/client
+                              :uri])
+                :mqtt-opts (ds/ref [:config
+                                    :fairy.box/components
+                                    :fairy.box.mqtt/client
+                                    :mqtt-opts])
+                :qos (ds/ref [:config
+                              :fairy.box/components
+                              :fairy.box.mqtt/client
+                              :qos])}})

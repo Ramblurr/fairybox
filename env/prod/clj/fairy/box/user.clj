@@ -6,7 +6,7 @@
    #_[clojure.string :as string]
    #_[clojure.java.io :as io]
    #_[fairy.box.switchboard :as switchboard]
-   #_[fairy.box.core :as main]))
+   #_[fairy.box.system :as system]))
 
 (println "Loading fairy.box.user PROD")
 
@@ -35,14 +35,17 @@
            (recur (.getNextEntry stream)))))))
 
 (comment
-  (keys @main/system)
+  (require '[fairy.box.system :as system]
+           '[fairy.box.switchboard :as switchboard])
+  (keys @system/app_)
 
   (portal-remote)
 
   (do
     (require '[clojure.core.async :as async])
-    (def player (:player (:fairy.box.audio.system/player @main/system)))
-    (def emitter (:emitter (:fairy.box.audio.system/player @main/system)))) ;; rcf
+    (let [audio (system/component :fairy.box.audio.system2/player)]
+      (def player (:player audio))
+      (def emitter (:emitter audio))))
 
   (switchboard/emit-led! emitter {:action :led/set :groups [:all] :value  0.0})
   (switchboard/emit-led! emitter {:action :led/set :names [:audio/volume-up] :value  0.0})

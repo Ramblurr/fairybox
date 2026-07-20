@@ -7,8 +7,8 @@
 
 (defn- start-simulator [bus]
   (rfid/start-component! {:bus bus
-                          :not-a-rpi "test"
-                          :rfid-type :mfrc522
+                          :hardware-enablement {:rfid true}
+                          :rfid-type :simulated
                           :mfrc522 {:reset-gpio 25}}))
 
 (defn- observed-event [event]
@@ -39,13 +39,11 @@
   (async/close! listener)
   (ev/close! bus))
 
-(deftest selects-component-type-from-not-a-rpi
-  (is (= {:rpi :mfrc522
-          :empty-env :simulated
-          :non-empty-env :simulated}
-         {:rpi (rfid/component-type nil)
-          :empty-env (rfid/component-type "")
-          :non-empty-env (rfid/component-type "1")})))
+(deftest selects-configured-component-type
+  (is (= {:simulated :simulated
+          :mfrc522 :mfrc522}
+         {:simulated (rfid/component-type :simulated)
+          :mfrc522 (rfid/component-type :mfrc522)})))
 
 (deftest places-and-removes-simulated-rfid
   (let [{:keys [listener rfid] :as rig} (test-rig)]

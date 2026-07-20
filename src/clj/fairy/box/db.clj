@@ -3,6 +3,7 @@
 (ns fairy.box.db
   (:require
    [clojure.pprint :as pp]
+   [donut.system :as ds]
    [duratom.core :as duratom]
    [duratom.utils :as dut]
    [fairy.box.db.media-meta :as mm]))
@@ -10,33 +11,31 @@
 (def DEFAULT_MAX_VOLUME 95)
 
 (def DbComponent
-  {:donut.system/start  (fn [{config :donut.system/config}]
-                          (let [env  (:config config)
-                                path (-> config :opts :path)]
-                            (assert path "Path is required for the db component")
-                            (assert env "Environment is required for the db component")
-                            (tap> [:db-start :path path :config config])
-                            (duratom/duratom
-                             :local-file
-                             :file-path path
-                             :rw {:commit-mode :sync
-                                  :read        dut/read-edn-object
-                                  :write       (fn [filepath data]
-                                                 (spit filepath
-                                                       (with-out-str
-                                                         (pp/pprint data))))}
-                             :init {:_version       1
-                                    :linked-tags    {}
-                                    :settings       {:audio
-                                                     {:max-volume       DEFAULT_MAX_VOLUME
-                                                      :min-volume       0
-                                                      :max-volume-day   DEFAULT_MAX_VOLUME
-                                                      :max-volume-night DEFAULT_MAX_VOLUME
-                                                      :hour-day-start   8
-                                                      :hour-night-start 19}}
-                                    :media-metadata {}})))
-   :donut.system/config {:config  [:donut.system/ref [:config]]
-                         :opts [:donut.system/ref [:config :fairy.box/components :fairy.box.db/db]]}})
+  {::ds/start  (fn [{config ::ds/config}]
+                 (let [path (get-in config [:opts :path])]
+                   (assert path "Path is required for the db component")
+                   (tap> [:db-start :path path :config config])
+                   (duratom/duratom
+                    :local-file
+                    :file-path path
+                    :rw {:commit-mode :sync
+                         :read dut/read-edn-object
+                         :write (fn [filepath data]
+                                  (spit filepath
+                                        (with-out-str
+                                          (pp/pprint data))))}
+                    :init {:_version 1
+                           :linked-tags {}
+                           :settings {:audio {:max-volume DEFAULT_MAX_VOLUME
+                                              :min-volume 0
+                                              :max-volume-day DEFAULT_MAX_VOLUME
+                                              :max-volume-night DEFAULT_MAX_VOLUME
+                                              :hour-day-start 8
+                                              :hour-night-start 19}}
+                           :media-metadata {}})))
+   ::ds/config {:opts (ds/ref [:config
+                               :fairy.box/components
+                               :fairy.box.db/db])}})
 
 (defn link-rfid-tag! [conn tag-uid folder-path]
   (assert tag-uid)
@@ -101,10 +100,7 @@
     res))
 
 (comment
-  (do
-    (require '[integrant.repl.state :as state])
-    (def system state/system)
-    (def db-conn (:fairy.box.db/db system)))
+  (require '[fairy.box.system :as system])
+  (def db-conn (system/component :fairy.box.db/db))
   @db-conn
-  ;;
-  )
+  :rcf)

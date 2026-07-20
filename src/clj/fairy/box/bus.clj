@@ -2,16 +2,14 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.bus
   (:require
-   [clojure.tools.logging :as log]
+   [donut.system :as ds]
    [jp.nijohando.event :as ev]))
 
-(defn init-bus! [_]
-  (let [bus (ev/bus)]
-    bus))
-
 (def BusComponent
-  {:donut.system/start (fn [{config :donut.system/config}]
-                         (init-bus! (:opts config)))
-   :donut.system/stop (fn [{:donut.system/keys [instance]}]
-                        (ev/close! instance))
-   :donut.system/config {:opts [:donut.system/ref [:config :fairy.box/components :fairy.box.bus/bus]]}})
+  {::ds/start (fn [_]
+                (ev/bus))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (ev/close! instance))
+   ::ds/config {:opts (ds/ref [:config
+                               :fairy.box/components
+                               :fairy.box.bus/bus])}})

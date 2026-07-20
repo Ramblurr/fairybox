@@ -2,14 +2,15 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.hardware.led
   (:require
-   [medley.core :as m]
-   [clojure.tools.logging :as log]
    [clojure.core.async :as async]
+   [clojure.tools.logging :as log]
+   [donut.system :as ds]
    [fairy.box.animation :as anim]
-   [jp.nijohando.event :as ev])
+   [jp.nijohando.event :as ev]
+   [medley.core :as m])
   (:import
-   [com.diozero.util Diozero]
-   [com.diozero.devices LED PwmLed]))
+   [com.diozero.devices LED PwmLed]
+   [com.diozero.util Diozero]))
 
 (defn init-led-led! [{:keys [gpio name active-high?]
                       :or {active-high? true}}]
@@ -119,13 +120,10 @@
   (cancel-all-animations!)
 
   (do
-
-    (require '[fairy.box.core :as main])
-    (require '[integrant.repl.state :as state])
-    (def sys (:fairy.box.hardware/leds
-              state/system
-              ;; @main/system
-              ))
+    (require '[fairy.box.system :as system])
+    (def sys (ds/instance @system/app_
+                          [:fairy.box/components
+                           :fairy.box.hardware/leds]))
     (def leds (:leds sys))
     (def groups (:groups sys))
     (def cancel-ch (async/chan))
@@ -263,3 +261,33 @@
   (async/close! listener)
   (doseq [led (vals leds)]
     (release-led! led)))
+
+(defn start-component! [{:keys [hardware-enablement] :as config}]
+  (if (:leds hardware-enablement)
+    (assoc (init-leds! config) :enabled? true)
+    {:enabled? false
+     :groups {}
+     :leds {}}))
+
+(defn stop-component! [{:keys [enabled?] :as instance}]
+  (when enabled?
+    (release-leds! instance)))
+
+(def LedsComponent
+  {::ds/start (fn [{config ::ds/config}]
+                (start-component! config))
+   ::ds/stop (fn [{instance ::ds/instance}]
+               (stop-component! instance))
+   ::ds/config {:hardware-enablement (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/enabled])
+                :bus (ds/ref [:fairy.box/components
+                              :fairy.box.bus/bus])
+                :leds (ds/ref [:config
+                               :fairy.box/components
+                               :fairy.box.hardware/leds
+                               :leds])
+                :groups (ds/ref [:config
+                                 :fairy.box/components
+                                 :fairy.box.hardware/leds
+                                 :groups])}})

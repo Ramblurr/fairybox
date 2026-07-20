@@ -13,5 +13,7 @@
    :stop       (fn []
                  (log/info "\n-=[box has shut down successfully]=-"))
    :middleware wrap-dev
-   :opts       {:profile       :dev
+   :opts       {:profile       (if (System/getenv "NOT_A_RPI")
+                                   :dev-no-rpi
+                                   :dev)
                 :persist-data? true}})
