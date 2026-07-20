@@ -112,6 +112,11 @@
               :delay-700                       {:transition-delay "700ms"}
               :delay-1000                      {:transition-delay "1000ms"}
               :appearance-none                 {:appearance "none"}
+              :trim-cap                        {:text-box "trim-both cap alphabetic"}
+              :trim-ex                         {:text-box "trim-both ex alphabetic"}
+              :trim-none                       {:text-box-trim "none"}
+              :trim-start                      {:text-box-trim "trim-start"}
+              :trim-end                        {:text-box-trim "trim-end"}
               :object-contain                  {:object-fit "contain"}
               :object-cover                    {:object-fit "cover"}
               :object-fill                     {:object-fit "fill"}

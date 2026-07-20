@@ -2,6 +2,7 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns dev
   (:require
+   [clojure.core.async :as async]
    [clj-reload.core :as clj-reload]
    [fairy.box.hardware.rfid :as rfid]
    [fairy.box.system :as sys]
@@ -51,34 +52,33 @@
   ;;
   )
 
-#_(comment
+(comment
 
-    (do
-      (require '[babashka.fs :as fs])
-      (require '[clojure.core.async :as async])
-      (require '[fairy.box.audio.browse :as browse])
-      (let [comps (-> @app/system :donut.system/instances :fairy.box/components)]
-        (def settings (:fairy.box/settings comps))
-        (def player (:player (:fairy.box.audio.system2/player comps)))
-        (def emitter (:emitter (:fairy.box.audio.system2/player comps)))
-        (def db-conn (:fairy.box.db/db comps))
-        (def bus (:fairy.box.bus/bus comps))))
+  (do
+    #_(require '[babashka.fs :as fs])
+    (require '[fairy.box.audio.browse :as browse])
+    (let [comps (-> @sys/app_ :ctx :donut.system/instances :fairy.box/components)]
+      (def settings (:fairy.box/settings comps))
+      (def player (:player (:fairy.box.audio.system2/player comps)))
+      (def emitter (:emitter (:fairy.box.audio.system2/player comps)))
+      (def db-conn (:fairy.box.db/db comps))
+      (def bus (:fairy.box.bus/bus comps))))
 
-    (browse/canonicalize-path settings
+  #_(browse/canonicalize-path settings
                               "audiobooks/Arnold Lobel/Days with Frog and Toad")
 
-    (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
-    (async/put! emitter {:path "/player/commands" :value {:action :audio/play}})
-    (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 80}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/stop}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/play}})
+  (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 80}})
 
-    (async/put! emitter {:path "/player/commands"
-                         :value {:action :audio/play-path
-                                 :item-path
-                                 "audiobooks/Arnold Lobel/Days with Frog and Toad"
+  (async/put! emitter {:path "/player/commands"
+                       :value {:action :audio/play-path
+                               :item-path
+                               "audiobooks/Arnold Lobel/Days with Frog and Toad"
                                ;; "/srv/media/audiobooks/Margaret Wise Brown"
                                ;; "audiobooks/From Nonna/"
-                                 :announce-per-track? true}})
+                               :announce-per-track? true}})
 
-    (-> @app/system :donut.system/instances :fairy.box/components :fairy.box/settings)
+  (-> @app/system :donut.system/instances :fairy.box/components :fairy.box/settings)
 
-    (my-portal/open-portals))
+  (my-portal/open-portals))

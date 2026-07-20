@@ -56,14 +56,6 @@ button {
                                       supported by Chrome, Edge, Opera and Firefox */
 }
 
-.htmx-swapping > .fade-in-out {
-  opacity: 0;
-}
-
-.htmx-swapping.htmx-settling > .fade-in-out {
-  opacity: 1;
-}
-
 .fade-in-out {
   opacity: 1;
   transition: opacity 0.1s ease-out;

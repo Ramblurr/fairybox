@@ -18,16 +18,16 @@
 
 (defn system []
   {::ds/defs
-   {:config (aero/read-config "config/env.edn")
+   {:config               (aero/read-config "config/env.edn")
     :fairy.box/components {:fairy.box/settings                settings/SettingsComponent
                            :fairy.box.db/db                   db/DbComponent
                            :fairy.box.bus/bus                 bus/BusComponent
                            :fairy.box.switchboard/switchboard switchboard/SwitchboardComponent
                            :fairy.box.audio.system2/player    audio/AudioSystemComponent
-                          ;; :fairy.box.bus/http-bus-emitter    api/HttpBusEmitterComponent
+                           ;; :fairy.box.bus/http-bus-emitter    api/HttpBusEmitterComponent
                            :fairy.box.tts/tts                 tts/TTSComponent
-                           :fairy.box.web/rfid-presence         web-rfid/RfidPresenceComponent
-                          ;; :fairy.box.web/sse-broadcaster     ui/SSEBroadcastComponent
+                           :fairy.box.web/rfid-presence       web-rfid/RfidPresenceComponent
+                           ;; :fairy.box.web/sse-broadcaster     ui/SSEBroadcastComponent
                            :fairy.box.hardware/enabled        nil
                            :fairy.box.hardware/rfid           rfid/RfidComponent
                            :fairy.box.hardware/buttons        nil
