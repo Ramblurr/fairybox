@@ -369,6 +369,31 @@
    [:div {:class "fade-in-out"}
     (player s)]])
 
+(defn hardware-buttons []
+  [:section.arcade-button-panel
+   {:id "hardware-buttons" :aria-label "Fairybox hardware buttons"}
+   [:div.arcade-button-row
+    [:button.arcade-button.arcade-button--green
+     {:type       "button"      :data-led-state "on"
+      :aria-label "Volume down" :title          "Volume down"}
+     icon/volume-down]
+    [:button.arcade-button.arcade-button--red
+     {:type       "button"   :data-led-state "on"
+      :aria-label "Previous" :title          "Previous"}
+     icon/prev]
+    [:button.arcade-button.arcade-button--orange
+     {:type       "button"        :data-led-state "on"
+      :aria-label "Play or pause" :title          "Play or pause"}
+     (icon/play {})]
+    [:button.arcade-button.arcade-button--red
+     {:type       "button" :data-led-state "on"
+      :aria-label "Next"   :title          "Next"}
+     icon/skip]
+    [:button.arcade-button.arcade-button--green
+     {:type       "button"    :data-led-state "on"
+      :aria-label "Volume up" :title          "Volume up"}
+     icon/volume-up]]])
+
 (defn render [_req])
 
 (defview render-home {:path "/" :shim-headers ui3/shim-headers}
@@ -379,6 +404,7 @@
      [:main#morph.main
       [:div {}
        (uic/player-tabs req :page/controls)
-       (player-controls-tab req)]])))
+       (player-controls-tab req)]
+      (hardware-buttons)])))
 
 (h/refresh-all!)

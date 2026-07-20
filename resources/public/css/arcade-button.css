@@ -1,0 +1,146 @@
+.arcade-button-panel {
+  display: block;
+  padding: 2.5rem 4px 3.5rem;
+  overflow-x: auto;
+}
+
+.arcade-button-row {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  margin-inline: auto;
+}
+
+.arcade-button {
+  --arcade-color: var(--arcade-on-color);
+  --arcade-bezel-shadow:
+    color-mix(in srgb, var(--arcade-color) 60%, black) 0 4px 5px inset,
+    rgb(255 255 255 / 50%) 0 12px 5px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 -12px 5px inset,
+    rgb(0 0 0 / 80%) 0 4px 8px;
+  --arcade-cap-shadow:
+    rgb(0 0 0 / 80%) 0 0 10px 5px,
+    rgb(255 255 255 / 70%) 0 3px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 20%, black) 0 8px 10px inset,
+    rgb(0 0 0 / 30%) 0 20px 10px inset,
+    rgb(255 255 255 / 50%) 0 -2px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 -7px 20px inset;
+  position: relative;
+  z-index: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 160px;
+  margin: 0 -24px;
+  transform: scale(0.7);
+  transform-origin: center;
+  padding: 0;
+  cursor: pointer;
+  color: rgb(255 255 255 / 88%);
+  font-size: 30px;
+  border: 0;
+  border-radius: 80px;
+  background: color-mix(in srgb, var(--arcade-color) 80%, black);
+  box-shadow: var(--arcade-bezel-shadow);
+}
+
+.arcade-button::before {
+  position: absolute;
+  z-index: 0;
+  top: 20px;
+  left: 20px;
+  box-sizing: border-box;
+  display: block;
+  width: 120px;
+  height: 120px;
+  content: "";
+  border: 1px solid var(--arcade-color);
+  border-radius: 60px;
+  background-color: var(--arcade-color);
+  background-image: radial-gradient(
+    circle at 40px 40px,
+    var(--arcade-color) 15px,
+    color-mix(in srgb, var(--arcade-color) 88%, white) 30px,
+    color-mix(in srgb, var(--arcade-color) 88%, white) 40px,
+    color-mix(in srgb, var(--arcade-color) 98%, black) 65px
+  );
+  background-position: center center;
+  background-repeat: no-repeat;
+  box-shadow: var(--arcade-cap-shadow);
+}
+
+.arcade-button svg {
+  position: relative;
+  z-index: 1;
+  width: 45px;
+  height: 45px;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 55%));
+}
+
+.arcade-button:hover::before {
+  background-image: radial-gradient(
+    circle at 40px 40px,
+    color-mix(in srgb, var(--arcade-color) 90%, white),
+    color-mix(in srgb, var(--arcade-color) 80%, white) 30px,
+    color-mix(in srgb, var(--arcade-color) 80%, white) 40px,
+    color-mix(in srgb, var(--arcade-color) 90%, white) 65px
+  );
+  box-shadow:
+    rgb(0 0 0 / 80%) 0 0 10px 5px,
+    rgb(255 255 255 / 90%) 0 3px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 8px 10px inset,
+    rgb(0 0 0 / 30%) 0 20px 10px inset,
+    rgb(255 255 255 / 50%) 0 -2px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 -7px 20px inset;
+}
+
+.arcade-button:focus {
+  box-shadow: var(--arcade-bezel-shadow);
+}
+
+.arcade-button:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 6px;
+}
+
+.arcade-button:active::before {
+  border-color: black;
+  background-image: radial-gradient(
+    circle at 40px 40px,
+    var(--arcade-color) 15px,
+    color-mix(in srgb, var(--arcade-color) 70%, black) 30px,
+    color-mix(in srgb, var(--arcade-color) 70%, black) 40px,
+    color-mix(in srgb, var(--arcade-color) 50%, black) 65px
+  );
+  box-shadow:
+    rgb(0 0 0 / 80%) 0 0 10px 5px,
+    rgb(0 0 0 / 80%) 0 3px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 8px 10px inset,
+    rgb(0 0 0 / 30%) 0 20px 10px inset,
+    rgb(255 255 255 / 30%) 0 -2px 3px inset,
+    color-mix(in srgb, var(--arcade-color) 40%, black) 0 -7px 20px inset;
+}
+
+.arcade-button[data-led-state="off"] {
+  --arcade-color: var(--arcade-off-color);
+}
+
+.arcade-button--red {
+  --arcade-on-color: red;
+  --arcade-off-color: #4d0000;
+}
+
+.arcade-button--green {
+  --arcade-on-color: #00ce30;
+  --arcade-off-color: #004d12;
+}
+
+.arcade-button--orange {
+  --arcade-on-color: #ff8c00;
+  --arcade-off-color: #593100;
+}

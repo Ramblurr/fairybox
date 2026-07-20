@@ -131,6 +131,36 @@
             :legacy-command-removed (not (str/includes? html "/player-cmd"))
             :htmx-removed           (not (str/includes? html "hx-"))}))))
 
+(deftest renders-static-hardware-buttons-below-player
+  (reset! audio-system/audio-state (sample-state))
+  (let [component-html (h/html->str (player/hardware-buttons))
+        page-html      (h/html->str ((render-fn) (player-request)))
+        buttons        (re-seq #"<button class=\"arcade-button.*?</button>"
+                               component-html)
+        labels         (mapv #(second (re-find #"aria-label=\"([^\"]+)\"" %))
+                             buttons)]
+    (is (= {:button-count   5
+            :labels         ["Volume down" "Previous" "Play or pause"
+                             "Next" "Volume up"]
+            :led-states     ["on" "on" "on" "on" "on"]
+            :red-buttons    2
+            :green-buttons  2
+            :orange-buttons 1
+            :unwired        true
+            :main-sibling   true}
+           {:button-count   (count buttons)
+            :labels         labels
+            :led-states
+            (mapv #(second (re-find #"data-led-state=\"([^\"]+)\"" %))
+                  buttons)
+            :red-buttons    (count (re-seq #"arcade-button--red" component-html))
+            :green-buttons  (count (re-seq #"arcade-button--green" component-html))
+            :orange-buttons (count (re-seq #"arcade-button--orange" component-html))
+            :unwired        (not (re-find #"data-on|hx-|@post" component-html))
+            :main-sibling
+            (str/includes? page-html
+                           "</div><section id=\"hardware-buttons\"")}))))
+
 (deftest range-controls-handle-track-clicks-and-drags-without-rerender-overrides
   (reset! audio-system/audio-state (sample-state))
   (let [progress-input (get-in (player/progress-bar 0.25) [2 1])
