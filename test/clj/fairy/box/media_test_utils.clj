@@ -14,17 +14,17 @@
     (spit (fs/file root "playlists/Favorites.m3u") "playlist")
     (spit (fs/file root "sfx/Chime.wav") "audio")
     (spit (fs/file root "notes.txt") "not audio")
-    {:root root
+    {:root     root
      :settings {:media {:media-dir root}}}))
 
 (defn request
   [{:keys [settings]} dir]
   (let [components
         {:fairy.box/settings settings
-         :fairy.box.db/db (atom {:linked-tags {}})
+         :fairy.box.db/db    (atom {:linked-tags {}})
          :fairy.box.web/rfid-presence
-         {:state (atom {:action :removed :uid nil})
+         {:state    (atom {:action :removed :uid nil})
           :refresh! (constantly nil)}}]
     {:uri "/settings/rfid"
-     :query-params (cond-> {} dir (assoc "dir" dir))
+     :query-params        (cond-> {} dir (assoc "dir" dir))
      :fairy.box/component components}))

@@ -9,19 +9,19 @@
   (assert bus "event bus is required")
   (assert refresh! "refresh function is required")
   (let [listener (async/chan (async/sliding-buffer 8))
-        state (atom {:action :removed :uid nil})
-        worker (async/thread
-                 (loop []
-                   (when-some [{:keys [value]} (async/<!! listener)]
-                     (when (#{:placed :removed} (:action value))
-                       (reset! state value)
-                       (refresh!))
-                     (recur))))]
+        state    (atom {:action :removed :uid nil})
+        worker   (async/thread
+                   (loop []
+                     (when-some [{:keys [value]} (async/<!! listener)]
+                       (when (#{:placed :removed} (:action value))
+                         (reset! state value)
+                         (refresh!))
+                       (recur))))]
     (ev/listen bus "/hardware/input/rfid" listener)
     {:listener listener
      :refresh! refresh!
-     :state state
-     :worker worker}))
+     :state    state
+     :worker   worker}))
 
 (defn stop-presence! [{:keys [listener worker]}]
   (async/close! listener)
@@ -38,10 +38,10 @@
   (refresh-fn))
 
 (def RfidPresenceComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (start-presence! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (stop-presence! instance))
-   ::ds/config {:bus [:donut.system/ref
-                      [:fairy.box/components :fairy.box.bus/bus]]
+  {::ds/start  (fn [{config ::ds/config}]
+                 (start-presence! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (stop-presence! instance))
+   ::ds/config {:bus      [:donut.system/ref
+                           [:fairy.box/components :fairy.box.bus/bus]]
                 :refresh! h/refresh-all!}})

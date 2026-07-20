@@ -20,30 +20,30 @@
 
 (defn- sample-state []
   {:playback {:state :playing}
-   :mixer {:muted? false :volume 40}
+   :mixer    {:muted? false :volume 40}
    :queue
    {:source-type :folder
     :source-path "audiobooks/Author One/Book One"
     :tracks
-    [{:id "past"
-      :mrl "file:///past.mp3"
+    [{:id    "past"
+      :mrl   "file:///past.mp3"
       :index -1
-      :meta #:meta{:title "Past Track"
-                   :artist "Past Artist"
-                   :album "Past Album"}}
-     {:id "current"
-      :mrl "file:///current.mp3"
+      :meta  #:meta{:title  "Past Track"
+                    :artist "Past Artist"
+                    :album  "Past Album"}}
+     {:id    "current"
+      :mrl   "file:///current.mp3"
       :index 0
-      :meta #:meta{:title "Current Track"
-                   :artist "Current Artist"
-                   :album "Current Album"}}
-     {:id "next"
-      :mrl "file:///next.mp3"
+      :meta  #:meta{:title  "Current Track"
+                    :artist "Current Artist"
+                    :album  "Current Album"}}
+     {:id    "next"
+      :mrl   "file:///next.mp3"
       :index 1
-      :meta #:meta{:title "Next Track"
-                   :artist ""
-                   :album "Next Album"}}]}
-   :config {:volume-up-step 5 :volume-down-step -5}})
+      :meta  #:meta{:title  "Next Track"
+                    :artist ""
+                    :album  "Next Album"}}]}
+   :config   {:volume-up-step 5 :volume-down-step -5}})
 
 (defn- with-restored-audio-state [f]
   (let [original @audio-system/audio-state]
@@ -57,39 +57,39 @@
 (defn- queue-request [tree]
   (assoc (media/request tree nil)
          :uri "/queue"
-         :url-for {:page/home "/"
-                   :page/queue "/queue"
-                   :page/settings "/settings"
+         :url-for {:page/home            "/"
+                   :page/queue           "/queue"
+                   :page/settings        "/settings"
                    :page.settings/browse "/settings/browse"}))
 
 (deftest renders-legacy-layout-active-state-and-datastar-controls
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-queue-render-"}]
-    (let [tree (media/populate-media-tree! temp-dir)
-          state (sample-state)
-          _ (reset! audio-system/audio-state state)
-          html (h/html->str ((render-fn) (queue-request tree)))
-          tracks (get-in state [:queue :tracks])
+    (let [tree           (media/populate-media-tree! temp-dir)
+          state          (sample-state)
+          _              (reset! audio-system/audio-state state)
+          html           (h/html->str ((render-fn) (queue-request tree)))
+          tracks         (get-in state [:queue :tracks])
           inactive-class (get-in (queue/play-queue-item-view 0 (first tracks))
                                  [1 :class])
-          active-class (get-in (queue/play-queue-item-view 1 (second tracks))
-                               [1 :class])]
+          active-class   (get-in (queue/play-queue-item-view 1 (second tracks))
+                                 [1 :class])]
       (is (= {:layout true
               :labels true
-              :metadata true
-              :active-state true
-              :full-row-button true
-              :datastar-action true
+              :metadata               true
+              :active-state           true
+              :full-row-button        true
+              :datastar-action        true
               :legacy-command-removed true
-              :htmx-removed true}
-             {:layout (and (str/includes? html "id=\"active-tab\"")
-                           (str/includes? html "id=\"play-queue\"")
-                           (str/includes? html "role=\"list\""))
-              :labels (and (str/includes? html ">Folder</p>")
-                           (str/includes? html ">Tracks</p>"))
-              :metadata (every? #(str/includes? html %)
-                                ["Past Track" "Past Artist" "Past Album"
-                                 "Current Track" "Next Track" "Next Album"])
-              :active-state (not= inactive-class active-class)
+              :htmx-removed           true}
+             {:layout          (and (str/includes? html "id=\"active-tab\"")
+                                    (str/includes? html "id=\"play-queue\"")
+                                    (str/includes? html "role=\"list\""))
+              :labels          (and (str/includes? html ">Folder</p>")
+                                    (str/includes? html ">Tracks</p>"))
+              :metadata        (every? #(str/includes? html %)
+                                       ["Past Track" "Past Artist" "Past Album"
+                                        "Current Track" "Next Track" "Next Album"])
+              :active-state    (not= inactive-class active-class)
               :full-row-button
               (every?
                true?
@@ -102,30 +102,30 @@
                                     (str/includes? html (action-path)))
               :legacy-command-removed
               (not (str/includes? html "/player-cmd"))
-              :htmx-removed (not (str/includes? html "hx-"))})))))
+              :htmx-removed    (not (str/includes? html "hx-"))})))))
 
 (deftest links-each-media-directory-to-browse
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-queue-source-"}]
-    (let [tree (media/populate-media-tree! temp-dir)
-          req (queue-request tree)
-          folder-html (h/html->str
-                       (queue/source-path-breadcrumb
-                        req
-                        "audiobooks/Author One/Book One"))
+    (let [tree          (media/populate-media-tree! temp-dir)
+          req           (queue-request tree)
+          folder-html   (h/html->str
+                         (queue/source-path-breadcrumb
+                          req
+                          "audiobooks/Author One/Book One"))
           playlist-html (h/html->str
                          (queue/source-path-breadcrumb
                           req
                           "playlists/Favorites.m3u"))
-          outside-html (h/html->str
-                        (queue/source-path-breadcrumb req "/etc/passwd"))]
-      (is (= {:folder-links 3
+          outside-html  (h/html->str
+                         (queue/source-path-breadcrumb req "/etc/passwd"))]
+      (is (= {:folder-links             3
               :root-link true
-              :parent-link true
-              :folder-link true
+              :parent-link              true
+              :folder-link              true
               :playlist-directory-links 1
-              :playlist-name-plain true
-              :outside-path-plain true}
-             {:folder-links (count (re-seq #"<a " folder-html))
+              :playlist-name-plain      true
+              :outside-path-plain       true}
+             {:folder-links       (count (re-seq #"<a " folder-html))
               :root-link
               (str/includes? folder-html
                              "href=\"/settings/browse?dir=audiobooks\"")
@@ -148,29 +148,29 @@
 
 (deftest emits-selected-queue-index-through-switchboard
   (let [commands (async/chan 1)
-        req {:query-params {"item-index" "-1"}
-             :fairy.box/component
-             {:fairy.box.switchboard/switchboard {:emitter commands}}}]
+        req      {:query-params {"item-index" "-1"}
+                  :fairy.box/component
+                  {:fairy.box.switchboard/switchboard {:emitter commands}}}]
     (try
       (reset! audio-system/audio-state (sample-state))
       ((action-fn) req)
       (let [[command port] (async/alts!! [commands (async/timeout 1000)])]
-        (is (= {:command {:path "/player/commands"
-                          :value {:action :audio/play-queue-index
-                                  :item-index -1}}
+        (is (= {:command   {:path  "/player/commands"
+                            :value {:action     :audio/play-queue-index
+                                    :item-index -1}}
                 :received? true}
-               {:command command
+               {:command   command
                 :received? (= port commands)})))
       (finally
         (async/close! commands)))))
 
 (deftest rejects-malformed-and-stale-queue-indices
-  (let [commands (async/chan 1)
+  (let [commands  (async/chan 1)
         component {:fairy.box.switchboard/switchboard {:emitter commands}}]
     (try
       (reset! audio-system/audio-state (sample-state))
       (doseq [item-index [nil "" "wat" "1.5" "2" 0]]
-        ((action-fn) {:query-params {"item-index" item-index}
+        ((action-fn) {:query-params        {"item-index" item-index}
                       :fairy.box/component component}))
       (let [[command port] (async/alts!! [commands (async/timeout 100)])]
         (is (= {:command nil :emitted? false}

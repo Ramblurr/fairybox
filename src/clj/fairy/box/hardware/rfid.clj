@@ -48,18 +48,18 @@
                                (int (:chip-select config 0))
                                (int (:reset-gpio config 25)))]
                  (Diozero/registerForShutdown (into-array MFRC522 [rfid]))
-                 {:device rfid
-                  :rfid-type rfid-type
-                  :config config
-                  :test-fn mfrc522-test
+                 {:device          rfid
+                  :rfid-type       rfid-type
+                  :config          config
+                  :test-fn         mfrc522-test
                   :get-card-uid-fn mfrc522-get-card-uid}))))
 
 (defn rfid-event
   ([uid action at error]
-   {:path "/hardware/input/rfid"
+   {:path  "/hardware/input/rfid"
     :value {:uid uid :action action :at at :error error}})
   ([uid action at]
-   {:path "/hardware/input/rfid"
+   {:path  "/hardware/input/rfid"
     :value {:uid uid :action action :at at}}))
 
 (defn rfid-uid-detected [status state now uid]
@@ -85,7 +85,7 @@
     :absent [state nil]))
 
 (defn rfid-device-error [state now test-result]
-  (let [errored-at (:error-at state 0)
+  (let [errored-at       (:error-at state 0)
         raise-new-error? (> (- now errored-at) 10000000000)]
     [(-> state
          (assoc :status :error)
@@ -97,7 +97,7 @@
 
 (defn poller-loop [{:keys [poll-delay uid status at] :as state} device get-card-uid-fn test-fn]
   (SleepUtil/sleepMillis poll-delay)
-  (let [now (System/nanoTime)
+  (let [now         (System/nanoTime)
         test-result (test-fn device)]
     (if (= :ok test-result)
       (if-let [uid (get-card-uid-fn device)]
@@ -135,7 +135,7 @@
 (defn init-rfid! [{:keys [rfid-type] :as opts}]
   (when-not (SUPPORTED-RFID-TYPES rfid-type)
     (throw (Exception. (format "Unsupported RFID type: %s" rfid-type))))
-  {:type :mfrc522
+  {:type          :mfrc522
    :poller-future (start-poller! opts)})
 
 (defn- release-hardware-rfid! [{:keys [poller-future]}]
@@ -151,9 +151,9 @@
   (let [emitter (async/chan)]
     (ev/emitize bus emitter)
     (reset! rfid-state {:status :absent :uid nil :at (System/nanoTime)})
-    {:type :simulated
+    {:type    :simulated
      :emitter emitter
-     :state rfid-state}))
+     :state   rfid-state}))
 
 (defn- release-simulated-rfid! [{:keys [emitter]}]
   (async/close! emitter)
@@ -191,8 +191,8 @@
                                        (System/nanoTime))))]
         (emit-simulated-events! rfid events)
         (reset! state {:status :present
-                       :uid uid
-                       :at (System/nanoTime)})
+                       :uid    uid
+                       :at     (System/nanoTime)})
         (last events)))))
 
 (defn remove!
@@ -204,8 +204,8 @@
     (let [event (rfid-event uid :removed (System/nanoTime))]
       (emit-simulated-events! rfid [event])
       (reset! state {:status :absent
-                     :uid nil
-                     :at (System/nanoTime)})
+                     :uid    nil
+                     :at     (System/nanoTime)})
       event)))
 
 (defn component-type
@@ -224,23 +224,23 @@
              :mfrc522 (init-rfid! config))
            :enabled? true)
     {:enabled? false
-     :type :disabled}))
+     :type     :disabled}))
 
 (def RfidComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (start-component! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (release-rfid! instance))
+  {::ds/start  (fn [{config ::ds/config}]
+                 (start-component! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (release-rfid! instance))
    ::ds/config {:hardware-enablement (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/enabled])
                 :bus (ds/ref [:fairy.box/components
                               :fairy.box.bus/bus])
-                :rfid-type (ds/ref [:config
-                                    :fairy.box/components
-                                    :fairy.box.hardware/rfid
-                                    :rfid-type])
-                :mfrc522 (ds/ref [:config
-                                  :fairy.box/components
-                                  :fairy.box.hardware/rfid
-                                  :mfrc522])}})
+                :rfid-type           (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/rfid
+                                              :rfid-type])
+                :mfrc522             (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/rfid
+                                              :mfrc522])}})

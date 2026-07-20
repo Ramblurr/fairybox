@@ -246,24 +246,24 @@
                   duration
                   repeat-times
                   easing-fn]
-           :or {from 0.0
-                to 1.0
-                duration 500
-                repeat-times 1
-                delay 0
-                easing-fn ease-linear}}]
+           :or   {from         0.0
+                  to           1.0
+                  duration     500
+                  repeat-times 1
+                  delay        0
+                  easing-fn    ease-linear}}]
   (let [steps (int  (* FPS (/ duration 1000)))]
-    {:from from
+    {:from              from
      :to to
-     :duration duration
-     :orig-delay delay
-     :delay delay
-     :data data
-     :steps steps
-     :orig-deltas (normalized-deltas easing-fn steps)
+     :duration          duration
+     :orig-delay        delay
+     :delay             delay
+     :data              data
+     :steps             steps
+     :orig-deltas       (normalized-deltas easing-fn steps)
      :current-iteration 1
-     :total-times (max 1 repeat-times)
-     :deltas (normalized-deltas easing-fn steps)}))
+     :total-times       (max 1 repeat-times)
+     :deltas            (normalized-deltas easing-fn steps)}))
 
 (defn- next-delay
   "Return the new delay value for the current-iteration"
@@ -337,8 +337,8 @@
   Returns a channel that will be closed when the animation is finished or canceled."
   ([apply-fn! tweens & {:keys [repeat-times finished-ch cancel-ch]
                         :or   {repeat-times 1
-                               cancel-ch nil
-                               finished-ch nil}}]
+                               cancel-ch    nil
+                               finished-ch  nil}}]
    (let [orig-tweens tweens]
      (async/go-loop [state {:tweens orig-tweens :step 1 :t 0 :iteration 1}]
        (let [new-tweens (update-tweens state)
@@ -350,8 +350,8 @@
          (cond
            finished?             (when finished-ch (async/put! finished-ch :finished) nil)
            (and closed? repeat?) (recur {:tweens orig-tweens :step 1 :t 0 :iteration (inc (:iteration state))})
-           :else                 (let [timeout (async/timeout DT)
-                                       ports (concat [timeout] (when cancel-ch [cancel-ch]))
+           :else                 (let [timeout   (async/timeout DT)
+                                       ports     (concat [timeout] (when cancel-ch [cancel-ch]))
                                        [op port] (async/alts! ports)]
                                    (cond
                                      (= port timeout) (recur {:tweens new-tweens :step (inc (:step state)) :t (+ (:t state) DT) :iteration (:iteration state)})

@@ -13,26 +13,26 @@
 (defaction play-queue-item
   [{:fairy.box/keys [component] :as req}]
   (let [requested-index (get-in req [:query-params "item-index"])
-        item-index (when (string? requested-index)
-                     (parse-long requested-index))
-        tracks (player/full-queue (player/current!))]
+        item-index      (when (string? requested-index)
+                          (parse-long requested-index))
+        tracks          (player/full-queue (player/current!))]
     (when (and (some? item-index)
                (some #(= item-index (:index %)) tracks))
       (when-let [controller
                  (component :fairy.box.switchboard/switchboard)]
         (switchboard/emit-player!
          (:emitter controller)
-         {:action :audio/play-queue-index
+         {:action     :audio/play-queue-index
           :item-index item-index})))))
 
 (defn icon-dot [$class]
   [:svg {:viewbox "0 0 2 2"
-         :class (cs (css :fill-current) $class)}
+         :class   (cs (css :fill-current) $class)}
    [:circle {:cx "1" :cy "1" :r "1"}]])
 
 (defn artist-dot-album [artist album]
   (let [artist? (not (str/blank? artist))
-        album? (not (str/blank? album))]
+        album?  (not (str/blank? album))]
     (cond
       (and artist? album?) (list
                             [:div artist]
@@ -49,7 +49,7 @@
         $current (css :bg-smoky-300 [:dark :bg-smoky-900])]
     [:li {:class (cs $base (when (= 0 index) $current))}
      [:button
-      {:class (css :w-full :text-left)
+      {:class         (css :w-full :text-left)
        :data-on:click (str "@post('"
                            play-queue-item
                            (h/url-query-string {:item-index index})
@@ -75,12 +75,12 @@
   [{:fairy.box/keys [component] :keys [url-for] :as req} source-path]
   (if-not (and (seq source-path) (ifn? component) (ifn? url-for))
     source-path
-    (let [settings (app-settings/settings req)
+    (let [settings       (app-settings/settings req)
           canonical-path (browse/canonicalize-path settings source-path)]
       (if-not canonical-path
         source-path
-        (let [relative-path (browse/media-relative-path settings canonical-path)
-              names (str/split relative-path #"/")
+        (let [relative-path  (browse/media-relative-path settings canonical-path)
+              names          (str/split relative-path #"/")
               relative-paths (reductions #(str %1 "/" %2) names)]
           (interpose
            " / "
@@ -88,8 +88,8 @@
                   (let [path (browse/canonicalize-path settings relative-path)]
                     (if (browse/valid-dir? settings path)
                       [:a
-                       {:href (str (url-for :page.settings/browse)
-                                   (h/url-query-string {:dir relative-path}))
+                       {:href  (str (url-for :page.settings/browse)
+                                    (h/url-query-string {:dir relative-path}))
                         :class (css :ml-0 [:hover :text-smoky-600])}
                        name]
                       name)))
@@ -116,10 +116,10 @@
 (defview render-queue {:path "/queue" :shim-headers ui3/shim-headers}
   [req]
   (let [current (player/current!)
-        req (assoc req
-                   :tracks (player/full-queue current)
-                   :source-type (player/queue-source-type current)
-                   :source-path (player/queue-source-path current))]
+        req     (assoc req
+                       :tracks (player/full-queue current)
+                       :source-type (player/queue-source-type current)
+                       :source-path (player/queue-source-path current))]
     (h/html
      (ui3/css-reload)
      [:main#morph.main

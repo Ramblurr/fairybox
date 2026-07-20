@@ -27,28 +27,28 @@
 
   (mh/publish conn "fairybox1/title" "Hello World")
 
-  (mh/publish conn "fairybox/discovery/test" (->json {:fairybox-discovery true
-                                                      :fairybox-id "test"
-                                                      :fairybox-name "TestBox"
+  (mh/publish conn "fairybox/discovery/test" (->json {:fairybox-discovery     true
+                                                      :fairybox-id            "test"
+                                                      :fairybox-name          "TestBox"
                                                       :fairybox-command-topic "fairybox/test/command"
-                                                      :fairybox-state-topic "fairybox/test/state"}))
-  (mh/publish conn "fairybox/test/state" (->json {:state "playing"
-                                                  :now-playing {:title "Bear Roll"
-                                                                :artist "ABBA"
-                                                                :album "Bear Things"
-                                                                :track-number 1
+                                                      :fairybox-state-topic   "fairybox/test/state"}))
+  (mh/publish conn "fairybox/test/state" (->json {:state       "playing"
+                                                  :now-playing {:title            "Bear Roll"
+                                                                :artist           "ABBA"
+                                                                :album            "Bear Things"
+                                                                :track-number     1
                                                                 :duration-seconds 60
-                                                                :playlist-name "All About Bears"}}))
+                                                                :playlist-name    "All About Bears"}}))
 
   (mh/disconnect conn)
 
   ;;
   )
 
-(def mqtt-init-state {:connected? false
-                      :client nil
+(def mqtt-init-state {:connected?       false
+                      :client           nil
                       :subscriber-state nil
-                      :publisher-state nil})
+                      :publisher-state  nil})
 (defonce ^:private mqtt-state (atom mqtt-init-state))
 
 (defn- mqtt-connected?! [] (:connected? @mqtt-state))
@@ -90,7 +90,7 @@
 (defn init-publisher! [{:keys [bus settings] :as opts}]
   (let [{:keys [fairybox-id]} settings
         _ (assert fairybox-id)
-        listener (async/chan (async/sliding-buffer 512))
+        listener              (async/chan (async/sliding-buffer 512))
         topic (format "fairybox/%s/state" fairybox-id)]
     (ev/listen bus "/player/events" listener)
     (start-publish-loop! (assoc opts :topic topic) listener)
@@ -107,15 +107,15 @@
 
 (defn init-subscriber! [{:keys [client bus settings qos]}]
   (let [emitter (async/chan (async/sliding-buffer 512))
-        topic (format "fairybox/%s/command" (:fairybox-id settings))]
+        topic   (format "fairybox/%s/command" (:fairybox-id settings))]
     (ev/emitize bus emitter)
     (mh/subscribe client {topic qos}
                   (fn [^String topic _ ^bytes payload]
                     (let [emit! (partial emit! emitter)]
                       (command-handler! emit! (<-json (String. payload "UTF-8"))))))
     {:emitter emitter
-     :client client
-     :topic topic}))
+     :client  client
+     :topic   topic}))
 
 (defn halt-subscriber! [{:keys [emitter topic client] :as opts}]
   (when opts
@@ -177,10 +177,10 @@
   (async/go-loop [retries 1]
     (when-not @stopped?
       (let [retry-timeout (min (* retries 1000) 60000)
-            conn (try
-                   (mqtt-connect! opts)
-                   (catch Exception e
-                     e))]
+            conn          (try
+                            (mqtt-connect! opts)
+                            (catch Exception e
+                              e))]
         (when (and (util/exception? conn)
                    (not @stopped?))
           (log/info "Unable to establish mqtt connection, retrying in "
@@ -199,20 +199,20 @@
     (do
       (log/info "mqtt not connecting because uri is nil")
       {:enabled? false})
-    (let [fairybox-id (:fairybox-id settings)
-          _ (assert (and (string? fairybox-id)
-                         (seq fairybox-id))
-                    "fairybox-id must be set!")
-          exit-ch (async/chan)
-          stopped? (atom false)
+    (let [fairybox-id  (:fairybox-id settings)
+          _            (assert (and (string? fairybox-id)
+                                    (seq fairybox-id))
+                               "fairybox-id must be set!")
+          exit-ch      (async/chan)
+          stopped?     (atom false)
           runtime-opts (assoc opts
                               :exit-ch exit-ch
                               :stopped? stopped?)
-          connector (try-connect! runtime-opts)]
-      {:enabled? true
+          connector    (try-connect! runtime-opts)]
+      {:enabled?  true
        :connector connector
-       :exit-ch exit-ch
-       :stopped? stopped?})))
+       :exit-ch   exit-ch
+       :stopped?  stopped?})))
 
 (defn halt-client! [{:keys [connector enabled? exit-ch stopped?]}]
   (when enabled?
@@ -228,25 +228,25 @@
   nil)
 
 (def MqttComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (log/info "\n-=[starting mqtt client]=-")
-                (init-client! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (log/info "\n-=[goodbye mqtt client]=-")
-               (halt-client! instance))
-   ::ds/config {:bus (ds/ref [:fairy.box/components
-                              :fairy.box.bus/bus])
-                :settings (ds/ref [:fairy.box/components
-                                   :fairy.box/settings])
-                :uri (ds/ref [:config
-                              :fairy.box/components
-                              :fairy.box.mqtt/client
-                              :uri])
+  {::ds/start  (fn [{config ::ds/config}]
+                 (log/info "\n-=[starting mqtt client]=-")
+                 (init-client! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (log/info "\n-=[goodbye mqtt client]=-")
+                 (halt-client! instance))
+   ::ds/config {:bus       (ds/ref [:fairy.box/components
+                                    :fairy.box.bus/bus])
+                :settings  (ds/ref [:fairy.box/components
+                                    :fairy.box/settings])
+                :uri       (ds/ref [:config
+                                    :fairy.box/components
+                                    :fairy.box.mqtt/client
+                                    :uri])
                 :mqtt-opts (ds/ref [:config
                                     :fairy.box/components
                                     :fairy.box.mqtt/client
                                     :mqtt-opts])
-                :qos (ds/ref [:config
-                              :fairy.box/components
-                              :fairy.box.mqtt/client
-                              :qos])}})
+                :qos       (ds/ref [:config
+                                    :fairy.box/components
+                                    :fairy.box.mqtt/client
+                                    :qos])}})

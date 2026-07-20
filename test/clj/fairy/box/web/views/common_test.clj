@@ -18,14 +18,14 @@
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-browser-"}]
     (let [tree (media/populate-media-tree! temp-dir)
           html (browser-html tree "audiobooks")]
-      (is (= {:current-contents true
-              :root-contents-hidden true
-              :directory-link true
-              :root-breadcrumb-link true
+      (is (= {:current-contents        true
+              :root-contents-hidden    true
+              :directory-link          true
+              :root-breadcrumb-link    true
               :selected-folder-binding true
-              :htmx-removed true}
-             {:current-contents (and (str/includes? html "Author One")
-                                     (str/includes? html "Author Two"))
+              :htmx-removed            true}
+             {:current-contents     (and (str/includes? html "Author One")
+                                         (str/includes? html "Author Two"))
               :root-contents-hidden (not (str/includes? html "Favorites.m3u"))
               :directory-link
               (str/includes?
@@ -35,14 +35,14 @@
               (str/includes? html "href=\"/settings/rfid\"")
               :selected-folder-binding
               (str/includes? html "data-bind=\"selected_folder\"")
-              :htmx-removed (not (str/includes? html "hx-"))})))))
+              :htmx-removed         (not (str/includes? html "hx-"))})))))
 
 (deftest breadcrumb-links-preserve-deep-directory
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-breadcrumb-"}]
     (let [tree (media/populate-media-tree! temp-dir)
           html (browser-html tree "audiobooks/Author One")]
-      (is (= {:shows-child true
-              :links-parent true
+      (is (= {:shows-child   true
+              :links-parent  true
               :links-current true}
              {:shows-child (str/includes? html "Book One")
               :links-parent
@@ -54,12 +54,12 @@
 
 (deftest invalid-directory-falls-back-to-media-root
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-browser-fallback-"}]
-    (let [tree (media/populate-media-tree! temp-dir)
+    (let [tree         (media/populate-media-tree! temp-dir)
           missing-html (browser-html tree "missing")
-          escape-html (browser-html tree "../../etc")]
+          escape-html  (browser-html tree "../../etc")]
       (is (= {:missing-shows-root true
-              :escape-shows-root true
-              :outside-hidden true}
+              :escape-shows-root  true
+              :outside-hidden     true}
              {:missing-shows-root
               (str/includes? missing-html "audiobooks")
               :escape-shows-root

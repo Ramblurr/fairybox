@@ -7,8 +7,8 @@
 (defn debounce [in ms]
   (let [out (async/chan)]
     (async/go-loop [last-val nil]
-      (let [val   (if (nil? last-val) (async/<! in) last-val)
-            timer (async/timeout ms)
+      (let [val          (if (nil? last-val) (async/<! in) last-val)
+            timer        (async/timeout ms)
             [new-val ch] (async/alts! [timer in] :priority true)]
         (condp = ch
           timer (do
@@ -26,8 +26,8 @@
   [in ms]
   (let [out (async/chan)]
     (async/go-loop []
-      (let [val (async/<! in)
-            timer  (async/timeout ms)]
+      (let [val   (async/<! in)
+            timer (async/timeout ms)]
         (when val
           (if-not (async/>! out val)
             (do

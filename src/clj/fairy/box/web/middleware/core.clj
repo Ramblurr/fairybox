@@ -15,10 +15,10 @@
               (assoc-in site-defaults-config [:session :store] cookie-store))))))
 
 (def wrap-settings
-  {:name ::config
+  {:name        ::config
    :description "Middleware for injecting settings into request"
-   :compile (fn [{:keys [settings] :as _route-data} _route-opts]
-              (fn [handler]
-                (fn [request]
-                  (assert settings "Settings not defined in route data")
-                  (handler (assoc request :settings settings)))))})
+   :compile     (fn [{:keys [settings] :as _route-data} _route-opts]
+                  (fn [handler]
+                    (fn [request]
+                      (assert settings "Settings not defined in route data")
+                      (handler (assoc request :settings settings)))))})

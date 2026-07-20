@@ -69,12 +69,12 @@
    ::ds/stop   (fn [{instance ::ds/instance}]
                  (stop-web-server! instance))
    ::ds/config {:port       (ds/ref [:config :fairy.box/components :fairy.box.web/server :port])
-                :components {:fairy.box/settings                 (component-ref :fairy.box/settings)
-                             :fairy.box.db/db                    (component-ref :fairy.box.db/db)
-                             :fairy.box.bus/bus                  (component-ref :fairy.box.bus/bus)
+                :components {:fairy.box/settings (component-ref :fairy.box/settings)
+                             :fairy.box.db/db (component-ref :fairy.box.db/db)
+                             :fairy.box.bus/bus (component-ref :fairy.box.bus/bus)
                              :fairy.box.switchboard/switchboard  (component-ref :fairy.box.switchboard/switchboard)
                              :fairy.box.audio.system2/player     (component-ref :fairy.box.audio.system2/player)
-                             :fairy.box.tts/tts                  (component-ref :fairy.box.tts/tts)
+                             :fairy.box.tts/tts (component-ref :fairy.box.tts/tts)
                              :fairy.box.web/rfid-presence        (component-ref :fairy.box.web/rfid-presence)
                              :fairy.box.web/player-progress      (component-ref :fairy.box.web/player-progress)
                              :fairy.box.web/player-event-refresh (component-ref :fairy.box.web/player-event-refresh)
@@ -89,21 +89,21 @@
   ([{:keys [config profile]
      :or   {profile (default-profile)}}]
    {::ds/defs {:config               (or config (read-config profile))
-     :fairy.box/components {:fairy.box/settings                 settings/SettingsComponent
-                            :fairy.box.db/db                    db/DbComponent
-                            :fairy.box.bus/bus                  bus/BusComponent
-                            :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
-                            :fairy.box.audio.system2/player     audio/AudioSystemComponent
-                            :fairy.box.tts/tts                  tts/TTSComponent
-                            :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent
-                            :fairy.box.web/player-progress      player-progress/ProgressStreamComponent
-                            :fairy.box.web/player-event-refresh player-events/PlayerEventRefreshComponent
-                            :fairy.box.hardware/rfid            rfid/RfidComponent
-                            :fairy.box.hardware/buttons         buttons/ButtonsComponent
-                            :fairy.box.hardware/leds            led/LedsComponent
-                            :fairy.box.mqtt/client              mqtt/MqttComponent
-                            :fairy.box.web/server               WebServerComponent
-                            :fairy.box/startup                  settings/StartupComponent}}}))
+               :fairy.box/components {:fairy.box/settings settings/SettingsComponent
+                                      :fairy.box.db/db db/DbComponent
+                                      :fairy.box.bus/bus bus/BusComponent
+                                      :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
+                                      :fairy.box.audio.system2/player     audio/AudioSystemComponent
+                                      :fairy.box.tts/tts tts/TTSComponent
+                                      :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent
+                                      :fairy.box.web/player-progress      player-progress/ProgressStreamComponent
+                                      :fairy.box.web/player-event-refresh player-events/PlayerEventRefreshComponent
+                                      :fairy.box.hardware/rfid            rfid/RfidComponent
+                                      :fairy.box.hardware/buttons         buttons/ButtonsComponent
+                                      :fairy.box.hardware/leds            led/LedsComponent
+                                      :fairy.box.mqtt/client              mqtt/MqttComponent
+                                      :fairy.box.web/server               WebServerComponent
+                                      :fairy.box/startup settings/StartupComponent}}}))
 
 (defonce app_ (atom nil))
 

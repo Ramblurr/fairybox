@@ -5,12 +5,12 @@
    [fairy.box.web.views.settings]))
 
 (def pages
-  {:page/home {:path  "/"}
-   :page/queue {:path  "/queue"}
-   :page/settings {:path  "/settings"}
+  {:page/home               {:path "/"}
+   :page/queue              {:path "/queue"}
+   :page/settings           {:path "/settings"}
    :page.settings/rfid-link {:path "/settings/rfid"}
-   :page.settings/browse {:path "/settings/browse"}
-   :page.settings/playback {:path "/settings/playback"}})
+   :page.settings/browse    {:path "/settings/browse"}
+   :page.settings/playback  {:path "/settings/playback"}})
 
 (defn url-for [r]
   (get-in pages [r :path] "/404"))

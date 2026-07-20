@@ -16,8 +16,8 @@
       :else (recur rest1 rest2))))
 
 (defn prepare-string [s]
-  (let [s (or s "")
-        parts (vec (string/split s #"\d+"))
+  (let [s       (or s "")
+        parts   (vec (string/split s #"\d+"))
         numbers (->> (re-seq #"\d+" s)
                      (map parse-int)
                      (vec))]

@@ -31,9 +31,9 @@
 (defn button-event
   "Constructs a valid event map for a button event"
   [button-id action]
-  {:path "/hardware/input/buttons"
+  {:path  "/hardware/input/buttons"
    :value {:button-id button-id
-           :action action}})
+           :action    action}})
 
 ;; These are low level handlers that try to smooth out the the electrical noise from the raw events
 ;; they must return the button-states map and an optional external event that will be published on the bus
@@ -57,7 +57,7 @@
 
 (defn release-handler [button-states button-id nanotime]
   (let [{:keys [state at]} (get button-states button-id)
-        delta (- nanotime at)]
+        delta              (- nanotime at)]
     (if (#{:held :pressed} state)
       [(assoc button-states button-id {:state :released :at nanotime})
        (button-event button-id (condp = state :held :button/hold-release :pressed :button/single-press))]
@@ -121,16 +121,16 @@
     {:button button :gpio gpio :action action}))
 
 (defn init-buttons! [{:keys [buttons bus]}]
-  (let [exit-chan (async/chan)
-        button-event-chan (async/chan (async/sliding-buffer 100))
+  (let [exit-chan            (async/chan)
+        button-event-chan    (async/chan (async/sliding-buffer 100))
         debounced-event-chan (debounce button-event-chan (/ debounce-delay 1000000.0))
-        emitter (async/chan)]
+        emitter              (async/chan)]
     (ev/emitize bus emitter)
     (reset! button-states {})
     (init-button-event-handler! emitter debounced-event-chan exit-chan)
     {:event-handler-exit-chan exit-chan
-     :button-event-chan button-event-chan
-     :debounced-event-chan debounced-event-chan
+     :button-event-chan       button-event-chan
+     :debounced-event-chan    debounced-event-chan
      :emitter emitter
      :buttons (doall
                (map (partial init-button! button-event-chan) buttons))}))
@@ -150,23 +150,23 @@
   (if (:buttons hardware-enablement)
     (assoc (init-buttons! config) :enabled? true)
     {:enabled? false
-     :buttons []}))
+     :buttons  []}))
 
 (defn stop-component! [{:keys [enabled?] :as instance}]
   (when enabled?
     (release-buttons! instance)))
 
 (def ButtonsComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (start-component! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (stop-component! instance))
+  {::ds/start  (fn [{config ::ds/config}]
+                 (start-component! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (stop-component! instance))
    ::ds/config {:hardware-enablement (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/enabled])
                 :bus (ds/ref [:fairy.box/components
                               :fairy.box.bus/bus])
-                :buttons (ds/ref [:config
-                                  :fairy.box/components
-                                  :fairy.box.hardware/buttons
-                                  :buttons])}})
+                :buttons             (ds/ref [:config
+                                              :fairy.box/components
+                                              :fairy.box.hardware/buttons
+                                              :buttons])}})

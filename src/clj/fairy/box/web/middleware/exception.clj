@@ -26,8 +26,8 @@
      :system.exception/forbidden    (partial handler "forbidden" 403)
 
        ;; override the default handler
-     ::exception/default            (partial handler "default" 500)
+     ::exception/default (partial handler "default" 500)
 
        ;; print stack-traces for all exceptions
-     ::exception/wrap               (fn [handler e request]
-                                      (handler e request))})))
+     ::exception/wrap (fn [handler e request]
+                        (handler e request))})))

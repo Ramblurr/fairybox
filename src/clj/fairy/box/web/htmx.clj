@@ -61,21 +61,21 @@
      (get-in req [:headers "hx-request"] false)))
 
 (def hx-trigger-types
-  {:hx-trigger "HX-Trigger"
+  {:hx-trigger              "HX-Trigger"
    :hx-trigger-after-settle "HX-Trigger-After-Settle"
-   :hx-trigger-after-swap "HX-Trigger-After-Swap"})
+   :hx-trigger-after-swap   "HX-Trigger-After-Swap"})
 
 (defn trigger-response
   ([trigger-name body]
    (trigger-response trigger-name body {}))
   ([trigger-name body {:keys [trigger-type data]
-                       :or {trigger-type :hx-trigger}}]
-   {:status 200
+                       :or   {trigger-type :hx-trigger}}]
+   {:status  200
     :headers {"Content-Type" "text/html" (get hx-trigger-types trigger-type)
               (if data
                 (cheshire/generate-string {trigger-name data})
                 trigger-name)}
-    :body (partial-htmx body)}))
+    :body    (partial-htmx body)}))
 
 (comment
 

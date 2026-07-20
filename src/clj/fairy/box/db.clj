@@ -19,19 +19,19 @@
                     :local-file
                     :file-path path
                     :rw {:commit-mode :sync
-                         :read dut/read-edn-object
-                         :write (fn [filepath data]
-                                  (spit filepath
-                                        (with-out-str
-                                          (pp/pprint data))))}
-                    :init {:_version 1
-                           :linked-tags {}
-                           :settings {:audio {:max-volume DEFAULT_MAX_VOLUME
-                                              :min-volume 0
-                                              :max-volume-day DEFAULT_MAX_VOLUME
-                                              :max-volume-night DEFAULT_MAX_VOLUME
-                                              :hour-day-start 8
-                                              :hour-night-start 19}}
+                         :read        dut/read-edn-object
+                         :write       (fn [filepath data]
+                                        (spit filepath
+                                              (with-out-str
+                                                (pp/pprint data))))}
+                    :init {:_version       1
+                           :linked-tags    {}
+                           :settings       {:audio {:max-volume       DEFAULT_MAX_VOLUME
+                                                    :min-volume       0
+                                                    :max-volume-day   DEFAULT_MAX_VOLUME
+                                                    :max-volume-night DEFAULT_MAX_VOLUME
+                                                    :hour-day-start   8
+                                                    :hour-night-start 19}}
                            :media-metadata {}})))
    ::ds/config {:opts (ds/ref [:config
                                :fairy.box/components

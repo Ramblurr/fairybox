@@ -40,16 +40,16 @@
       (.getAbsolutePath maybe-file))))
 
 (defn home-assistant-tts [{:keys [db]} text]
-  (let [api-url (str (db/ha-url db) "/api/tts_get_url")
+  (let [api-url      (str (db/ha-url db) "/api/tts_get_url")
         bearer-token (db/ha-bearer-token db)]
     (assert api-url "home assistant api url must be set in settings")
     (assert bearer-token "home assistant bearer token must be set in settings")
     (try
       (->
        (hc/post api-url
-                {:body (->json {"message" text "engine_id" "tts.piper"})
+                {:body         (->json {"message" text "engine_id" "tts.piper"})
                  :content-type :json
-                 :headers {"authorization" (str "Bearer " bearer-token)}})
+                 :headers      {"authorization" (str "Bearer " bearer-token)}})
        :body
        <-json
        :url)
@@ -61,7 +61,7 @@
 (defn cache-file [cache-dir text remote-url]
   (assert cache-dir)
 
-  (with-open [in (io/input-stream remote-url)
+  (with-open [in  (io/input-stream remote-url)
               out (io/output-stream (.toFile (Paths/get cache-dir (into-array [(hash-text text)]))))]
     (io/copy in out)))
 
@@ -82,14 +82,14 @@
 (defn mimic3-tts [sys text]
   (->
    (hc/get "http://10.9.4.3:59125/api/tts"
-           {:query-params {"text" text
-                           "voice" "en_US/cmu-arctic_low#clb"
-                           "noiseScale" "0.677"
-                           "noiseW" "0.8"
+           {:query-params {"text"        text
+                           "voice"       "en_US/cmu-arctic_low#clb"
+                           "noiseScale"  "0.677"
+                           "noiseW"      "0.8"
                            ;; "lengthScale" "1.2"
-                           "ssml" "true"
+                           "ssml"        "true"
                            "audioTarget" "client"}
-            :as :stream})
+            :as           :stream})
    :body))
 
 ;; http://localhost:59125/api/tts?text=. <break time="500ms" /> In which Tigger comes to the forest and has breakfast&voice=en_US/cmu-arctic_low#clb&noiseScale=0.667&
@@ -104,16 +104,16 @@
     (assert api-key "google cloud api key must be set in settings")
     (->
      (hc/post "https://texttospeech.googleapis.com/v1/text:synthesize"
-              {:body (->json {"input" {"ssml"
-                                       (if-not (str/starts-with? text "<")
-                                         (str "<speak>" text "</speak>")
-                                         text)}
-                              "voice" {"languageCode" "en-US"
-                                       "name" "en-US-Polyglot-1"}
+              {:body (->json {"input"       {"ssml"
+                                             (if-not (str/starts-with? text "<")
+                                               (str "<speak>" text "</speak>")
+                                               text)}
+                              "voice"       {"languageCode" "en-US"
+                                             "name"         "en-US-Polyglot-1"}
                               "audioConfig" {"audioEncoding" "MP3"}})
 
                :content-type :json
-               :headers {"X-Goog-Api-Key" api-key}})
+               :headers      {"X-Goog-Api-Key" api-key}})
      :body
      <-json
      :audioContent
@@ -148,7 +148,7 @@
 (defn speak-problem! [{:keys [settings] :as sys}]
   (if-let [problem-path (browse/sfx-path settings :tts-problem)]
     (emit-player! sys
-                  {:action :audio/play-one-shot :id :error
+                  {:action    :audio/play-one-shot :id :error
                    :item-path problem-path}
                   #_{:action :audio/play-one-shot :id :tts :item-path url})
     (log/error "no tts problem sound found!")))
@@ -160,9 +160,9 @@
       (emit-player! sys
                     (if play-one-shot
                       {:action :audio/play-one-shot :id :tts :item-path url}
-                      {:action :audio/play-path
+                      {:action    :audio/play-path
                        :item-path url
-                       :uid nil})))
+                       :uid       nil})))
 
     (catch Exception e
       (log/error "tts-speak failed" e)
@@ -177,25 +177,25 @@
       (first albums))))
 
 (defn metadata->ssml [metadata]
-  (let [album (choose-album metadata)
+  (let [album  (choose-album metadata)
         titles (map :title metadata)
-        text (if album
-               (str "This one is " album "")
-               (str "This one has "))
-        ssml [:speak
-              [:s (if album
-                    (str "This one is " album "")
-                    (str "This one has "))]
-              [:break {:time "1s"}]
-              (if (> (count titles) 1)
-                (concat
-                 (map-indexed (fn [i title]
-                                [:s (inc i) ", "
-                                 [:break {:time "500ms"}]
-                                 title
-                                 [:break {:time "500ms"}]]) (butlast titles))
-                 [[:s " and " (count titles) ", " [:break {:time "500ms"}] (last titles)]])
-                [:s (first titles)])]]
+        text   (if album
+                 (str "This one is " album "")
+                 (str "This one has "))
+        ssml   [:speak
+                [:s (if album
+                      (str "This one is " album "")
+                      (str "This one has "))]
+                [:break {:time "1s"}]
+                (if (> (count titles) 1)
+                  (concat
+                   (map-indexed (fn [i title]
+                                  [:s (inc i) ", "
+                                   [:break {:time "500ms"}]
+                                   title
+                                   [:break {:time "500ms"}]]) (butlast titles))
+                   [[:s " and " (count titles) ", " [:break {:time "500ms"}] (last titles)]])
+                  [:s (first titles)])]]
 
     (str (h2/html {:mode :xml} ssml))))
 
@@ -212,7 +212,7 @@
 
 (defn tts-track [sys metadata opts]
   (try
-    (let [text (tts-track-text metadata opts)
+    (let [text          (tts-track-text metadata opts)
           tts-file-path (tts sys text)]
       tts-file-path)
     (catch Exception e
@@ -235,8 +235,8 @@
 
 (defn init-tts! [{:keys [bus db-conn settings] :as opts}]
   (let [listener (async/chan)
-        emitter (async/chan)
-        sys {:listener listener :emitter emitter :db-conn db-conn :settings settings :tts-cache-dir (tts-cache-dir settings)}]
+        emitter  (async/chan)
+        sys      {:listener listener :emitter emitter :db-conn db-conn :settings settings :tts-cache-dir (tts-cache-dir settings)}]
 
     (.mkdir (io/file (tts-cache-dir settings)))
 
@@ -252,16 +252,16 @@
     (async/close! listener)))
 
 (def TTSComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (init-tts! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (stop-tts! instance))
-   ::ds/config {:bus (ds/ref [:fairy.box/components
-                              :fairy.box.bus/bus])
+  {::ds/start  (fn [{config ::ds/config}]
+                 (init-tts! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (stop-tts! instance))
+   ::ds/config {:bus      (ds/ref [:fairy.box/components
+                                   :fairy.box.bus/bus])
                 :settings (ds/ref [:fairy.box/components
                                    :fairy.box/settings])
-                :db-conn (ds/ref [:fairy.box/components
-                                  :fairy.box.db/db])}})
+                :db-conn  (ds/ref [:fairy.box/components
+                                   :fairy.box.db/db])}})
 
 (comment
 

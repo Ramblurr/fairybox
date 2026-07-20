@@ -21,13 +21,13 @@
                    (fs/canonicalize (fs/path base-path))))
 
 (defn dir-item [^java.nio.file.Path root ^java.io.File f]
-  {:name (.getName f)
-   :abs-path (.getAbsolutePath f)
-   :rel-path (when root (-> root (.relativize (.toPath f)) (.toString)))
-   :dir? (.isDirectory f)
-   :file? (.isFile f)
+  {:name           (.getName f)
+   :abs-path       (.getAbsolutePath f)
+   :rel-path       (when root (-> root (.relativize (.toPath f)) (.toString)))
+   :dir?           (.isDirectory f)
+   :file?          (.isFile f)
    :playlist-file? (re-find #"(?i)\.(m3u)$" (.getName f))
-   :media-file? (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac|m3u)$" (.getName f))})
+   :media-file?    (re-find #"(?i)\.(mp3|wav|ogg|oga|opus|flac|m4b|m4a|aac|m3u)$" (.getName f))})
 
 (defn m3u?
   "Returns true if the file is a playlist"
@@ -59,7 +59,7 @@
   "Returns the canonical path for `path` when it is within the media directory."
   [settings path]
   (let [media-base (media-dir settings)
-        abs-path (fs/canonicalize (fs/path media-base path))]
+        abs-path   (fs/canonicalize (fs/path media-base path))]
     (when (validate-base-path media-base abs-path)
       (str abs-path))))
 
@@ -75,7 +75,7 @@
   (if (str/starts-with? path "http")
     :url
     (let [media-base (media-dir settings)
-          abs-path (canonicalize-path settings path)]
+          abs-path   (canonicalize-path settings path)]
       (when (and abs-path (.exists (fs/file abs-path)))
         (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) (fs/file abs-path))]
           (cond

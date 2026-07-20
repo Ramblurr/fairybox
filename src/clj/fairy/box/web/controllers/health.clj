@@ -10,7 +10,7 @@
 (defn ready?
   [req]
   (let [system-state (switchboard/system-state!)
-        body {:system-state (name system-state)}]
+        body         {:system-state (name system-state)}]
     (if (= system-state  :system-state/ready)
       (http-response/ok body)
       (http-response/service-unavailable body))))
@@ -20,5 +20,5 @@
   (http-response/ok
    {:time     (str (Date. (System/currentTimeMillis)))
     :up-since (str (Date. (.getStartTime (java.lang.management.ManagementFactory/getRuntimeMXBean))))
-    :app      {:status (switchboard/system-state!)
+    :app      {:status  (switchboard/system-state!)
                :message ""}}))

@@ -25,29 +25,29 @@
 
 (defn- sample-state []
   {:playback
-   {:state :playing
-    :time 61000
-    :position 0.25
+   {:state       :playing
+    :time        61000
+    :position    0.25
     :repeat-mode :track
-    :shuffle? true
+    :shuffle?    true
     :current-track
-    {:id "track-1"
-     :mrl "file:///music/track.mp3"
+    {:id       "track-1"
+     :mrl      "file:///music/track.mp3"
      :duration 244000
-     :meta #:meta{:title "Track title"
-                  :artist "Track artist"
-                  :album "Track album"}}}
-   :mixer {:muted? false :volume 40}
-   :queue {:history []
-           :current nil
-           :priority []
-           :normal []
-           :tracks []}
-   :config {:volume-up-step 5 :volume-down-step -5}})
+     :meta     #:meta{:title  "Track title"
+                      :artist "Track artist"
+                      :album  "Track album"}}}
+   :mixer    {:muted? false :volume 40}
+   :queue    {:history  []
+              :current  nil
+              :priority []
+              :normal   []
+              :tracks   []}
+   :config   {:volume-up-step 5 :volume-down-step -5}})
 
 (defn- player-request []
-  {:url-for {:page/home "/"
-             :page/queue "/queue"
+  {:url-for {:page/home     "/"
+             :page/queue    "/queue"
              :page/settings "/settings"}})
 
 (defn- with-restored-audio-state [f]
@@ -72,25 +72,25 @@
   (reset! audio-system/audio-state (sample-state))
   (let [actions (mapv action-path
                       '[control-player seek-player set-player-volume])
-        html (h/html->str ((render-fn) (player-request)))]
+        html    (h/html->str ((render-fn) (player-request)))]
     (is (= {:layout true
             :metadata true
-            :labels-and-icons true
-            :actions-present true
-            :datastar-actions true
-            :ephemeral-slider-signals true
-            :server-pushed-progress true
+            :labels-and-icons           true
+            :actions-present            true
+            :datastar-actions           true
+            :ephemeral-slider-signals   true
+            :server-pushed-progress     true
             :server-driven-time-updates true
-            :legacy-command-removed true
-            :htmx-removed true}
+            :legacy-command-removed     true
+            :htmx-removed               true}
            {:layout (every? #(str/includes? html %)
                             ["id=\"active-tab\""
                              "id=\"player-controls\""
                              "id=\"progress-bar\""
                              "id=\"volume-slider\""
                              "src=\"/api/current-artwork?v="])
-            :metadata (every? #(str/includes? html %)
-                              ["Track title" "Track artist" "Track album"])
+            :metadata               (every? #(str/includes? html %)
+                                            ["Track title" "Track artist" "Track album"])
             :labels-and-icons
             (every? #(str/includes? html %)
                     ["aria-label=\"Previous\""
@@ -99,7 +99,7 @@
                      "aria-label=\"Skip 10 seconds\""
                      "aria-label=\"Next\""
                      "<rect"])
-            :actions-present (every? string? actions)
+            :actions-present        (every? string? actions)
             :datastar-actions
             (and (every? #(and (string? %)
                                (str/includes? html %))
@@ -129,19 +129,19 @@
                  (str/includes? html
                                 "data-text=\"$_server_time_left\""))
             :legacy-command-removed (not (str/includes? html "/player-cmd"))
-            :htmx-removed (not (str/includes? html "hx-"))}))))
+            :htmx-removed           (not (str/includes? html "hx-"))}))))
 
 (deftest range-controls-handle-track-clicks-and-drags-without-rerender-overrides
   (reset! audio-system/audio-state (sample-state))
   (let [progress-input (get-in (player/progress-bar 0.25) [2 1])
-        volume-input (get-in (player/volume-bar 40) [1])
+        volume-input   (get-in (player/volume-bar 40) [1])
         progress-input-action
         (:data-on:input__throttle.100ms.trailing progress-input)
         volume-input-action
         (:data-on:input__throttle.100ms.trailing volume-input)
-        html (h/html->str ((render-fn) (player-request)))]
+        html           (h/html->str ((render-fn) (player-request)))]
     (is (= {:progress-interaction
-            {:data-bind "progress"
+            {:data-bind           "progress"
              :data-on:pointerdown "$seeking = true"
              :data-on:pointerup__window
              "$_server_progress = $progress; $seeking = false"
@@ -156,7 +156,7 @@
              :data-on:blur
              "$_server_progress = $progress; $seeking = false"}
             :volume-interaction
-            {:data-bind "volume"
+            {:data-bind           "volume"
              :data-on:pointerdown "$adjusting_volume = true"
              :data-on:pointerup__window
              "$_server_volume = $volume; $adjusting_volume = false"
@@ -170,13 +170,13 @@
              "$_server_volume = $volume; $adjusting_volume = false"
              :data-on:blur
              "$_server_volume = $volume; $adjusting_volume = false"}
-            :progress-input-action true
-            :progress-final-action true
-            :volume-input-action true
-            :volume-final-action true
+            :progress-input-action     true
+            :progress-final-action     true
+            :volume-input-action       true
+            :volume-final-action       true
             :volume-value-not-rendered true
-            :interaction-signals true
-            :guarded-server-sync true}
+            :interaction-signals       true
+            :guarded-server-sync       true}
            {:progress-interaction
             (select-keys progress-input
                          [:data-bind
@@ -232,30 +232,30 @@
 
 (deftest renders-loaded-track-controls-for-non-playing-state
   (let [state (assoc-in (sample-state) [:playback :state] :stopped)
-        html (h/html->str (player/player
-                           (assoc (player-request) :current state)))]
-    (is (= {:track-visible true
-            :play-control-visible true
+        html  (h/html->str (player/player
+                            (assoc (player-request) :current state)))]
+    (is (= {:track-visible          true
+            :play-control-visible   true
             :nothing-playing-hidden true}
-           {:track-visible (str/includes? html "Track title")
+           {:track-visible        (str/includes? html "Track title")
             :play-control-visible (str/includes? html "id=\"play-pause\"")
             :nothing-playing-hidden
             (not (str/includes? html "Nothing is playing."))}))))
 
 (deftest exposes-current-track-and-playback-state
   (let [state (sample-state)]
-    (is (= {:artist "Track artist"
-            :mrl "file:///music/track.mp3"
+    (is (= {:artist      "Track artist"
+            :mrl         "file:///music/track.mp3"
             :repeat-mode :track
-            :shuffle? true}
-           {:artist (current/artist state)
-            :mrl (current/mrl state)
+            :shuffle?    true}
+           {:artist      (current/artist state)
+            :mrl         (current/mrl state)
             :repeat-mode (current/repeat-mode state)
-            :shuffle? (current/shuffle? state)}))))
+            :shuffle?    (current/shuffle? state)}))))
 
 (deftest emits-button-commands-through-injected-switchboard
-  (let [commands (async/chan 16)
-        action (action-fn 'control-player)
+  (let [commands  (async/chan 16)
+        action    (action-fn 'control-player)
         component {:fairy.box.switchboard/switchboard {:emitter commands}}
         requested ["play-pause" "previous" "next" "skip-back"
                    "skip-forward" "volume-down-step" "volume-up-step"
@@ -263,105 +263,105 @@
     (try
       (when action
         (doseq [command requested]
-          (action {:query-params {"command" command}
+          (action {:query-params        {"command" command}
                    :fairy.box/component component})))
-      (is (= [{:path "/player/commands"
+      (is (= [{:path  "/player/commands"
                :value {:action :audio/play-pause}}
-              {:path "/player/commands"
+              {:path  "/player/commands"
                :value {:action :audio/prev}}
-              {:path "/player/commands"
+              {:path  "/player/commands"
                :value {:action :audio/next}}
-              {:path "/player/commands"
-               :value {:action :audio/skip-time
+              {:path  "/player/commands"
+               :value {:action       :audio/skip-time
                        :milliseconds -10000}}
-              {:path "/player/commands"
-               :value {:action :audio/skip-time
+              {:path  "/player/commands"
+               :value {:action       :audio/skip-time
                        :milliseconds 10000}}
-              {:path "/player/commands"
+              {:path  "/player/commands"
                :value {:action :audio/adjust-volume
-                       :delta -5}}
-              {:path "/player/commands"
+                       :delta  -5}}
+              {:path  "/player/commands"
                :value {:action :audio/adjust-volume
-                       :delta 5}}
-              {:path "/player/commands"
+                       :delta  5}}
+              {:path  "/player/commands"
                :value {:action :audio/toggle-mute}}]
              (take-values commands (count requested))))
       (finally
         (async/close! commands)))))
 
 (deftest emits-validated-seek-volume-repeat-and-shuffle-commands
-  (let [commands (async/chan 8)
+  (let [commands  (async/chan 8)
         component {:fairy.box.switchboard/switchboard {:emitter commands}}
-        requests [['seek-player "position" "25.5"]
-                  ['set-player-volume "volume" "75"]
-                  ['set-player-repeat "mode" "list"]
-                  ['set-player-shuffle "shuffle" "true"]]]
+        requests  [['seek-player "position" "25.5"]
+                   ['set-player-volume "volume" "75"]
+                   ['set-player-repeat "mode" "list"]
+                   ['set-player-shuffle "shuffle" "true"]]]
     (try
       (doseq [[action-name parameter value] requests]
         (when-let [action (action-fn action-name)]
-          (action {:query-params {parameter value}
+          (action {:query-params        {parameter value}
                    :fairy.box/component component})))
-      (is (= [{:path "/player/commands"
-               :value {:action :audio/set-position
+      (is (= [{:path  "/player/commands"
+               :value {:action   :audio/set-position
                        :position 0.255}}
-              {:path "/player/commands"
+              {:path  "/player/commands"
                :value {:action :audio/set-volume
                        :volume 75}}
-              {:path "/player/commands"
+              {:path  "/player/commands"
                :value {:action :audio/set-repeat
-                       :mode :list}}
-              {:path "/player/commands"
-               :value {:action :audio/set-shuffle
+                       :mode   :list}}
+              {:path  "/player/commands"
+               :value {:action   :audio/set-shuffle
                        :shuffle? true}}]
              (take-values commands (count requests))))
       (finally
         (async/close! commands)))))
 
 (deftest rejects-malformed-and-out-of-range-action-input
-  (let [commands (async/chan 32)
+  (let [commands  (async/chan 32)
         component {:fairy.box.switchboard/switchboard {:emitter commands}}
-        actions (mapv action-fn
-                      '[control-player seek-player set-player-volume
-                        set-player-repeat set-player-shuffle])]
+        actions   (mapv action-fn
+                        '[control-player seek-player set-player-volume
+                          set-player-repeat set-player-shuffle])]
     (try
       (when-let [action (first actions)]
         (doseq [command [nil "" "pause" "PLAY" 1]]
-          (action {:query-params {"command" command}
+          (action {:query-params        {"command" command}
                    :fairy.box/component component})))
       (when-let [action (second actions)]
         (doseq [position [nil "" "wat" "NaN" "Infinity" "-1"
                           "100.1" " 20" 20]]
-          (action {:query-params {"position" position}
+          (action {:query-params        {"position" position}
                    :fairy.box/component component})))
       (when-let [action (nth actions 2)]
         (doseq [volume [nil "" "1.5" "-1" "101" " 20" 20]]
-          (action {:query-params {"volume" volume}
+          (action {:query-params        {"volume" volume}
                    :fairy.box/component component})))
       (when-let [action (nth actions 3)]
         (doseq [mode [nil "" "all" "repeat-one" :track]]
-          (action {:query-params {"mode" mode}
+          (action {:query-params        {"mode" mode}
                    :fairy.box/component component})))
       (when-let [action (nth actions 4)]
         (doseq [shuffle [nil "" "yes" "TRUE" true]]
-          (action {:query-params {"shuffle" shuffle}
+          (action {:query-params        {"shuffle" shuffle}
                    :fairy.box/component component})))
       (let [[command port] (async/alts!! [commands (async/timeout 100)])]
         (is (= {:actions-present? true
-                :command nil
-                :emitted? false}
+                :command          nil
+                :emitted?         false}
                {:actions-present? (every? ifn? actions)
-                :command command
-                :emitted? (= port commands)})))
+                :command          command
+                :emitted?         (= port commands)})))
       (finally
         (async/close! commands)))))
 
 (deftest changes-artwork-url-when-the-current-track-changes
-  (let [state (sample-state)
-        next-state (assoc-in state
-                             [:playback :current-track :mrl]
-                             "file:///music/next-track.mp3")
+  (let [state       (sample-state)
+        next-state  (assoc-in state
+                              [:playback :current-track :mrl]
+                              "file:///music/next-track.mp3")
         artwork-src #(get-in (player/current-artwork %) [1 :src])]
-    (is (= {:current-url-versioned? true
+    (is (= {:current-url-versioned?    true
             :track-change-updates-url? true}
            {:current-url-versioned?
             (str/starts-with? (artwork-src state)
@@ -382,11 +382,11 @@
              (some-> (artwork/actual-artwork) first str))))))
 
 (deftest registers-current-artwork-with-hyperlith-router
-  (let [handler (get-in @router/routes_ [:get "/api/current-artwork"])
+  (let [handler  (get-in @router/routes_ [:get "/api/current-artwork"])
         response (when handler (handler {}))]
-    (is (= {:handler? true
-            :status 200
+    (is (= {:handler?     true
+            :status       200
             :content-type "image/png"}
-           {:handler? (ifn? handler)
-            :status (:status response)
+           {:handler?     (ifn? handler)
+            :status       (:status response)
             :content-type (get-in response [:headers "Content-Type"])}))))

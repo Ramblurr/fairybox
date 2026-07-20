@@ -26,59 +26,59 @@
         prod-components (components :prod)]
     (is (= {:test-enablement {:rfid true :buttons false :leds false}
             :prod-enablement {:rfid true :buttons true :leds true}
-            :test-rfid-type :simulated
-            :prod-rfid-type :mfrc522
-            :buttons [{:gpio 22 :action :audio/prev}
-                      {:gpio 23 :action :audio/next}
-                      {:gpio 27 :action :audio/play-pause}
-                      {:gpio 5 :action :audio/volume-up}
-                      {:gpio 6 :action :audio/volume-down}
-                      {:gpio 17 :action :system/shutdown}]
-            :leds [{:gpio 14 :led-type :pwm :name :audio/prev}
-                   {:gpio 7 :led-type :pwm :name :audio/next}
-                   {:gpio 12 :led-type :pwm :name :audio/play-pause}
-                   {:gpio 13 :led-type :pwm :name :audio/volume-up}
-                   {:gpio 15 :led-type :pwm :name :audio/volume-down}]
-            :groups {}}
+            :test-rfid-type  :simulated
+            :prod-rfid-type  :mfrc522
+            :buttons         [{:gpio 22 :action :audio/prev}
+                              {:gpio 23 :action :audio/next}
+                              {:gpio 27 :action :audio/play-pause}
+                              {:gpio 5 :action :audio/volume-up}
+                              {:gpio 6 :action :audio/volume-down}
+                              {:gpio 17 :action :system/shutdown}]
+            :leds            [{:gpio 14 :led-type :pwm :name :audio/prev}
+                              {:gpio 7 :led-type :pwm :name :audio/next}
+                              {:gpio 12 :led-type :pwm :name :audio/play-pause}
+                              {:gpio 13 :led-type :pwm :name :audio/volume-up}
+                              {:gpio 15 :led-type :pwm :name :audio/volume-down}]
+            :groups          {}}
            {:test-enablement (:fairy.box.hardware/enabled test-components)
             :prod-enablement (:fairy.box.hardware/enabled prod-components)
-            :test-rfid-type (get-in test-components
-                                    [:fairy.box.hardware/rfid :rfid-type])
-            :prod-rfid-type (get-in prod-components
-                                    [:fairy.box.hardware/rfid :rfid-type])
-            :buttons (get-in test-components
-                             [:fairy.box.hardware/buttons :buttons])
-            :leds (get-in test-components
-                          [:fairy.box.hardware/leds :leds])
-            :groups (get-in test-components
-                            [:fairy.box.hardware/leds :groups])}))))
+            :test-rfid-type  (get-in test-components
+                                     [:fairy.box.hardware/rfid :rfid-type])
+            :prod-rfid-type  (get-in prod-components
+                                     [:fairy.box.hardware/rfid :rfid-type])
+            :buttons         (get-in test-components
+                                     [:fairy.box.hardware/buttons :buttons])
+            :leds            (get-in test-components
+                                     [:fairy.box.hardware/leds :leds])
+            :groups          (get-in test-components
+                                     [:fairy.box.hardware/leds :groups])}))))
 
 (deftest defines-complete-donut-graph
   (let [component-defs (get-in (system/system {:profile :test})
                                [::ds/defs :fairy.box/components])]
-    (is (= {:component-keys #{:fairy.box/settings
-                              :fairy.box/startup
-                              :fairy.box.audio.system2/player
-                              :fairy.box.bus/bus
-                              :fairy.box.db/db
-                              :fairy.box.hardware/buttons
-                              :fairy.box.hardware/leds
-                              :fairy.box.hardware/rfid
-                              :fairy.box.mqtt/client
-                              :fairy.box.switchboard/switchboard
-                              :fairy.box.tts/tts
-                              :fairy.box.web/player-event-refresh
-                              :fairy.box.web/player-progress
-                              :fairy.box.web/rfid-presence
-                              :fairy.box.web/server}
-            :missing-start #{}
+    (is (= {:component-keys        #{:fairy.box/settings
+                                     :fairy.box/startup
+                                     :fairy.box.audio.system2/player
+                                     :fairy.box.bus/bus
+                                     :fairy.box.db/db
+                                     :fairy.box.hardware/buttons
+                                     :fairy.box.hardware/leds
+                                     :fairy.box.hardware/rfid
+                                     :fairy.box.mqtt/client
+                                     :fairy.box.switchboard/switchboard
+                                     :fairy.box.tts/tts
+                                     :fairy.box.web/player-event-refresh
+                                     :fairy.box.web/player-progress
+                                     :fairy.box.web/rfid-presence
+                                     :fairy.box.web/server}
+            :missing-start         #{}
             :missing-required-stop #{}}
-           {:component-keys (set (keys component-defs))
-            :missing-start (->> component-defs
-                                (keep (fn [[key component]]
-                                        (when-not (fn? (::ds/start component))
-                                          key)))
-                                set)
+           {:component-keys        (set (keys component-defs))
+            :missing-start         (->> component-defs
+                                        (keep (fn [[key component]]
+                                                (when-not (fn? (::ds/start component))
+                                                  key)))
+                                        set)
             :missing-required-stop (->> (dissoc component-defs
                                                 :fairy.box/settings
                                                 :fairy.box.db/db)
@@ -88,12 +88,12 @@
                                         set)}))))
 
 (deftest starts-and-stops-safe-hardware-subsystem
-  (let [selected #{(component-id :fairy.box.hardware/buttons)
-                   (component-id :fairy.box.hardware/leds)
-                   (component-id :fairy.box.hardware/rfid)
-                   (component-id :fairy.box.mqtt/client)}
-        running (ds/start (system/system {:profile :test}) {} selected)
-        instance #(ds/instance running (component-id %))
+  (let [selected      #{(component-id :fairy.box.hardware/buttons)
+                        (component-id :fairy.box.hardware/leds)
+                        (component-id :fairy.box.hardware/rfid)
+                        (component-id :fairy.box.mqtt/client)}
+        running       (ds/start (system/system {:profile :test}) {} selected)
+        instance      #(ds/instance running (component-id %))
         rfid-instance (instance :fairy.box.hardware/rfid)]
     (try
       (is (= {:buttons {:enabled? false :buttons []}
@@ -111,18 +111,18 @@
                           (rfid/place! rfid-instance "after-stop")))))
 
 (deftest emits-initialized-event-during-startup
-  (let [bus (ev/bus)
+  (let [bus      (ev/bus)
         listener (async/chan 1)]
     (try
       (ev/listen bus "/system" listener)
-      (let [instance (settings/startup! {:bus bus :delay-ms 0})
-            timeout (async/timeout 1000)
+      (let [instance     (settings/startup! {:bus bus :delay-ms 0})
+            timeout      (async/timeout 1000)
             [event port] (async/alts!! [listener timeout])]
         (settings/stop! instance)
-        (is (= {:event {:path "/system"
-                        :value {:event :system/initialized}}
+        (is (= {:event     {:path  "/system"
+                            :value {:event :system/initialized}}
                 :received? true}
-               {:event (select-keys event [:path :value])
+               {:event     (select-keys event [:path :value])
                 :received? (= port listener)})))
       (finally
         (async/close! listener)
@@ -130,11 +130,11 @@
 
 (deftest keeps-mqtt-disabled-without-uri
   (let [instance (mqtt/init-client! {:settings {:fairybox-id "test-box"}
-                                     :uri nil})]
+                                     :uri      nil})]
     (mqtt/halt-client! instance)
     (is (= {:enabled? false} instance))))
 
 (deftest loads-production-entry-point-without-starting
   (is (= {:main? true :running-system nil}
-         {:main? (boolean (ns-resolve 'fairy.box.core '-main))
+         {:main?          (boolean (ns-resolve 'fairy.box.core '-main))
           :running-system @system/app_})))

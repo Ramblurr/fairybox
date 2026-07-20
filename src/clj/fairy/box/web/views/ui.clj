@@ -38,40 +38,40 @@
 (def spinner-priority-classes {:primary (css  :text-white)})
 
 (def button-sizes-classes {:2xsmall (css :px-1.5 :py-0.5 :text-xs)
-                           :xsmall (css :px-2.5 :py-1.5 :text-xs)
-                           :small (css  :px-3 :py-2 :text-sm :leading-4)
-                           :normal (css :px-4 :py-2 :text-sm)
-                           :large (css  :px-4 :py-2 :text-base)
-                           :xlarge (css  :px-6 :py-3 :text-base)})
+                           :xsmall  (css :px-2.5 :py-1.5 :text-xs)
+                           :small   (css  :px-3 :py-2 :text-sm :leading-4)
+                           :normal  (css :px-4 :py-2 :text-sm)
+                           :large   (css  :px-4 :py-2 :text-base)
+                           :xlarge  (css  :px-6 :py-3 :text-base)})
 
 (def button-icon-sizes-classes {:xsmall (css  :h-3 :w-3)
-                                :small (css :h-4 :w-4)
+                                :small  (css :h-4 :w-4)
                                 :normal (css :h-5 :w-5)
-                                :large (css :h-5 :w-5)
+                                :large  (css :h-5 :w-5)
                                 :xlarge (css :h-5 :w5)})
 (defn button [&  {:keys [type tag label disabled? class attr icon icon-class priority centered? size
                          tabindex href spinner? id title name value]
-                  :or   {class ""
+                  :or   {class      ""
                          icon-class ""
-                         type :button
-                         priority :primary
-                         size  :large
-                         disabled? false
-                         tag :button}}]
+                         type       :button
+                         priority   :primary
+                         size       :large
+                         disabled?  false
+                         tag        :button}}]
   [tag
    (merge
     (util/remove-nils {:tabindex tabindex
-                       :id        id
-                       :name      name
-                       :value     value
-                       :title     title
-                       :href      (when-not disabled? href)})
-    {:type  type
+                       :id       id
+                       :name     name
+                       :value    value
+                       :title    title
+                       :href     (when-not disabled? href)})
+    {:type     type
      :disabled disabled?
      :class
      (let [;; $not-link-rounding (css :inline-flex :items-center :rounded-md :border :font-medium)
-           $centered (css :items-center :justify-center)
-           $disabled (css [:disabled :opacity-50 :cursor-not-allowed])
+           $centered   (css :items-center :justify-center)
+           $disabled   (css [:disabled :opacity-50 :cursor-not-allowed])
            $disabled-a (css :opacity-50 :cursor-not-allowed)]
        [(priority button-priority-classes)
         (size button-sizes-classes)
@@ -89,15 +89,15 @@
    [:span {:class "button-label"} label]])
 
 (defn integer-input [& {:keys [name value label required? hint error min max step id autocomplete data-bind]
-                        :or {required? true step 1 min 0 max 100}}]
+                        :or   {required? true step 1 min 0 max 100}}]
   [:div {:class (css [:sm :col-span-4])}
    [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
    [:div {:class (css :mt-2)}
     [:div {:class (css :flex [:sm :max-w-md])}
-     [:input {:type "number" :min min :max max :step step :name name :id (or id name) :autocomplete autocomplete
-              :value value
+     [:input {:type      "number" :min min :max max :step step :name name :id (or id name) :autocomplete autocomplete
+              :value     value
               :data-bind data-bind
-              :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                          :bg-smoky-100 :text-smoky-900 :py-1.5 :pl-1
-                          [:dark :bg-smoky-900 :text-smoky-100]
-                          [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])
+              :class     (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
+                              :bg-smoky-100 :text-smoky-900 :py-1.5 :pl-1
+                              [:dark :bg-smoky-900 :text-smoky-100]
+                              [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])

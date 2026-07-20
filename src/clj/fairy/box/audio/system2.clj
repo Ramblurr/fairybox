@@ -75,7 +75,7 @@
                                  (map announcment-for-track)
                                  (mapv  #(tts/tts (assoc sys
                                                          :tts-cache-dir (tts/tts-cache-dir (:settings sys))) %)))
-              new-tracks (interleave announcements tracks)]
+              new-tracks    (interleave announcements tracks)]
           (play-now sys new-tracks)))
       (catch Exception e
         (log/error e "Error parsing track metadata for announcement")))))
@@ -103,7 +103,7 @@
     (throw (ex-info
             "Could not play. Requested path could not be found in media-dir"
             {:requested-path item-path
-             :media-dir (browse/media-dir settings)}))))
+             :media-dir      (browse/media-dir settings)}))))
 
 (defn maximum-volume
   ([db current-hour]
@@ -113,10 +113,10 @@
          hour-night-start    (db/hour-night-start db)
          max-volume-night    (db/max-volume-night db)
          max-volume-day      (db/max-volume-day db)
-         m                   (min absolute-max-volume
-                                  (if (< (dec hour-day-start) current-hour hour-night-start)
-                                    (or max-volume-day absolute-max-volume)
-                                    (or max-volume-night absolute-max-volume)))]
+         m (min absolute-max-volume
+                (if (< (dec hour-day-start) current-hour hour-night-start)
+                  (or max-volume-day absolute-max-volume)
+                  (or max-volume-night absolute-max-volume)))]
      m))
   ([db]
    (maximum-volume db (-> (java.time.LocalTime/now) (.getHour)))))
@@ -137,17 +137,17 @@
          #(merge (select-keys % [:source-type :source-path]) val)))
 
 (defn wrap-volume [db-conn new-volume]
-  (let [db @db-conn
+  (let [db   @db-conn
         minv (db/min-volume db)
         maxv (maximum-volume db)
-        v (max minv (min maxv new-volume))]
+        v    (max minv (min maxv new-volume))]
     (int v)))
 
 (defn set-volume! [{:keys [player db-conn]} v]
   (mp/dispatch player :mixer/set-volume :level (wrap-volume db-conn v)))
 
 (defn adjust-volume! [{:keys [player db-conn]} delta]
-  (let [current (mp/get-volume player)
+  (let [current    (mp/get-volume player)
         new-volume (wrap-volume db-conn (+ current delta))]
     (mp/dispatch player :mixer/set-volume :level new-volume)))
 
@@ -158,21 +158,21 @@
   (if-let [path (browse/canonicalize-path settings item-path)]
     (util/thread
       (try
-        (let [unsubscribe_ (promise)
-              handler (fn [{:ol.vinyl/keys [event]}]
-                        (try
-                          (case event
-                            :vlc/finished
-                            (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
+        (let [unsubscribe_    (promise)
+              handler         (fn [{:ol.vinyl/keys [event]}]
+                                (try
+                                  (case event
+                                    :vlc/finished
+                                    (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
 
-                            :vlc/error
-                            (do
-                              (log/error "one-shot received vlc error event")
-                              (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))))
+                                    :vlc/error
+                                    (do
+                                      (log/error "one-shot received vlc error event")
+                                      (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))))
 
-                          (catch Exception e
-                            (log/error e "one-shot event error"))
-                          (finally (deliver unsubscribe_ true))))
+                                  (catch Exception e
+                                    (log/error e "one-shot event error"))
+                                  (finally (deliver unsubscribe_ true))))
               subscription-id (mp/subscribe! one-shot-player handler #{:vlc/finished :vlc/error})]
 
           (mp/dispatch one-shot-player :mixer/set-volume :level (maximum-volume @db-conn))
@@ -184,10 +184,10 @@
         (catch Throwable e
           (log/error e "one-shot player error"))))
     (throw (ex-info "Could not play. Requested path could not be found in media-dir" {:requested-path item-path
-                                                                                      :media-dir (browse/media-dir settings)}))))
+                                                                                      :media-dir      (browse/media-dir settings)}))))
 
 (defn internal-event-handler [{:keys [emitter]} event]
-  (let [event-name (or (:ol.vinyl/event event) (:event event))
+  (let [event-name  (or (:ol.vinyl/event event) (:event event))
         emit-player (fn [k & {:as extra}]
                       (async/put! emitter (player-event (merge extra {:event k}))))]
     (try
@@ -308,23 +308,23 @@
 
 (defn- init-audio! [{:keys [bus settings db-conn]}]
   (reset! audio-state audio-init-state)
-  (let [emitter (async/chan (async/sliding-buffer 512))
+  (let [emitter     (async/chan (async/sliding-buffer 512))
         commands-ch (async/chan (async/sliding-buffer 512))
         internal-ch (async/chan (async/sliding-buffer 512))
-        exit-ch (async/chan)
-        player (new-player! @db-conn (fn [ev]
-                                       (try
-                                         (async/put! internal-ch ev)
-                                         (catch Exception e
-                                           (log/error e "player put internal-ch error")))))
-        sys {:emitter emitter
-             :settings settings
-             :db-conn db-conn
-             :commands-ch commands-ch
-             :internal-ch internal-ch
-             :exit-ch exit-ch
-             :player player
-             :one-shot-player (mp/create-player {:media-player-factory factory})}]
+        exit-ch     (async/chan)
+        player      (new-player! @db-conn (fn [ev]
+                                            (try
+                                              (async/put! internal-ch ev)
+                                              (catch Exception e
+                                                (log/error e "player put internal-ch error")))))
+        sys         {:emitter         emitter
+                     :settings        settings
+                     :db-conn         db-conn
+                     :commands-ch     commands-ch
+                     :internal-ch     internal-ch
+                     :exit-ch         exit-ch
+                     :player          player
+                     :one-shot-player (mp/create-player {:media-player-factory factory})}]
     (ev/listen bus "/player/commands" commands-ch)
     (ev/emitize bus emitter)
     (assoc sys :audio-loop (audio-loop sys))))
@@ -338,13 +338,13 @@
   (reset! audio-state audio-init-state))
 
 (def AudioSystemComponent
-  {::ds/start (fn [{config ::ds/config}]
-                (init-audio! config))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (halt-player! instance))
-   ::ds/config {:bus (ds/ref [:fairy.box/components
-                              :fairy.box.bus/bus])
+  {::ds/start  (fn [{config ::ds/config}]
+                 (init-audio! config))
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (halt-player! instance))
+   ::ds/config {:bus      (ds/ref [:fairy.box/components
+                                   :fairy.box.bus/bus])
                 :settings (ds/ref [:fairy.box/components
                                    :fairy.box/settings])
-                :db-conn (ds/ref [:fairy.box/components
-                                  :fairy.box.db/db])}})
+                :db-conn  (ds/ref [:fairy.box/components
+                                   :fairy.box.db/db])}})

@@ -49,10 +49,10 @@
 
 (defn img-response [input-stream img-type]
   {:status  200
-   :headers {"Content-Type" (str "image/" img-type)
+   :headers {"Content-Type"  (str "image/" img-type)
              "Cache-Control" "no-cache, no-store, must-revalidate"
-             "Pragma" "no-cache"
-             "Expires" "0"}
+             "Pragma"        "no-cache"
+             "Expires"       "0"}
    :body    input-stream})
 
 (defn default-artwork
@@ -65,8 +65,8 @@
   []
   (when-let [^String image-path (get-current-artwork-path!)]
     (let [^java.io.File img-file (io/file image-path)
-          img-type (str/lower-case
-                    (subs image-path (inc (.lastIndexOf image-path "."))))]
+          img-type               (str/lower-case
+                                  (subs image-path (inc (.lastIndexOf image-path "."))))]
       (when (.exists img-file)
         [img-file img-type]))))
 

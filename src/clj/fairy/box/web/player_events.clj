@@ -82,10 +82,10 @@
       (assoc config
              :progress!
              #(progress/broadcast! (:progress-stream config)))))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (stop-player-refresh! instance))
-   ::ds/config {:bus [:donut.system/ref
-                      [:fairy.box/components :fairy.box.bus/bus]]
+   ::ds/stop   (fn [{instance ::ds/instance}]
+                 (stop-player-refresh! instance))
+   ::ds/config {:bus      [:donut.system/ref
+                           [:fairy.box/components :fairy.box.bus/bus]]
                 :progress-stream
                 [:donut.system/ref
                  [:fairy.box/components :fairy.box.web/player-progress]]

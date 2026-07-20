@@ -15,27 +15,27 @@
 
 (defaction play-audio-path [{:fairy.box/keys [component] :as req}]
   (let [selected-path (get-in req [:query-params "path"])
-        settings (app-settings/settings req)
-        controller (component :fairy.box.switchboard/switchboard)]
+        settings      (app-settings/settings req)
+        controller    (component :fairy.box.switchboard/switchboard)]
     (when (and controller (seq selected-path))
       (when-let [canonical-path
                  (browse/canonicalize-path settings selected-path)]
         (when (browse/playable-type settings canonical-path)
           (switchboard/emit-player!
            (:emitter controller)
-           {:action :audio/play-path
+           {:action    :audio/play-path
             :item-path canonical-path
-            :uid nil})
+            :uid       nil})
           (h/execute-expr
            (format "window.location.assign('%s')"
                    ((:url-for req) :page/home))))))))
 
 (defaction link-rfid-folder [{:fairy.box/keys [component] :as req}]
-  (let [presence (component :fairy.box.web/rfid-presence)
-        uid (rfid/current-uid presence)
+  (let [presence        (component :fairy.box.web/rfid-presence)
+        uid             (rfid/current-uid presence)
         selected-folder (get-in req [:body :selected_folder])
-        settings (app-settings/settings req)
-        db-conn (component :fairy.box.db/db)]
+        settings        (app-settings/settings req)
+        db-conn         (component :fairy.box.db/db)]
     (when (and uid (seq selected-folder))
       (when-let [canonical-path
                  (browse/canonicalize-path settings selected-folder)]
@@ -50,11 +50,11 @@
   [{:fairy.box/keys [component]
     {:keys [min_volume max_volume max_volume_day max_volume_night
             hour_day_start hour_night_start]} :body}]
-  (let [audio (-> {:min-volume min_volume
-                   :max-volume max_volume
-                   :max-volume-day max_volume_day
+  (let [audio (-> {:min-volume       min_volume
+                   :max-volume       max_volume
+                   :max-volume-day   max_volume_day
                    :max-volume-night max_volume_night
-                   :hour-day-start hour_day_start
+                   :hour-day-start   hour_day_start
                    :hour-night-start hour_night_start}
                   (update-vals #(if (string? %) (parse-long %) %))
                   util/remove-nils)]
@@ -113,9 +113,9 @@
                 :label "Link To Folder")]]])
 
 (defn rfid-link [{:fairy.box/keys [component] :as req}]
-  (let [presence (component :fairy.box.web/rfid-presence)
-        uid (rfid/current-uid presence)
-        db-conn (component :fairy.box.db/db)
+  (let [presence      (component :fairy.box.web/rfid-presence)
+        uid           (rfid/current-uid presence)
+        db-conn       (component :fairy.box.db/db)
         linked-folder (db/linked-folder @db-conn uid)]
     [:div {:id "active-tab"}
      (rfid-link-form req uid linked-folder)]))
@@ -148,7 +148,7 @@
                       [:dark :text-smoky-300])}
       "Fairybox Audio Folders"]]
     (uic/browse-media-folder req
-                             {:mode :play
+                             {:mode        :play
                               :play-action play-audio-path}
                              (get-in req [:query-params "dir"]))]])
 
@@ -158,11 +158,11 @@
            hour-day-start hour-night-start]}]
   [:form {:class [ui/$page-margin (css :max-w-5xl)]
           :id "playback-settings"
-          :data-signals:min_volume__ifmissing (or min-volume "")
-          :data-signals:max_volume__ifmissing (or max-volume "")
-          :data-signals:max_volume_day__ifmissing (or max-volume-day "")
+          :data-signals:min_volume__ifmissing       (or min-volume "")
+          :data-signals:max_volume__ifmissing       (or max-volume "")
+          :data-signals:max_volume_day__ifmissing   (or max-volume-day "")
           :data-signals:max_volume_night__ifmissing (or max-volume-night "")
-          :data-signals:hour_day_start__ifmissing (or hour-day-start "")
+          :data-signals:hour_day_start__ifmissing   (or hour-day-start "")
           :data-signals:hour_night_start__ifmissing (or hour-night-start "")
           :data-on:submit (str "evt.preventDefault(); @post('"
                                save-playback-settings
@@ -211,7 +211,7 @@
     req
     (db/audio-settings @(component :fairy.box.db/db)))])
 
-(defview render-playback {:path "/settings/playback"
+(defview render-playback {:path         "/settings/playback"
                           :shim-headers ui3/shim-headers}
   [req]
   (h/html

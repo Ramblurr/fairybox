@@ -13,19 +13,19 @@
 
 (defn duration-data
   [^long duration-in-millis]
-  (let [milliseconds (mod duration-in-millis 1000)
-        duration-in-secs (quot duration-in-millis 1000)
-        seconds (mod duration-in-secs 60)
-        duration-in-mins (quot duration-in-secs 60)
-        minutes (mod duration-in-mins 60)
+  (let [milliseconds      (mod duration-in-millis 1000)
+        duration-in-secs  (quot duration-in-millis 1000)
+        seconds           (mod duration-in-secs 60)
+        duration-in-mins  (quot duration-in-secs 60)
+        minutes           (mod duration-in-mins 60)
         duration-in-hours (quot duration-in-mins 60)
-        hours (mod duration-in-hours 24)
-        days (quot duration-in-hours 24)]
+        hours             (mod duration-in-hours 24)
+        days              (quot duration-in-hours 24)]
     {:milliseconds milliseconds
-     :seconds seconds
-     :minutes minutes
-     :hours hours
-     :days days}))
+     :seconds      seconds
+     :minutes      minutes
+     :hours        hours
+     :days         days}))
 
 (defn format-duration [milliseconds]
   (when milliseconds
@@ -54,10 +54,10 @@
 
 (defn progress-signals [current]
   (let [current-time (or (player/time current) 0)
-        duration (player/duration current)]
+        duration     (player/duration current)]
     {:_server_progress
      (progress-percentage (player/position current))
-     :_server_time (format-duration current-time)
+     :_server_time      (format-duration current-time)
      :_server_time_left (format-time-left current-time duration)}))
 
 (defn start-progress-stream! []
@@ -120,5 +120,5 @@
 (def ProgressStreamComponent
   {::ds/start (fn [_]
                 (start-progress-stream!))
-   ::ds/stop (fn [{instance ::ds/instance}]
-               (stop-progress-stream! instance))})
+   ::ds/stop  (fn [{instance ::ds/instance}]
+                (stop-progress-stream! instance))})
