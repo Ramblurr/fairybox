@@ -14,13 +14,22 @@
 (defn- play-action-fn []
   (ns-resolve 'fairy.box.web.views.settings 'play-audio-path-fn))
 
+(defn- save-playback-action-fn []
+  (ns-resolve 'fairy.box.web.views.settings
+              'save-playback-settings-fn))
+
+(defn- playback-request [db-conn]
+  {:url-for {:page/home "/"
+             :page/queue "/queue"
+             :page/settings "/settings"}
+   :fairy.box/component {:fairy.box.db/db db-conn}})
+
 (defn- browse-request [tree dir]
   (assoc (media/request tree dir)
          :uri "/settings/browse"
          :url-for {:page/home "/"
                    :page/queue "/queue"
                    :page/settings "/settings"}))
-
 
 (defn- action-request [tree selected-folder rfid]
   (let [req (media/request tree "audiobooks/Author One")
@@ -227,3 +236,107 @@
                             :command nil
                             :emitted? false})
                  results)))))))
+
+(deftest playback-settings-use-legacy-layout-and-datastar-form
+  (let [db-conn
+        (atom {:settings
+               {:audio {:min-volume 1
+                        :max-volume 90
+                        :max-volume-day 80
+                        :max-volume-night 50
+                        :hour-day-start 8
+                        :hour-night-start 19}}})
+        req (playback-request db-conn)
+        action-path (ns-resolve 'fairy.box.web.views.settings
+                                'save-playback-settings)
+        render-page (ns-resolve 'fairy.box.web.views.settings
+                                'render-playback-fn)]
+    (is (= {:action true :render true}
+           {:action (some? action-path)
+            :render (some? render-page)}))
+    (when (and action-path render-page)
+      (let [html (h/html->str (render-page req))
+            inputs (re-seq #"<input[^>]+>" html)
+            signal-names ["min_volume" "max_volume"
+                          "max_volume_day" "max_volume_night"
+                          "hour_day_start" "hour_night_start"]
+            labels ["Min Volume" "Max Volume"
+                    "Max Volume (Day)" "Max Volume (Night)"
+                    "Day Starts At" "Night Starts At"]]
+        (is (= {:legacy-layout true
+                :labels true
+                :signals true
+                :bindings true
+                :volume-limits true
+                :hour-limits true
+                :submit-action true
+                :ordinary-back-link true
+                :settings-placeholder-removed true
+                :htmx-removed true}
+               {:legacy-layout
+                (and (str/includes? html "id=\"active-tab\"")
+                     (str/includes? html "id=\"playback-settings\"")
+                     (str/includes? html "Playback Settings"))
+                :labels (every? #(str/includes? html %) labels)
+                :signals
+                (every? #(str/includes?
+                          html
+                          (str "data-signals:" % "__ifmissing="))
+                        signal-names)
+                :bindings
+                (every? #(str/includes? html (str "data-bind=\"" % "\""))
+                        signal-names)
+                :volume-limits
+                (every? #(and (str/includes? % "min=\"0\"")
+                              (str/includes? % "max=\"100\"")
+                              (str/includes? % "step=\"1\""))
+                        (take 4 inputs))
+                :hour-limits
+                (every? #(and (str/includes? % "min=\"0\"")
+                              (str/includes? % "max=\"23\"")
+                              (str/includes? % "step=\"1\""))
+                        (drop 4 inputs))
+                :submit-action
+                (and (str/includes? html "data-on:submit=")
+                     (str/includes? html (var-get action-path)))
+                :ordinary-back-link
+                (str/includes? html "href=\"/settings\"")
+                :settings-placeholder-removed
+                (not (str/includes? html ">Settings</h1>"))
+                :htmx-removed (not (str/includes? html "hx-"))}))))))
+
+(deftest saves-playback-settings-through-component-lookup
+  (let [db-conn (atom {:settings {:audio {:max-volume 95}}
+                       :unrelated :preserved})
+        req (playback-request db-conn)
+        save! (save-playback-action-fn)]
+    (is (some? save!))
+    (when save!
+      (let [_full-save
+            (save! (assoc req :body
+                          {:min_volume "2"
+                           :max_volume 91
+                           :max_volume_day "81"
+                           :max_volume_night 51
+                           :hour_day_start "7"
+                           :hour_night_start 20}))
+            after-full-save @db-conn
+            _partial-save
+            (save! (assoc req :body
+                          {:min_volume ""
+                           :max_volume_day "82"}))
+            after-partial-save @db-conn]
+        (is (= {:after-full-save
+                {:settings
+                 {:audio {:min-volume 2
+                          :max-volume 91
+                          :max-volume-day 81
+                          :max-volume-night 51
+                          :hour-day-start 7
+                          :hour-night-start 20}}
+                 :unrelated :preserved}
+                :after-partial-save
+                {:settings {:audio {:max-volume-day 82}}
+                 :unrelated :preserved}}
+               {:after-full-save after-full-save
+                :after-partial-save after-partial-save}))))))

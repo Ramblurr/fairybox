@@ -88,7 +88,7 @@
                        icon-class]})))
    [:span {:class "button-label"} label]])
 
-(defn integer-input [& {:keys [name value label required? hint error min max step id autocomplete]
+(defn integer-input [& {:keys [name value label required? hint error min max step id autocomplete data-bind]
                         :or {required? true step 1 min 0 max 100}}]
   [:div {:class (css [:sm :col-span-4])}
    [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
@@ -96,5 +96,8 @@
     [:div {:class (css :flex [:sm :max-w-md])}
      [:input {:type "number" :min min :max max :step step :name name :id (or id name) :autocomplete autocomplete
               :value value
+              :data-bind data-bind
               :class (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                          :bg-transparent :py-1.5 :pl-1  [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])
+                          :bg-smoky-100 :text-smoky-900 :py-1.5 :pl-1
+                          [:dark :bg-smoky-900 :text-smoky-100]
+                          [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])

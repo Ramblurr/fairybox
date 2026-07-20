@@ -3,6 +3,7 @@
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.settings :as app-settings]
+   [fairy.box.util :as util]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.ui3 :as ui3]
    [fairy.box.web.rfid :as rfid]
@@ -11,7 +12,6 @@
    [fairy.box.web.views.ui :as ui]
    [hyperlith.core :as h :refer [defaction defview]]
    [shadow.css :refer [css]]))
-
 
 (defaction play-audio-path [{:fairy.box/keys [component] :as req}]
   (let [selected-path (get-in req [:query-params "path"])
@@ -45,6 +45,23 @@
                              (browse/media-relative-path settings
                                                          canonical-path))
           (rfid/refresh! presence))))))
+
+(defaction save-playback-settings
+  [{:fairy.box/keys [component]
+    {:keys [min_volume max_volume max_volume_day max_volume_night
+            hour_day_start hour_night_start]} :body}]
+  (let [audio (-> {:min-volume min_volume
+                   :max-volume max_volume
+                   :max-volume-day max_volume_day
+                   :max-volume-night max_volume_night
+                   :hour-day-start hour_day_start
+                   :hour-night-start hour_night_start}
+                  (update-vals #(if (string? %) (parse-long %) %))
+                  util/remove-nils)]
+    (db/upsert-audio-settings!
+     (component :fairy.box.db/db)
+     audio)
+    nil))
 
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
@@ -135,16 +152,74 @@
                               :play-action play-audio-path}
                              (get-in req [:query-params "dir"]))]])
 
-(defview render-playback {:path "/settings/playback" :shim-headers ui3/shim-headers} [req]
+(defn playback-settings-form
+  [{:keys [url-for]}
+   {:keys [min-volume max-volume max-volume-day max-volume-night
+           hour-day-start hour-night-start]}]
+  [:form {:class [ui/$page-margin (css :max-w-5xl)]
+          :id "playback-settings"
+          :data-signals:min_volume__ifmissing (or min-volume "")
+          :data-signals:max_volume__ifmissing (or max-volume "")
+          :data-signals:max_volume_day__ifmissing (or max-volume-day "")
+          :data-signals:max_volume_night__ifmissing (or max-volume-night "")
+          :data-signals:hour_day_start__ifmissing (or hour-day-start "")
+          :data-signals:hour_night_start__ifmissing (or hour-night-start "")
+          :data-on:submit (str "evt.preventDefault(); @post('"
+                               save-playback-settings
+                               "')")}
+   (ui/setting-heading :label "Playback Settings")
+   [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8
+                      [:sm :grid-cols-6])}
+    (ui/integer-input :name "min-volume"
+                      :label "Min Volume"
+                      :value min-volume
+                      :data-bind "min_volume")
+    (ui/integer-input :name "max-volume"
+                      :label "Max Volume"
+                      :value max-volume
+                      :data-bind "max_volume")
+    (ui/integer-input :name "max-volume-day"
+                      :label "Max Volume (Day)"
+                      :value max-volume-day
+                      :data-bind "max_volume_day")
+    (ui/integer-input :name "max-volume-night"
+                      :label "Max Volume (Night)"
+                      :value max-volume-night
+                      :data-bind "max_volume_night")
+    (ui/integer-input :name "hour-day-start"
+                      :label "Day Starts At"
+                      :value hour-day-start
+                      :min 0
+                      :max 23
+                      :data-bind "hour_day_start")
+    (ui/integer-input :name "hour-night-start"
+                      :label "Night Starts At"
+                      :value hour-night-start
+                      :min 0
+                      :max 23
+                      :data-bind "hour_night_start")]
+   [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
+    (ui/button :tag :a
+               :href (url-for :page/settings)
+               :priority :link
+               :label "Back")
+    (ui/button :type :submit :label "Save")]])
+
+(defn playback-settings [{:fairy.box/keys [component] :as req}]
+  [:div {:id "active-tab"}
+   (playback-settings-form
+    req
+    (db/audio-settings @(component :fairy.box.db/db)))])
+
+(defview render-playback {:path "/settings/playback"
+                          :shim-headers ui3/shim-headers}
+  [req]
   (h/html
    (ui3/css-reload)
    [:main#morph.main
     [:div {}
      (uic/player-tabs req :page/settings)
-     [:div {:id "active-tab"}
-      [:div {:class "fade-in-out"}
-       ;; TODO port playback settings from htmx
-       (settings-view req)]]]]))
+     (playback-settings req)]]))
 
 (defview render-browse {:path "/settings/browse" :shim-headers ui3/shim-headers} [req]
   (h/html
