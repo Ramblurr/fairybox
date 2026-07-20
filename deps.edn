@@ -60,8 +60,7 @@
                                       com.clojure-goes-fast/virgil    {:mvn/version "0.2.1"}
                                       dev.weavejester/hashp           {:mvn/version "0.5.1"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
-                        :jvm-opts    ["-Dguardrails.enabled=true"
-                                      "-XX:-OmitStackTraceInFastThrow"
+                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow"
                                       "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       "-DPIGPIOD_HOST=127.0.0.1"
                                       "-XX:+UseZGC"
