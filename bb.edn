@@ -1,11 +1,7 @@
 {:min-bb-version "0.8.156"
+ :pods           {org.babashka/fswatcher {:version "0.0.5"}}
+ :paths          ["resources" "scripts"]
 
- :deps  {failjure/failjure       {:mvn/version "2.3.0"}
-         com.thheller/shadow-css {;; :git/url "https://github.com/thheller/shadow-css.git"
-                                  ;; :git/sha "b3c97fe3caf16fab1a90fb93a7baad76fe15aa46"
-                                  :mvn/version "0.6.4"}}
- :pods  {org.babashka/fswatcher {:version "0.0.5"}}
- :paths ["resources" "scripts"]
  :tasks {:requires         ([babashka.fs :as fs]
                             [clojure.string :as str]
                             [babashka.tasks :refer [shell]])
@@ -27,8 +23,6 @@
          watch             {:requires ([pod.babashka.fswatcher :as fw])
                             :task     (exec 'watch/dev-watch)}
          sync              {:task (exec 'sync/do-sync!)}
-         css-dev           {:task (exec 'css/css-dev)}
-         css-release       {:task (exec 'css/css-release)}
          credits           {:task (exec 'credits/build-attribution)}
          fmt               {:doc  "Format code with cljfmt"
                             :task (apply shell "cljfmt --quiet -v fix" (if (seq *command-line-args*) *command-line-args* paths))}
