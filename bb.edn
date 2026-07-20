@@ -16,8 +16,8 @@
                             :task (clojure "-M:dev:nrepl")}
          cider             {:doc  "starts the cider"
                             :task (clojure "-M:dev:cider")}
-         test              {:doc  "runs tests"
-                            :task (clojure "-M:test")}
+         test              {:doc  "Run all tests or specific test suites"
+                            :task (apply clojure "-M:dev:kaocha" *command-line-args*)}
          uber              {:doc  "builds the uberjar"
                             :task (clojure "-T:build all")}
          watch             {:requires ([pod.babashka.fswatcher :as fw])
@@ -29,7 +29,7 @@
          fmt:check         {:doc  "Check code formatting without making changes"
                             :task (apply shell "cljfmt check " paths)}
          lint:copy-configs {:doc  "Copy clj-kondo configs from dependencies"
-                            :task (shell "clj-kondo" "--lint" (-> (shell {:out :string} "clojure -Spath -M:test:dev") :out str/trim) "--dependencies" "--copy-configs" "--skip-lint")}
+                            :task (shell "clj-kondo" "--lint" (-> (shell {:out :string} "clojure -Spath -M:dev:kaocha") :out str/trim) "--dependencies" "--copy-configs" "--skip-lint")}
          lint              {:doc  "Lint code with clj-kondo"
                             :task (if (seq *command-line-args*)
                                     (apply shell "clj-kondo" "--lint" *command-line-args*)
