@@ -11,6 +11,7 @@
    [fairy.box.settings :as settings]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.tts :as tts]
+   [fairy.box.web.player-events :as player-events]
    [fairy.box.web.rfid :as web-rfid]
    [fairy.box.web.views :as views]
    [hyperlith.core :as h] ;; [fairy.box.web.routes.api :as api]
@@ -27,6 +28,7 @@
                            ;; :fairy.box.bus/http-bus-emitter    api/HttpBusEmitterComponent
                            :fairy.box.tts/tts                 tts/TTSComponent
                            :fairy.box.web/rfid-presence       web-rfid/RfidPresenceComponent
+                           :fairy.box.web/player-event-refresh player-events/PlayerEventRefreshComponent
                            ;; :fairy.box.web/sse-broadcaster     ui/SSEBroadcastComponent
                            :fairy.box.hardware/enabled        nil
                            :fairy.box.hardware/rfid           rfid/RfidComponent

@@ -69,5 +69,11 @@
 (defn history [c]
   (get-in c [:queue :history]))
 
+(defn queue-source-type [c]
+  (get-in c [:queue :source-type]))
+
+(defn queue-source-path [c]
+  (get-in c [:queue :source-path]))
+
 (defn full-queue [c]
   (get-in c [:queue :tracks]))

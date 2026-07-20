@@ -79,14 +79,30 @@
       (catch Exception e
         (log/error e "Error parsing track metadata for announcement")))))
 
-(defn play-path! [{:keys [settings] :as sys} {:keys [item-path announce-per-track?] :as value}]
+(defn- set-queue-source! [settings path]
+  (swap! audio-state update :queue merge
+         {:source-type (if (= :playlist (browse/playable-type settings path))
+                         :playlist
+                         :folder)
+          :source-path (or (browse/media-relative-path settings path) path)}))
+
+(defn- clear-queue-source! []
+  (swap! audio-state update :queue dissoc :source-type :source-path))
+
+(defn play-path!
+  [{:keys [settings] :as sys}
+   {:keys [item-path announce-per-track?] :as _value}]
   (assert item-path "Path must not be nil")
   (if-let [path (browse/canonicalize-path settings item-path)]
-    (if announce-per-track?
-      (announce-then-play sys path)
-      (play-now sys [path]))
-    (throw (ex-info "Could not play. Requested path could not be found in media-dir" {:requested-path item-path
-                                                                                      :media-dir (browse/media-dir settings)}))))
+    (do
+      (set-queue-source! settings path)
+      (if announce-per-track?
+        (announce-then-play sys path)
+        (play-now sys [path])))
+    (throw (ex-info
+            "Could not play. Requested path could not be found in media-dir"
+            {:requested-path item-path
+             :media-dir (browse/media-dir settings)}))))
 
 (defn maximum-volume
   ([db current-hour]
@@ -116,7 +132,8 @@
   (swap! audio-state assoc-in [:playback k] val))
 
 (defn- set-queue [val]
-  (swap! audio-state assoc-in [:queue] val))
+  (swap! audio-state update :queue
+         #(merge (select-keys % [:source-type :source-path]) val)))
 
 (defn wrap-volume [db-conn new-volume]
   (let [db @db-conn
@@ -209,8 +226,10 @@
         :ol.vinyl.playback/current-track-changed (do
                                                    (set-playback :current-track (:current-track event))
                                                    (emit-player :player/current-track-changed :current-track (:current-track event)))
-        :ol.vinyl.playback/queue-changed (do
-                                           (set-queue (:after-queue event)))
+        :ol.vinyl.playback/queue-changed
+        (do
+          (set-queue (:after-queue event))
+          (emit-player :player/queue-changed))
 
         nil)
       (catch Exception e
@@ -224,7 +243,9 @@
                              (mp/dispatch player command-name payload))]
 
       (condp = action
-        :audio/clear            (d! :playback/clear-all)
+        :audio/clear            (do
+                                  (clear-queue-source!)
+                                  (d! :playback/clear-all))
         :audio/play-one-shot    (play-one-shot! sys value)
         :audio/play-path        (play-path! sys value)
         :audio/stop             (d! :playback/stop)

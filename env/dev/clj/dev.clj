@@ -37,7 +37,7 @@
 ;; REPL and Inspector
 
 ;; Configure the paths containing clojure sources we want clj-reload to reload
-(clj-reload/init {:dirs      ["src" "env/dev" "test"]
+(clj-reload/init {:dirs      ["src" "env/dev/clj" "test"]
                   :no-reload #{'user 'dev 'ol.dev.portal}})
 
 (defonce ps (my-portal/open-portals))
