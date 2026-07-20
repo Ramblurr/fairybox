@@ -43,9 +43,10 @@
 (defn ->rfid [{:keys [rfid-type] :as opts}]
   (let [config (rfid-type opts)]
     (case rfid-type
-      :mfrc522 (let [rfid (MFRC522. (:controller config 0)
-                                    (:chip-select config 0)
-                                    (:reset-gpio config 25))]
+      :mfrc522 (let [^MFRC522 rfid
+                     (MFRC522. (int (:controller config 0))
+                               (int (:chip-select config 0))
+                               (int (:reset-gpio config 25)))]
                  (Diozero/registerForShutdown (into-array MFRC522 [rfid]))
                  {:device rfid
                   :rfid-type rfid-type
@@ -115,7 +116,7 @@
       (let [emitter (async/chan (async/sliding-buffer 512))]
         (try
           (ev/emitize bus emitter)
-          (with-open [device device]
+          (with-open [^MFRC522 device device]
             (loop []
               (let [[new-state external-event] (poller-loop @rfid-state device get-card-uid-fn test-fn)]
                 (when @poller-active?

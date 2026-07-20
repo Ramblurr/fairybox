@@ -52,7 +52,7 @@
     (h/html
      (ui3/css-reload)
      [:main#morph.main
-      [:div
+      [:div {}
        (uic/player-tabs req :page/queue)
        [:div {:id "active-tab"}
         [:div {:class "fade-in-out"}

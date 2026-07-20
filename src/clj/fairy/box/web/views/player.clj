@@ -203,7 +203,7 @@
     (h/html
      (ui3/css-reload)
      [:main#morph.main
-      [:div
+      [:div {}
        (uic/player-tabs req :page/controls)
        (player-controls-tab req)]])))
 

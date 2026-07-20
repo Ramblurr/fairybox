@@ -139,7 +139,7 @@
   (h/html
    (ui3/css-reload)
    [:main#morph.main
-    [:div
+    [:div {}
      (uic/player-tabs req :page/settings)
      [:div {:id "active-tab"}
       [:div {:class "fade-in-out"}
@@ -159,7 +159,7 @@
   (h/html
    (ui3/css-reload)
    [:main#morph.main
-    [:div
+    [:div {}
      (uic/player-tabs req :page/settings)
      [:div {:id "active-tab"}
       [:div {:class "fade-in-out"}
@@ -170,7 +170,7 @@
   (h/html
    (ui3/css-reload)
    [:main#morph.main
-    [:div
+    [:div {}
      (uic/player-tabs req :page/settings)
      [:div {:id "active-tab"}
       [:div {:class "fade-in-out"}
