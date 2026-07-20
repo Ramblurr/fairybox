@@ -160,7 +160,7 @@
               elapsed-ms     (when second-push
                                (quot (- second-push first-push)
                                      1000000))]
-          (is (= {:premature-push? false
+          (is (= {:premature-push?                 false
                   :elapsed-between-200-and-400-ms? true}
                  {:premature-push? (some? premature-push)
                   :elapsed-between-200-and-400-ms?

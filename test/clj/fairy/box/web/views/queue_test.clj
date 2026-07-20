@@ -73,8 +73,8 @@
                                  [1 :class])
           active-class   (get-in (queue/play-queue-item-view 1 (second tracks))
                                  [1 :class])]
-      (is (= {:layout true
-              :labels true
+      (is (= {:layout                 true
+              :labels                 true
               :metadata               true
               :active-state           true
               :full-row-button        true
@@ -119,7 +119,7 @@
           outside-html  (h/html->str
                          (queue/source-path-breadcrumb req "/etc/passwd"))]
       (is (= {:folder-links             3
-              :root-link true
+              :root-link                true
               :parent-link              true
               :folder-link              true
               :playlist-directory-links 1

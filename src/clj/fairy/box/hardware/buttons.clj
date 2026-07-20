@@ -74,7 +74,7 @@
                  nil)
       button-event-chan ([{:keys [event button-id at orig-at]}]
                          ;; (tap> [event button-id at])
-                         (let [states @button-states
+                         (let [states                 @button-states
                                [after external-event] (case event
                                                         :press (press-handler button-event-chan states button-id at)
                                                         :release (release-handler states button-id at)
@@ -130,9 +130,9 @@
     {:event-handler-exit-chan exit-chan
      :button-event-chan       button-event-chan
      :debounced-event-chan    debounced-event-chan
-     :emitter emitter
-     :buttons (doall
-               (map (partial init-button! button-event-chan) buttons))}))
+     :emitter                 emitter
+     :buttons                 (doall
+                               (map (partial init-button! button-event-chan) buttons))}))
 
 (defn release-buttons! [{:keys [buttons emitter button-event-chan event-handler-exit-chan debounced-event-chan]}]
   (async/put! event-handler-exit-chan true)
@@ -163,8 +163,8 @@
    ::ds/config {:hardware-enablement (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/enabled])
-                :bus (ds/ref [:fairy.box/components
-                              :fairy.box.bus/bus])
+                :bus                 (ds/ref [:fairy.box/components
+                                              :fairy.box.bus/bus])
                 :buttons             (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/buttons

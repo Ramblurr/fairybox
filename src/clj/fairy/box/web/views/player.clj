@@ -137,7 +137,7 @@
               :min 0
               :max 100
               :step 1
-              :data-on:pointerdown "$seeking = true"
+              :data-on:pointerdown                    "$seeking = true"
               :data-on:pointerup__window              end-expression
               :data-on:pointercancel__window          end-expression
               :data-on:keydown
@@ -237,7 +237,7 @@
              :min 0
              :max 100
              :step 1
-             :data-on:pointerdown "$adjusting_volume = true"
+             :data-on:pointerdown                    "$adjusting_volume = true"
              :data-on:pointerup__window              end-expression
              :data-on:pointercancel__window          end-expression
              :data-on:keydown

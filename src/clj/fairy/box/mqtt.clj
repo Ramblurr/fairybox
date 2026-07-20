@@ -88,7 +88,7 @@
   (let [{:keys [fairybox-id]} settings
         _ (assert fairybox-id)
         listener              (async/chan (async/sliding-buffer 512))
-        topic (format "fairybox/%s/state" fairybox-id)]
+        topic                 (format "fairybox/%s/state" fairybox-id)]
     (ev/listen bus "/player/events" listener)
     (start-publish-loop! (assoc opts :topic topic) listener)
     {:listener listener}))

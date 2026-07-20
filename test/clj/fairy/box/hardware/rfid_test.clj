@@ -6,7 +6,7 @@
    [jp.nijohando.event :as ev]))
 
 (defn- start-simulator [bus]
-  (rfid/start-component! {:bus bus
+  (rfid/start-component! {:bus                 bus
                           :hardware-enablement {:rfid true}
                           :rfid-type           :simulated
                           :mfrc522             {:reset-gpio 25}}))

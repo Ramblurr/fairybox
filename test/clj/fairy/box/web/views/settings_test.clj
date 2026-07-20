@@ -53,7 +53,7 @@
                           h/html->str)]
       (is (some? action-path))
       (when action-path
-        (is (= {:form true
+        (is (= {:form                true
                 :selection-signal    true
                 :submit-action       true
                 :radio-binding       true
@@ -139,7 +139,7 @@
                              (browse-request tree
                                              "audiobooks/Author Two"))
                             h/html->str)]
-          (is (= {:legacy-layout true
+          (is (= {:legacy-layout                true
                   :heading true
                   :requested-directory          true
                   :ordinary-directory-link      true
@@ -147,7 +147,7 @@
                   :relative-play-path           true
                   :settings-placeholder-removed true
                   :absolute-path-hidden         true
-                  :htmx-removed true}
+                  :htmx-removed                 true}
                  {:legacy-layout
                   (str/includes? nav-html
                                  "<div id=\"active-tab\"><div class=")
@@ -263,16 +263,16 @@
             labels       ["Min Volume" "Max Volume"
                           "Max Volume (Day)" "Max Volume (Night)"
                           "Day Starts At" "Night Starts At"]]
-        (is (= {:legacy-layout true
+        (is (= {:legacy-layout                true
                 :labels true
                 :signals true
                 :bindings true
-                :volume-limits true
-                :hour-limits true
-                :submit-action true
+                :volume-limits                true
+                :hour-limits                  true
+                :submit-action                true
                 :ordinary-back-link           true
                 :settings-placeholder-removed true
-                :htmx-removed true}
+                :htmx-removed                 true}
                {:legacy-layout
                 (and (str/includes? html "id=\"active-tab\"")
                      (str/includes? html "id=\"playback-settings\"")

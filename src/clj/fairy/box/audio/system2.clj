@@ -113,10 +113,10 @@
          hour-night-start    (db/hour-night-start db)
          max-volume-night    (db/max-volume-night db)
          max-volume-day      (db/max-volume-day db)
-         m (min absolute-max-volume
-                (if (< (dec hour-day-start) current-hour hour-night-start)
-                  (or max-volume-day absolute-max-volume)
-                  (or max-volume-night absolute-max-volume)))]
+         m                   (min absolute-max-volume
+                                  (if (< (dec hour-day-start) current-hour hour-night-start)
+                                    (or max-volume-day absolute-max-volume)
+                                    (or max-volume-night absolute-max-volume)))]
      m))
   ([db]
    (maximum-volume db (-> (java.time.LocalTime/now) (.getHour)))))

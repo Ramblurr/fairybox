@@ -96,7 +96,7 @@
     (speak-card-contents sys item-path)
     (emit-tts! emitter {:action              :tts/speak
                         :audio/play-one-shot false
-                        :text "This one is empty."})))
+                        :text                "This one is empty."})))
 
 (defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as _sys} {:keys [uid]}]
   (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
@@ -106,7 +106,7 @@
                            :value {:action              :audio/play-path
                                    :announce-per-track? nil
                                    :item-path           item-path
-                                   :uid uid}}))
+                                   :uid                 uid}}))
     (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
 
 (defn cap-volume! [emitter]

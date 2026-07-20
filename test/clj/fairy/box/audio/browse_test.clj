@@ -8,7 +8,7 @@
 (deftest canonical-path-containment
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-browse-"}]
     (let [{:keys [root settings]} (media/populate-media-tree! temp-dir)
-          sibling (str root "-outside")]
+          sibling                 (str root "-outside")]
       (try
         (fs/create-dirs sibling)
         (is (= {:root            true

@@ -25,6 +25,6 @@
          :fairy.box.web/rfid-presence
          {:state    (atom {:action :removed :uid nil})
           :refresh! (constantly nil)}}]
-    {:uri "/settings/rfid"
+    {:uri                 "/settings/rfid"
      :query-params        (cond-> {} dir (assoc "dir" dir))
      :fairy.box/component components}))

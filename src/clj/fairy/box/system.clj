@@ -69,12 +69,12 @@
    ::ds/stop   (fn [{instance ::ds/instance}]
                  (stop-web-server! instance))
    ::ds/config {:port       (ds/ref [:config :fairy.box/components :fairy.box.web/server :port])
-                :components {:fairy.box/settings (component-ref :fairy.box/settings)
-                             :fairy.box.db/db (component-ref :fairy.box.db/db)
-                             :fairy.box.bus/bus (component-ref :fairy.box.bus/bus)
+                :components {:fairy.box/settings                 (component-ref :fairy.box/settings)
+                             :fairy.box.db/db                    (component-ref :fairy.box.db/db)
+                             :fairy.box.bus/bus                  (component-ref :fairy.box.bus/bus)
                              :fairy.box.switchboard/switchboard  (component-ref :fairy.box.switchboard/switchboard)
                              :fairy.box.audio.system2/player     (component-ref :fairy.box.audio.system2/player)
-                             :fairy.box.tts/tts (component-ref :fairy.box.tts/tts)
+                             :fairy.box.tts/tts                  (component-ref :fairy.box.tts/tts)
                              :fairy.box.web/rfid-presence        (component-ref :fairy.box.web/rfid-presence)
                              :fairy.box.web/player-progress      (component-ref :fairy.box.web/player-progress)
                              :fairy.box.web/player-event-refresh (component-ref :fairy.box.web/player-event-refresh)
@@ -103,7 +103,7 @@
                                       :fairy.box.hardware/leds            led/LedsComponent
                                       :fairy.box.mqtt/client              mqtt/MqttComponent
                                       :fairy.box.web/server               WebServerComponent
-                                      :fairy.box/startup settings/StartupComponent}}}))
+                                      :fairy.box/startup                  settings/StartupComponent}}}))
 
 (defonce app_ (atom nil))
 

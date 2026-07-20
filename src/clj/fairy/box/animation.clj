@@ -254,7 +254,7 @@
                   easing-fn    ease-linear}}]
   (let [steps (int  (* FPS (/ duration 1000)))]
     {:from              from
-     :to to
+     :to                to
      :duration          duration
      :orig-delay        delay
      :delay             delay

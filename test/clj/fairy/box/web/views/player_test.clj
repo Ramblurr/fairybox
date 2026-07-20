@@ -74,7 +74,7 @@
                       '[control-player seek-player set-player-volume])
         html    (h/html->str ((render-fn) (player-request)))]
     (is (= {:layout true
-            :metadata true
+            :metadata                   true
             :labels-and-icons           true
             :actions-present            true
             :datastar-actions           true
@@ -83,12 +83,12 @@
             :server-driven-time-updates true
             :legacy-command-removed     true
             :htmx-removed               true}
-           {:layout (every? #(str/includes? html %)
-                            ["id=\"active-tab\""
-                             "id=\"player-controls\""
-                             "id=\"progress-bar\""
-                             "id=\"volume-slider\""
-                             "src=\"/api/current-artwork?v="])
+           {:layout                 (every? #(str/includes? html %)
+                                            ["id=\"active-tab\""
+                                             "id=\"player-controls\""
+                                             "id=\"progress-bar\""
+                                             "id=\"volume-slider\""
+                                             "src=\"/api/current-artwork?v="])
             :metadata               (every? #(str/includes? html %)
                                             ["Track title" "Track artist" "Track album"])
             :labels-and-icons

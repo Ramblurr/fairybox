@@ -234,8 +234,8 @@
    ::ds/config {:hardware-enablement (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/enabled])
-                :bus (ds/ref [:fairy.box/components
-                              :fairy.box.bus/bus])
+                :bus                 (ds/ref [:fairy.box/components
+                                              :fairy.box.bus/bus])
                 :rfid-type           (ds/ref [:config
                                               :fairy.box/components
                                               :fairy.box.hardware/rfid
