@@ -79,6 +79,7 @@
             :actions-present true
             :datastar-actions true
             :ephemeral-slider-signals true
+            :server-pushed-progress true
             :server-driven-time-updates true
             :legacy-command-removed true
             :htmx-removed true}
@@ -112,11 +113,21 @@
                      "data-signals:_server_progress="
                      "data-bind=\"progress\""
                      "data-bind=\"volume\""])
+            :server-pushed-progress
+            (every? #(str/includes? html %)
+                    ["data-init=\"@get("
+                     "/api/player/progress-stream"
+                     "retryMaxCount: Infinity"
+                     "openWhenHidden: false"
+                     "requestCancellation: &apos;cleanup&apos;"])
             :server-driven-time-updates
             (and (str/includes? html ">01:01</div>")
                  (not (str/includes? html
                                      "data-on-interval__duration.1s="))
-                 (not (str/includes? html "data-text=")))
+                 (str/includes? html
+                                "data-text=\"$_server_time\"")
+                 (str/includes? html
+                                "data-text=\"$_server_time_left\""))
             :legacy-command-removed (not (str/includes? html "/player-cmd"))
             :htmx-removed (not (str/includes? html "hx-"))}))))
 

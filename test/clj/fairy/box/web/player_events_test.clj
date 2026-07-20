@@ -12,62 +12,114 @@
     (when (= port channel)
       value)))
 
-(deftest refreshes-for-all-player-state-including-time-and-position
+(deftest classifies-progress-and-structural-events-separately
+  (let [progress-event? (ns-resolve 'fairy.box.web.player-events
+                                    'progress-event?)
+        events [:player/time-changed
+                :player/position-changed
+                :player/state-changed
+                :player/current-track-changed
+                :player/muted
+                :player/volume-changed
+                :player/repeat-changed
+                :player/shuffle-changed
+                :player/queue-changed
+                :player/one-shot-finished]]
+    (is (= {:progress [true true false false false false false false false false]
+            :refresh [false false true true true true true true true false]}
+           {:progress (when progress-event?
+                        (mapv #(boolean (progress-event? {:value {:event %}}))
+                              events))
+            :refresh (mapv #(player-events/refresh-event?
+                             {:value {:event %}})
+                           events)}))))
+
+(deftest routes-progress-events-without-refreshing-the-page
   (let [bus (ev/bus)
-        emitter (async/chan 16)
-        refreshes (async/chan 16)
-        refresher (player-events/start-player-refresh!
-                   {:bus bus
-                    :refresh! #(async/>!! refreshes :refreshed)})
-        state-events
-        [:player/state-changed
-         :player/current-track-changed
-         :player/muted
-         :player/volume-changed
-         :player/repeat-changed
-         :player/shuffle-changed
-         :player/queue-changed
-         :player/time-changed
-         :player/position-changed]]
+        emitter (async/chan 4)
+        progress-pushes (async/chan 4)
+        refreshes (async/chan 4)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :progress! #(async/>!! progress-pushes :progress)
+          :refresh! #(async/>!! refreshes :refreshed)})]
     (try
       (ev/emitize bus emitter)
-      (let [state-refreshes
-            (mapv (fn [event]
-                    (async/>!! emitter
-                               {:path "/player/events"
-                                :value {:event event}})
-                    (await-value refreshes 1000))
-                  state-events)]
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/time-changed}})
+      (let [progress-result (await-value progress-pushes 1000)
+            progress-refresh (await-value refreshes 100)]
         (async/>!! emitter
                    {:path "/player/events"
-                    :value {:event :player/one-shot-finished}})
-        (is (= {:state-refreshes
-                (vec (repeat (count state-events) :refreshed))
-                :unrelated-refresh nil}
-               {:state-refreshes state-refreshes
-                :unrelated-refresh (await-value refreshes 100)})))
+                    :value {:event :player/state-changed}})
+        (is (= {:progress-event {:progress progress-result
+                                 :refresh progress-refresh}
+                :structural-event
+                {:progress (await-value progress-pushes 100)
+                 :refresh (await-value refreshes 1000)}}
+               {:progress-event {:progress :progress
+                                 :refresh nil}
+                :structural-event {:progress nil
+                                   :refresh :refreshed}})))
       (finally
         (player-events/stop-player-refresh! refresher)
         (async/close! emitter)
+        (async/close! progress-pushes)
         (async/close! refreshes)
         (ev/close! bus)))))
 
-(deftest stopped-refresher-does-not-refresh
+(deftest ignores-unrelated-player-events
   (let [bus (ev/bus)
         emitter (async/chan 1)
+        progress-pushes (async/chan 1)
         refreshes (async/chan 1)
-        refresher (player-events/start-player-refresh!
-                   {:bus bus
-                    :refresh! #(async/>!! refreshes :refreshed)})]
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :progress! #(async/>!! progress-pushes :progress)
+          :refresh! #(async/>!! refreshes :refreshed)})]
+    (try
+      (ev/emitize bus emitter)
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/one-shot-finished}})
+      (is (= {:progress nil :refresh nil}
+             {:progress (await-value progress-pushes 100)
+              :refresh (await-value refreshes 100)}))
+      (finally
+        (player-events/stop-player-refresh! refresher)
+        (async/close! emitter)
+        (async/close! progress-pushes)
+        (async/close! refreshes)
+        (ev/close! bus)))))
+
+(deftest stopped-refresher-does-not-push-or-refresh
+  (let [bus (ev/bus)
+        emitter (async/chan 2)
+        progress-pushes (async/chan 1)
+        refreshes (async/chan 1)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :progress! #(async/>!! progress-pushes :progress)
+          :refresh! #(async/>!! refreshes :refreshed)})]
     (try
       (ev/emitize bus emitter)
       (player-events/stop-player-refresh! refresher)
       (async/>!! emitter
                  {:path "/player/events"
+                  :value {:event :player/time-changed}})
+      (async/>!! emitter
+                 {:path "/player/events"
                   :value {:event :player/queue-changed}})
-      (is (nil? (await-value refreshes 100)))
+      (is (= {:progress nil :refresh nil}
+             {:progress (await-value progress-pushes 100)
+              :refresh (await-value refreshes 100)}))
       (finally
         (async/close! emitter)
+        (async/close! progress-pushes)
         (async/close! refreshes)
         (ev/close! bus)))))
 
@@ -84,41 +136,42 @@
       (finally
         (async/close! listener)))))
 
-(deftest throttles-player-refreshes-to-500-ms
+(deftest throttles-progress-pushes-to-250-ms
   (let [bus (ev/bus)
         emitter (async/chan 2)
-        refreshes (async/chan 2)
+        progress-pushes (async/chan 2)
         refresher
         (player-events/start-player-refresh!
          {:bus bus
-          :refresh! #(async/>!! refreshes (System/nanoTime))})]
+          :progress! #(async/>!! progress-pushes (System/nanoTime))
+          :refresh! (fn [])})]
     (try
       (ev/emitize bus emitter)
       (async/>!! emitter
                  {:path "/player/events"
                   :value {:event :player/time-changed}})
-      (let [first-refresh (await-value refreshes 1000)]
+      (let [first-push (await-value progress-pushes 1000)]
         (async/>!! emitter
                    {:path "/player/events"
                     :value {:event :player/position-changed}})
-        (let [premature-refresh (await-value refreshes 350)
-              second-refresh (or premature-refresh
-                                 (await-value refreshes 1000))
-              elapsed-ms (when second-refresh
-                           (quot (- second-refresh first-refresh)
+        (let [premature-push (await-value progress-pushes 150)
+              second-push (or premature-push
+                              (await-value progress-pushes 350))
+              elapsed-ms (when second-push
+                           (quot (- second-push first-push)
                                  1000000))]
-          (is (= {:premature-refresh? false
-                  :elapsed-at-least-450-ms? true}
-                 {:premature-refresh? (some? premature-refresh)
-                  :elapsed-at-least-450-ms?
-                  (and elapsed-ms (>= elapsed-ms 450))}))))
+          (is (= {:premature-push? false
+                  :elapsed-between-200-and-400-ms? true}
+                 {:premature-push? (some? premature-push)
+                  :elapsed-between-200-and-400-ms?
+                  (and elapsed-ms (<= 200 elapsed-ms 400))}))))
       (finally
         (player-events/stop-player-refresh! refresher)
         (async/close! emitter)
-        (async/close! refreshes)
+        (async/close! progress-pushes)
         (ev/close! bus)))))
 
-(deftest coalesces-relevant-refreshes-without-blocking-the-event-bus
+(deftest coalesces-page-refreshes-without-blocking-the-event-bus
   (let [bus (ev/bus)
         emitter (async/chan)
         refreshes (async/chan 2)
@@ -128,6 +181,7 @@
         refresher
         (player-events/start-player-refresh!
          {:bus bus
+          :progress! (fn [])
           :refresh! #(do
                        (when (compare-and-set! first-refresh? true false)
                          (deliver refresh-started true)
@@ -141,7 +195,7 @@
                         :value
                         {:event (if (= i 127)
                                   :player/one-shot-finished
-                                  :player/time-changed)}}))
+                                  :player/queue-changed)}}))
           :finished)]
     (try
       (ev/emitize bus emitter)
@@ -160,7 +214,37 @@
         (async/close! refreshes)
         (ev/close! bus)))))
 
-(deftest continues-refreshing-after-a-refresh-error
+(deftest page-refresh-does-not-wait-for-a-progress-push
+  (let [bus (ev/bus)
+        emitter (async/chan 2)
+        progress-started (promise)
+        release-progress (promise)
+        refreshes (async/chan 1)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :progress! #(do
+                        (deliver progress-started true)
+                        @release-progress)
+          :refresh! #(async/>!! refreshes :refreshed)})]
+    (try
+      (ev/emitize bus emitter)
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/time-changed}})
+      (is (true? (deref progress-started 1000 false)))
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/state-changed}})
+      (is (= :refreshed (await-value refreshes 1000)))
+      (finally
+        (deliver release-progress true)
+        (player-events/stop-player-refresh! refresher)
+        (async/close! emitter)
+        (async/close! refreshes)
+        (ev/close! bus)))))
+
+(deftest continues-pushing-progress-after-an-error
   (let [bus (ev/bus)
         emitter (async/chan 2)
         attempts (async/chan 2)
@@ -168,10 +252,11 @@
         refresher
         (player-events/start-player-refresh!
          {:bus bus
-          :refresh! #(let [attempt (swap! attempt-number inc)]
-                       (async/>!! attempts attempt)
-                       (when (= attempt 1)
-                         (throw (ex-info "refresh failed" {}))))})]
+          :progress! #(let [attempt (swap! attempt-number inc)]
+                        (async/>!! attempts attempt)
+                        (when (= attempt 1)
+                          (throw (ex-info "push failed" {}))))
+          :refresh! (fn [])})]
     (try
       (ev/emitize bus emitter)
       (async/>!! emitter
@@ -189,9 +274,56 @@
         (async/close! attempts)
         (ev/close! bus)))))
 
-(deftest system-includes-player-event-refresher
-  (is (= player-events/PlayerEventRefreshComponent
-         (get-in (system/system)
-                 [:donut.system/defs
-                  :fairy.box/components
-                  :fairy.box.web/player-event-refresh]))))
+(deftest continues-refreshing-after-a-refresh-error
+  (let [bus (ev/bus)
+        emitter (async/chan 2)
+        attempts (async/chan 2)
+        attempt-number (atom 0)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus bus
+          :progress! (fn [])
+          :refresh! #(let [attempt (swap! attempt-number inc)]
+                       (async/>!! attempts attempt)
+                       (when (= attempt 1)
+                         (throw (ex-info "refresh failed" {}))))})]
+    (try
+      (ev/emitize bus emitter)
+      (async/>!! emitter
+                 {:path "/player/events"
+                  :value {:event :player/state-changed}})
+      (let [first-attempt (await-value attempts 1000)]
+        (async/>!! emitter
+                   {:path "/player/events"
+                    :value {:event :player/queue-changed}})
+        (is (= [1 2]
+               [first-attempt (await-value attempts 1000)])))
+      (finally
+        (player-events/stop-player-refresh! refresher)
+        (async/close! emitter)
+        (async/close! attempts)
+        (ev/close! bus)))))
+
+(deftest system-includes-player-event-and-progress-components
+  (let [components (get-in (system/system)
+                           [:donut.system/defs
+                            :fairy.box/components])
+        progress-component
+        (try
+          (some-> (requiring-resolve
+                   'fairy.box.web.player-progress/ProgressStreamComponent)
+                  var-get)
+          (catch Throwable _
+            nil))]
+    (is (= {:event-component player-events/PlayerEventRefreshComponent
+            :progress-component progress-component
+            :progress-stream-ref
+            [:donut.system/ref
+             [:fairy.box/components :fairy.box.web/player-progress]]}
+           {:event-component
+            (:fairy.box.web/player-event-refresh components)
+            :progress-component
+            (:fairy.box.web/player-progress components)
+            :progress-stream-ref
+            (get-in player-events/PlayerEventRefreshComponent
+                    [:donut.system/config :progress-stream])}))))

@@ -4,6 +4,7 @@
    [fairy.box.switchboard :as switchboard]
    [fairy.box.ui3 :as ui3]
    [fairy.box.web.controllers.artwork :as artwork]
+   [fairy.box.web.player-progress :as progress]
    [fairy.box.web.views.common :as uic :refer [cs]]
    [fairy.box.web.views.icon :as icon]
    [hyperlith.core :as h :refer [defaction defview]]
@@ -91,41 +92,8 @@
 
 (router/add-route! [:get "/api/current-artwork"] #'artwork/current-artwork)
 
-(defn duration-data
-  [^long duration-in-millis]
-  (let [milliseconds (mod duration-in-millis 1000)
-        duration-in-secs (quot duration-in-millis 1000)
-        seconds (mod duration-in-secs 60)
-        duration-in-mins (quot duration-in-secs 60)
-        minutes (mod duration-in-mins 60)
-        duration-in-hours (quot duration-in-mins 60)
-        hours (mod duration-in-hours 24)
-        days (quot duration-in-hours 24)]
-    {:milliseconds milliseconds
-     :seconds seconds
-     :minutes minutes
-     :hours hours
-     :days days}))
-
-(defn format-duration [milliseconds]
-  (when milliseconds
-    (let [{:keys [days hours minutes seconds milliseconds]}
-          (duration-data milliseconds)
-          rounded-seconds (if (> milliseconds 0)
-                            (inc seconds)
-                            seconds)]
-      (str (when (> days 0) (format "%02dd " days))
-           (when (> hours 0) (format "%02d:" hours))
-           (format "%02d" minutes)
-           ":"
-           (format "%02d" rounded-seconds)))))
-
-(defn- progress-percentage [current-position]
-  (if (number? current-position)
-    (-> (* 100.0 current-position)
-        (max 0.0)
-        (min 100.0))
-    0.0))
+(def duration-data progress/duration-data)
+(def format-duration progress/format-duration)
 
 (defn- command-expression [command]
   (str "@post('" control-player
@@ -133,7 +101,7 @@
        "')"))
 
 (defn- player-signals [current]
-  (let [progress (progress-percentage (player/position current))
+  (let [progress (progress/progress-percentage (player/position current))
         volume (or (player/volume current) 0)]
     {:data-signals:progress__ifmissing progress
      :data-signals:volume__ifmissing volume
@@ -183,6 +151,7 @@
 
 (defn the-time [current-time]
   [:div {:id "current-time"
+         :data-text "$_server_time"
          :class (css :transition-all :duration-500)}
    (format-duration (or current-time 0))])
 
@@ -216,11 +185,10 @@
   (when duration
     [:div {:id "current-length"
            :data-length (str duration)
+           :data-text "$_server_time_left"
            :class (css :transition-all :duration-500 :text-smoky-500
                        [:dark :text-smoky-500])}
-     (if (not current-time)
-       (format-duration duration)
-       (str "-" (format-duration (- duration current-time))))]))
+     (progress/format-time-left current-time duration)]))
 
 (defn play-pause-button [state]
   (let [button-icon (condp = state
@@ -315,7 +283,13 @@
                            [:active :text-smoky-950 :scale-125 :duration-500]]
                           [:dark :text-smoky-100
                            [:active :text-smoky-500]])]
-    [:div (cond-> {:id "player-controls"}
+    [:div (cond->
+           {:id "player-controls"
+            :data-init
+            (str "@get('" progress/stream-path
+                 "', {retry: 'error', retryMaxCount: Infinity, "
+                 "openWhenHidden: false, "
+                 "requestCancellation: 'cleanup'})")}
             track-loaded? (merge (player-signals current)))
      (if track-loaded?
        [:div {:class (css :mt-6 :mb-10 :flex :flex-col
