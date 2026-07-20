@@ -154,28 +154,38 @@
       :else (/ (+ (* (Math/pow (- (* x 2) 2) 2) (+ (* (+ c2 1) (- (* x 2) 2)) c2)) 2) 2))))
 
 ;;; Elastic easing functions
+(def ^:private elastic-angular-frequency (* 2 Math/PI 1/3))
+(def ^:private elastic-in-out-angular-frequency (* 2 Math/PI 5/4))
 
 (defn ease-in-elastic
   [x]
   (cond
     (zero? x) 0
     (= 1 x) 1
-    :else (* (- (Math/pow 2 (- (* x 10) 10))) (Math/sin (* (- (* x 10) 10.75) (* 2 Math/PI 1/3))))))
+    :else (* (- (Math/pow 2 (- (* x 10) 10)))
+             (Math/sin (* (- (* x 10) 10.75) elastic-angular-frequency)))))
 
 (defn ease-out-elastic
   [x]
   (cond
     (zero? x) 0
     (= 1 x) 1
-    :else (+ (* (Math/pow 2 (* x -10)) (Math/sin (* (- (* x 10) 0.75) (* 2 Math/PI 1/3)))) 1)))
+    :else (+ (* (Math/pow 2 (* x -10))
+                (Math/sin (* (- (* x 10) 0.75) elastic-angular-frequency)))
+             1)))
 
 (defn ease-in-out-elastic
   [x]
   (cond
     (zero? x) 0
     (= 1 x) 1
-    (< x 0.5) (/ (- (* (Math/pow 2 (- (* x 20) 10)) (Math/sin (* (- (* x 10) 11.125) (* 2 Math/PI 5/4))))) 2)
-    :else (+ (/ (* (Math/pow 2 (+ (* x -20) 10)) (Math/sin (* (- (* x 10) 11.125) (* 2 Math/PI 5/4)))) 2) 1)))
+    (< x 0.5) (/ (- (* (Math/pow 2 (- (* x 20) 10))
+                       (Math/sin (* (- (* x 10) 11.125) elastic-in-out-angular-frequency))))
+                 2)
+    :else (+ (/ (* (Math/pow 2 (+ (* x -20) 10))
+                   (Math/sin (* (- (* x 10) 11.125) elastic-in-out-angular-frequency)))
+                2)
+             1)))
 
 ;;; Bouncing easing functions
 
