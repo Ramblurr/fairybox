@@ -4,6 +4,7 @@
    [clojure.core.async :as async]
    [clojure.string :as str]
    [clojure.test :refer [deftest is use-fixtures]]
+   [fairy.box.audio.current :as current]
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.media-test-utils :as media]
    [fairy.box.web.views.queue :as queue]
@@ -87,9 +88,11 @@
           _              (reset! audio-system/audio-state state)
           html           (h/html->str ((render-fn) (queue-request tree)))
           tracks         (get-in state [:queue :tracks])
-          inactive-class (get-in (queue/play-queue-item-view 0 (first tracks))
+          inactive-class (get-in (queue/play-queue-item-view
+                                  0 0 (first tracks))
                                  [1 :class])
-          active-class   (get-in (queue/play-queue-item-view 1 (second tracks))
+          active-class   (get-in (queue/play-queue-item-view
+                                  0 1 (second tracks))
                                  [1 :class])]
       (is (= {:layout                 true
               :labels                 true
@@ -114,13 +117,72 @@
                (map-indexed
                 (fn [idx track]
                   (= :button
-                     (get-in (queue/play-queue-item-view idx track) [2 0])))
+                     (get-in (queue/play-queue-item-view 0 idx track) [2 0])))
                 tracks))
               :datastar-action (and (str/includes? html "data-on:click=")
                                     (str/includes? html (action-path)))
               :legacy-command-removed
               (not (str/includes? html "/player-cmd"))
               :htmx-removed    (not (str/includes? html "hx-"))})))))
+
+(deftest hides-tts-tracks-without-renumbering-queue-controls-test
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-queue-tts-render-"}]
+    (let [tts              {:id   "announcement"
+                            :mrl  "file:///media/tts-cache/introduction.tts-cache"
+                            :meta #:meta{:title "introduction.tts-cache"}}
+          introduction     {:id    "introduction"
+                            :mrl   "file:///media/Introduction.mp3"
+                            :index 1
+                            :meta  #:meta{:title "Introduction"}}
+          tomorrow         {:id    "tomorrow"
+                            :mrl   "file:///media/Tomorrow.mp3"
+                            :index 3
+                            :meta  #:meta{:title "Tomorrow"}}
+          base-state       (sample-state)
+          state            (assoc base-state
+                                  :playback {:state         :playing
+                                             :current-track tts}
+                                  :queue (assoc (:queue base-state)
+                                                :tracks
+                                                [(assoc tts :index 0)
+                                                 introduction
+                                                 (assoc tts
+                                                        :id "second-announcement"
+                                                        :index 2
+                                                        :mrl
+                                                        "file:///media/tts-cache/tomorrow.tts-cache")
+                                                 tomorrow]))
+          _                (reset! audio-system/audio-state state)
+          tree             (media/populate-media-tree! temp-dir)
+          html             (h/html->str ((render-fn) (queue-request tree)))
+          display          (current/display-queue (current/full-queue state))
+          current-index    (:index (current/display-track state))
+          active-class     (get-in (queue/play-queue-item-view
+                                    current-index 0 introduction)
+                                   [1 :class])
+          inactive-class   (get-in (queue/play-queue-item-view
+                                    current-index 1 tomorrow)
+                                   [1 :class])
+          rows             (re-seq #"<li .*?</li>" html)
+          introduction-row (some #(when (str/includes? % "Introduction") %)
+                                 rows)
+          tomorrow-row     (some #(when (str/includes? % "Tomorrow") %) rows)]
+      (is (= {:titles-visible?       true
+              :cache-names-hidden?   true
+              :physical-indices      [1 3]
+              :physical-controls?    true
+              :announced-highlighted true}
+             {:titles-visible?
+              (every? #(str/includes? html %) ["Introduction" "Tomorrow"])
+              :cache-names-hidden?
+              (not (or (str/includes? html "introduction.tts-cache")
+                       (str/includes? html "tomorrow.tts-cache")))
+              :physical-indices (mapv :index display)
+              :physical-controls?
+              (every? #(str/includes? html (str "item-index=" %)) [1 3])
+              :announced-highlighted
+              (and (str/includes? introduction-row active-class)
+                   (str/includes? tomorrow-row inactive-class))})))))
 
 (deftest links-each-media-directory-to-browse
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-queue-source-"}]

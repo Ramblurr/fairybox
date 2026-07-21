@@ -1,10 +1,19 @@
 (ns fairy.box.audio.current
   (:refer-clojure :exclude [time])
   (:require
+   [clojure.string :as str]
    [fairy.box.audio.system2 :as audio]))
 
 (defn current! []
   @audio/audio-state)
+
+(defn current-track [c]
+  (get-in c [:playback :current-track]))
+
+(defn tts-cache-track? [track]
+  (boolean
+   (some-> (:mrl track)
+           (str/ends-with? ".tts-cache"))))
 
 (defn duration [c]
   (get-in c [:playback :current-track :duration]))
@@ -77,3 +86,19 @@
 
 (defn full-queue [c]
   (get-in c [:queue :tracks]))
+
+(defn display-track
+  ([c]
+   (display-track (current-track c) (full-queue c)))
+  ([physical-current physical-queue]
+   (if-not (tts-cache-track? physical-current)
+     physical-current
+     (or (some (fn [{:keys [index] :as track}]
+                 (when (and (pos? (or index 0))
+                            (not (tts-cache-track? track)))
+                   track))
+               physical-queue)
+         (assoc physical-current :meta #:meta{:title "TTS"})))))
+
+(defn display-queue [physical-queue]
+  (into [] (remove tts-cache-track?) physical-queue))

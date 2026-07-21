@@ -39,7 +39,7 @@
 
 (defn get-current-artwork-path! []
   (let [{:meta/keys [artwork-url] :as meta}
-        (get-in (current/current!) [:playback :current-track :meta])]
+        (:meta (current/display-track (current/current!)))]
     (when artwork-url
       (cond
         (str/starts-with? artwork-url "attachment://") (artwork-attachment-to-path meta)

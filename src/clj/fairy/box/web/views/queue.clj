@@ -42,12 +42,12 @@
       album? album
       :else nil)))
 
-(defn play-queue-item-view [nat-idx {:keys [meta index]}]
+(defn play-queue-item-view [current-index nat-idx {:keys [meta index]}]
   (let [{:meta/keys [title album artist]} meta
         $base (css :flex :items-center :justify-between :gap-x-6 :gap-y-2
                    :py-2 :pl-2 :rounded-lg :shadow)
         $current (css :bg-smoky-300 [:dark :bg-smoky-900])]
-    [:li {:class (cs $base (when (= 0 index) $current))}
+    [:li {:class (cs $base (when (= current-index index) $current))}
      [:button
       {:class         (css :w-full :text-left)
        :data-on:click (str "@post('"
@@ -97,7 +97,7 @@
                 relative-paths)))))))
 
 (defn play-queue-list
-  [{:keys [tracks source-type source-path url-for] :as req}]
+  [{:keys [current-index tracks source-type source-path url-for] :as req}]
   [:div {:id "play-queue" :class "fade-in-out"}
    (if (seq tracks)
      [:div
@@ -112,7 +112,7 @@
       [:div
        [:p {:class (css :text-lg :font-bold)} "Tracks"]]
       [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
-       (map-indexed play-queue-item-view tracks)]]
+       (map-indexed (partial play-queue-item-view current-index) tracks)]]
      [:div {:class (css :flex :justify-center :items-center :mt-10)}
       [:div {:class (css :outline-dotted :p-6 :rounded-lg
                          :outline-smoky-400 :text-smoky-900
@@ -125,7 +125,8 @@
   [req]
   (let [current (player/current!)
         req     (assoc req
-                       :tracks (player/full-queue current)
+                       :current-index (or (:index (player/display-track current)) 0)
+                       :tracks (player/display-queue (player/full-queue current))
                        :source-type (player/queue-source-type current)
                        :source-path (player/queue-source-path current))]
     (h/html

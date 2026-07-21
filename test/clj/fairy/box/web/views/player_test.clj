@@ -502,6 +502,64 @@
       (finally
         (async/close! commands)))))
 
+(deftest renders-announced-track-metadata-artwork-and-physical-progress-test
+  (fs/with-temp-dir [temp-dir]
+    (let [image-path (fs/path temp-dir "announced-cover.png")
+          tts        {:id       "announcement"
+                      :mrl      "file:///media/tts-cache/announcement.tts-cache"
+                      :duration 3000
+                      :meta     #:meta{:title "announcement.tts-cache"}}
+          announced  {:id       "introduction"
+                      :mrl      "file:///media/Introduction.mp3"
+                      :index    1
+                      :duration 244000
+                      :meta     #:meta{:title       "Introduction"
+                                       :artist      "The Artist"
+                                       :album       "The Album"
+                                       :artwork-url (str (.toUri image-path))}}
+          state      (-> (sample-state)
+                         (assoc-in [:playback :current-track] tts)
+                         (assoc-in [:playback :time] 1000)
+                         (assoc-in [:playback :position] 0.333)
+                         (assoc-in [:queue :tracks]
+                                   [(assoc tts :index 0) announced]))
+          _          (spit (str image-path) "png")
+          _          (reset! audio-system/audio-state state)
+          html       (h/html->str
+                      (player/player
+                       (assoc (player-request) :current state)))]
+      (is (= {:logical-metadata        true
+              :cache-name-hidden?      true
+              :physical-duration?      true
+              :logical-artwork-version (str "/api/current-artwork?v="
+                                            (hash announced))
+              :logical-artwork-path    (str image-path)}
+             {:logical-metadata
+              (every? #(str/includes? html %)
+                      ["Introduction" "The Artist" "The Album"])
+              :cache-name-hidden?
+              (not (str/includes? html "announcement.tts-cache"))
+              :physical-duration?
+              (str/includes? html "data-length=\"3000\"")
+              :logical-artwork-version
+              (get-in (player/current-artwork state) [1 :src])
+              :logical-artwork-path
+              (some-> (artwork/actual-artwork) first str)})))))
+
+(deftest renders-simple-fallback-for-orphaned-tts-test
+  (let [tts   {:id   "orphaned-announcement"
+               :mrl  "file:///media/tts-cache/orphaned.tts-cache"
+               :meta #:meta{:title "orphaned.tts-cache"}}
+        state (-> (sample-state)
+                  (assoc-in [:playback :current-track] tts)
+                  (assoc-in [:queue :tracks] [(assoc tts :index 0)]))
+        html  (h/html->str (player/current-meta state))]
+    (is (= {:fallback-visible?  true
+            :cache-name-hidden? true}
+           {:fallback-visible? (str/includes? html ">TTS</div>")
+            :cache-name-hidden?
+            (not (str/includes? html "orphaned.tts-cache"))}))))
+
 (deftest changes-artwork-url-when-the-current-track-changes
   (let [state       (sample-state)
         next-state  (assoc-in state

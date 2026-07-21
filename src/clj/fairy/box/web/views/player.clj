@@ -249,19 +249,20 @@
          :class (css :object-cover :w-64 :h-64)
          :style "transform: translateZ(0)"
          :src   (str "/api/current-artwork?v="
-                     (hash (get-in current [:playback :current-track])))}])
+                     (hash (player/display-track current)))}])
 
-(defn current-meta [c]
-  [:div {:id "current-meta" :class (css :flex :flex-col :gap-y-1)}
-   [:div {:class (css :text-center :text-xl :text-smoky-800 :font-bold
-                      [:dark :text-white])}
-    (player/track-title c)]
-   [:div {:class (css :text-center :text-lg :text-smoky-800 :font-semibold
-                      [:dark :text-gray-400])}
-    (player/album c)]
-   [:div {:class (css :text-center :text-sm :text-smoky-800 :font-semibold
-                      [:dark :text-gray-400])}
-    (player/artist c)]])
+(defn current-meta [current]
+  (let [{:meta/keys [title album artist]} (:meta (player/display-track current))]
+    [:div {:id "current-meta" :class (css :flex :flex-col :gap-y-1)}
+     [:div {:class (css :text-center :text-xl :text-smoky-800 :font-bold
+                        [:dark :text-white])}
+      title]
+     [:div {:class (css :text-center :text-lg :text-smoky-800 :font-semibold
+                        [:dark :text-gray-400])}
+      album]
+     [:div {:class (css :text-center :text-sm :text-smoky-800 :font-semibold
+                        [:dark :text-gray-400])}
+      artist]]))
 
 (defn the-length [duration]
   [:div {:id          "current-length"
