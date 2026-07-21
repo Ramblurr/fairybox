@@ -86,12 +86,14 @@
   (println (str "Compiling Clojure for " (name variant) " build..."))
   (b/compile-clj {:basis     basis
                   :src-dirs  source-dirs
-                  :class-dir class-dir})
+                  :class-dir class-dir
+                  :java-opts ["--enable-native-access=ALL-UNNAMED"]})
   (println (str "Making " uber-file "..."))
   (b/uber {:class-dir class-dir
            :uber-file uber-file
            :main      main-cls
-           :basis     basis}))
+           :basis     basis
+           :manifest  {"Enable-Native-Access" "ALL-UNNAMED"}}))
 
 (defn uber [opts]
   (uber-variant! (variant-config opts)))
