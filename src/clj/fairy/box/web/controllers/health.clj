@@ -4,21 +4,18 @@
   (:require
    [fairy.box.switchboard :as switchboard]
    [fairy.box.util :as util]
-   [hyperlith.impl.router :as router]
-   [ring.util.http-response :as http-response])
+   [hyperlith.impl.router :as router])
   (:import
    [java.util Date]))
 
 (defn ready?
   [_req]
-  (let [system-state (switchboard/system-state!)
-        body         {:system-state (name system-state)}
-        response     ((if (= system-state :system-state/ready)
-                        http-response/ok
-                        http-response/service-unavailable)
-                      (util/->json body))]
-    (http-response/content-type response
-                                "application/json; charset=utf-8")))
+  (let [system-state (switchboard/system-state!)]
+    {:status  (if (= system-state :system-state/ready)
+                200
+                503)
+     :headers {"Content-Type" "application/json; charset=utf-8"}
+     :body    (util/->json {:system-state (name system-state)})}))
 
 (defn leds-on!
   [{:fairy.box/keys [component]}]
@@ -28,15 +25,16 @@
                            {:action :led/set
                             :groups [:all]
                             :value  1.0})
-    (http-response/no-content)))
+    {:status 204 :headers {} :body ""}))
 
 (defn healthcheck!
   [_req]
-  (http-response/ok
-   {:time     (str (Date. (System/currentTimeMillis)))
-    :up-since (str (Date. (.getStartTime (java.lang.management.ManagementFactory/getRuntimeMXBean))))
-    :app      {:status  (switchboard/system-state!)
-               :message ""}}))
+  {:status  200
+   :headers {}
+   :body    {:time     (str (Date. (System/currentTimeMillis)))
+             :up-since (str (Date. (.getStartTime (java.lang.management.ManagementFactory/getRuntimeMXBean))))
+             :app      {:status  (switchboard/system-state!)
+                        :message ""}}})
 
 (router/add-route! [:get "/api/ready"] #'ready?)
 (router/add-route! [:get "/api/leds-on"] #'leds-on!)

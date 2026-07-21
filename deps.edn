@@ -6,11 +6,9 @@
            party.donut/system                  {:mvn/version "1.0.259"}
            aero/aero                           {:mvn/version "1.1.6"}
            ;; Raspberry PI GPIO
-           com.diozero/diozero-core            {:mvn/version "1.4.1"
-                                                ;; :local/root "/home/admin/diozero/diozero-core/target/diozero-core-1.4.0.jar"
-                                                }
+           com.diozero/diozero-core            {:mvn/version "1.4.1"}
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
-           ;; vlc audio player library
+           ;; VLC audio player library
            ol/vinyl                            {:local/root "/home/ramblurr/src/github.com/ramblurr/vinyl"}
            ;; File system munging
            babashka/fs                         {:mvn/version "0.5.34"}
@@ -21,8 +19,6 @@
            ;; Util
            medley/medley                       {:mvn/version "1.4.0"}
            exoscale/cloak                      {:mvn/version "1.0.42"}
-           ;; Ring
-           metosin/ring-http-response          {:mvn/version "0.9.5"}
            ;; HTML and CSS
            com.thheller/shadow-css             {:mvn/version "0.6.4"}
            dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC11"}
