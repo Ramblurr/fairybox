@@ -67,7 +67,7 @@
                       result)))
     (let [tracks (vec result)]
       (if (every? #(= :media-parsed-status/done (:parse-status %)) tracks)
-        tracks
+        (filterv (comp seq :audio-tracks) tracks)
         (throw (ex-info "Failed to parse media tracks"
                         {:item-path    path
                          :parse-result tracks}))))))

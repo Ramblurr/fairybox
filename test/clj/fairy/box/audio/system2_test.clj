@@ -20,6 +20,47 @@
 
 (use-fixtures :each with-restored-audio-state)
 
+(deftest metadata-excludes-parsed-files-without-audio-tracks
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-metadata-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          parsed             [{:mrl          "file:///media/01-Introduction.ogg"
+                               :meta         #:meta{:album        "Days with Frog and Toad"
+                                                    :artist       "Arnold Lobel"
+                                                    :title        "Introduction"
+                                                    :track-number "1"}
+                               :duration     60914
+                               :audio-tracks [{:bit-rate          224000
+                                               :channels          2
+                                               :codec             1651666806
+                                               :codec-description "Vorbis Audio"
+                                               :codec-name        "vorb"
+                                               :description       nil
+                                               :id                0
+                                               :language          nil
+                                               :level             -1
+                                               :profile           -1
+                                               :rate              44100}]
+                               :media-type   :media-type/file
+                               :parse-status :media-parsed-status/done}
+                              {:mrl          "file:///media/folder.conf"
+                               :meta         #:meta{:title "folder.conf"}
+                               :duration     0
+                               :audio-tracks []
+                               :media-type   :media-type/file
+                               :parse-status :media-parsed-status/done}]
+          metadata           (with-redefs [mp/parse-meta
+                                           (fn [_ _]
+                                             (doto (promise)
+                                               (deliver parsed)))]
+                               (audio/metadata-for
+                                {:player   :player
+                                 :settings settings}
+                                "audiobooks/Author One/Book One"))]
+      (is (= [{:title  "Introduction"
+               :album  "Days with Frog and Toad"
+               :artist "Arnold Lobel"}]
+             metadata)))))
+
 (deftest publishes-queue-change-after-updating-state
   (let [events (async/chan 1)
         queue  {:history  []
