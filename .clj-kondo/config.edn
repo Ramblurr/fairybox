@@ -6,4 +6,6 @@
                 com.fulcrologic.guardrails.core/>defn-                        clojure.core/defn-
                 hyperlith.core/defaction                                      clojure.core/defn
                 hyperlith.core/defview                                        clojure.core/defn}
+ ;; Hyperlith re-exports its public API dynamically via import-vars.
+ :linters      {:unresolved-var {:exclude [hyperlith.core]}}
  :config-paths []}
