@@ -130,6 +130,7 @@
             :deployer-source     true
             :deployer-dest       true
             :service-launcher    true
+            :service-mode        true
             :fixed-aot-in-unit   false}
            {:release-directories
             (and (str/includes? playbook "- name: Create Fairybox release directories")
@@ -147,5 +148,8 @@
             (str/includes? playbook "        dest: /usr/local/bin/fairybox-deploy")
             :service-launcher
             (str/includes? playbook "          ExecStart=/usr/local/bin/fairybox-launch")
+            :service-mode
+            (str/includes? playbook
+                           "        dest: /home/ramblurr/.config/systemd/user/fairybox.service\n        mode: \"0644\"")
             :fixed-aot-in-unit
             (str/includes? playbook "          ExecStart=/usr/local/bin/fairybox-launch -XX:AOTCache=")}))))

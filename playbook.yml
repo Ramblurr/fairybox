@@ -352,6 +352,7 @@
       tags: [app]
       ansible.builtin.copy:
         dest: /home/ramblurr/.config/systemd/user/fairybox.service
+        mode: "0644"
         content: |
           [Unit]
           Description=fairybox
