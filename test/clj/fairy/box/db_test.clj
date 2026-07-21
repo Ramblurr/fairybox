@@ -49,6 +49,8 @@
                                    :max-led-brightness-night 100
                                    :day-start                "08:30"
                                    :night-start              "20:00"
+                                   :card-removal-behavior    :pause
+                                   :card-return-behavior     :restart
                                    :unknown                  :kept}}
                           :media-metadata {}}
           _              (ds/stop first-running)
@@ -96,16 +98,22 @@
             :brightness
             {:max-led-brightness-day   100
              :max-led-brightness-night 100}
-            :unrelated   :kept
-            :idempotent? true}
-           {:starts      (update-vals migrated
-                                      #(select-keys (db/audio-settings %)
-                                                    [:day-start :night-start]))
-            :brightness  (select-keys
-                          (db/audio-settings (:missing migrated))
-                          [:max-led-brightness-day
-                           :max-led-brightness-night])
-            :unrelated   (:unrelated (:missing migrated))
-            :idempotent? (every? (fn [[_ database]]
-                                   (= database (db/migrate-db database)))
-                                 migrated)}))))
+            :card-behavior {:card-removal-behavior :pause
+                            :card-return-behavior  :restart}
+            :unrelated     :kept
+            :idempotent?   true}
+           {:starts        (update-vals migrated
+                                        #(select-keys (db/audio-settings %)
+                                                      [:day-start :night-start]))
+            :brightness    (select-keys
+                            (db/audio-settings (:missing migrated))
+                            [:max-led-brightness-day
+                             :max-led-brightness-night])
+            :card-behavior (select-keys
+                            (db/audio-settings (:missing migrated))
+                            [:card-removal-behavior
+                             :card-return-behavior])
+            :unrelated     (:unrelated (:missing migrated))
+            :idempotent?   (every? (fn [[_ database]]
+                                     (= database (db/migrate-db database)))
+                                   migrated)}))))

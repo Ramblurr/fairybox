@@ -53,22 +53,17 @@
    :max_led_brightness_day   :max-led-brightness-day
    :max_led_brightness_night :max-led-brightness-night})
 
-(defn- parse-playback-integer [value]
-  (cond
-    (integer? value) value
-    (string? value) (parse-long value)
-    :else nil))
-
 (defn- playback-settings-update [body]
-  (let [numbers     (reduce-kv (fn [update body-key setting-key]
-                                 (assoc update
-                                        setting-key
-                                        (parse-playback-integer
-                                         (get body body-key))))
-                               {}
-                               playback-number-fields)
-        day-start   (:day_start body)
-        night-start (:night_start body)]
+  (let [numbers               (reduce-kv (fn [update input-key setting-key]
+                                           (assoc update
+                                                  setting-key
+                                                  (get body input-key)))
+                                         {}
+                                         playback-number-fields)
+        day-start             (:day_start body)
+        night-start           (:night_start body)
+        card-removal-behavior (keyword (:card_removal_behavior body))
+        card-return-behavior  (keyword (:card_return_behavior body))]
     (when (and (every? (fn [[_ value]]
                          (and (integer? value)
                               (<= 0 value 100)))
@@ -77,7 +72,9 @@
                (util/valid-wall-clock-time? night-start))
       (assoc numbers
              :day-start day-start
-             :night-start night-start))))
+             :night-start night-start
+             :card-removal-behavior card-removal-behavior
+             :card-return-behavior card-return-behavior))))
 
 (defaction save-playback-settings
   [{:fairy.box/keys [component] :as request}]
@@ -178,65 +175,144 @@
                               :play-action play-audio-path}
                              (get-in req [:query-params "dir"]))]])
 
+(defn- card-behavior-choice
+  [group-name signal value selected-value label description]
+  [:label {:class ["card-behavior-choice"
+                   (css :flex :cursor-pointer :gap-3 :rounded-lg :border
+                        :border-smoky-300 :bg-white-rock-50 :p-4
+                        [:dark :border-smoky-700 :bg-smoky-950])]}
+   [:input {:class     (css :mt-1 :h-4 :w-4 :shrink-0 :border-smoky-400)
+            :type      "radio"
+            :name      group-name
+            :value     value
+            :checked   (= value selected-value)
+            :data-bind signal}]
+   [:span {:class (css :block)}
+    [:span {:class (css :block :text-sm :font-semibold :text-smoky-900
+                        [:dark :text-smoky-100])}
+     label]
+    [:span {:class (css :mt-1 :block :text-sm :leading-5 :text-smoky-700
+                        [:dark :text-smoky-300])}
+     description]]])
+
+(defn- card-behavior-choice-group
+  [{:keys [id legend description signal selected-value choices]}]
+  [:fieldset {:class (css :space-y-3)}
+   [:legend {:id    id
+             :class (css :text-base :font-semibold :text-smoky-900
+                         [:dark :text-smoky-100])}
+    legend]
+   [:p {:class (css :text-sm :leading-6 :text-smoky-700
+                    [:dark :text-smoky-300])}
+    description]
+   [:div {:class (css :grid :grid-cols-1 :gap-3 [:sm :grid-cols-2])}
+    (mapv (fn [{:keys [value label description]}]
+            (card-behavior-choice id
+                                  signal
+                                  value
+                                  selected-value
+                                  label
+                                  description))
+          choices)]])
+
+(defn- card-behavior-settings
+  [{:keys [card-removal-behavior card-return-behavior]}]
+  [:section {:id              "card-behavior-settings"
+             :aria-labelledby "card-behavior-heading"
+             :class           (css :mt-8 :rounded-xl :border :border-smoky-300
+                                   :bg-white-rock-50 :p-5
+                                   [:dark :border-smoky-700 :bg-smoky-900]
+                                   [:sm :p-6])}
+   [:div
+    [:h3 {:id    "card-behavior-heading"
+          :class (css :text-lg :font-bold :text-smoky-900
+                      [:dark :text-smoky-100])}
+     "RFID card behavior"]
+    [:p {:class (css :mt-1 :max-w-2xl :text-sm :leading-6 :text-smoky-700
+                     [:dark :text-smoky-300])}
+     "Choose what happens when the card that started playback is removed or placed back."]]
+   [:div {:class (css :mt-6 :space-y-8)}
+    (card-behavior-choice-group
+     {:id             "card-removal-behavior"
+      :legend         "When the card is removed"
+      :description    "Should Fairybox pause, or continue playing?"
+      :signal         "card_removal_behavior"
+      :selected-value (name card-removal-behavior)
+      :choices        [{:value       "keep-playing"
+                        :label       "Keep playing"
+                        :description "Audio continues; removing the card does nothing."}
+                       {:value       "pause"
+                        :label       "Pause playback"
+                        :description "Audio pauses when the card is removed."}]})
+    [:div {:class "card-return-behavior"}
+     (card-behavior-choice-group
+      {:id             "card-return-behavior"
+       :legend         "When the same card is placed back"
+       :description    "This applies after playback was paused by removing the card."
+       :signal         "card_return_behavior"
+       :selected-value (name card-return-behavior)
+       :choices        [{:value       "resume"
+                         :label       "Resume playback"
+                         :description "Continue the same track from the paused position."}
+                        {:value       "restart"
+                         :label       "Restart the playlist"
+                         :description "Start again from the beginning of the playlist."}]})]]])
+
 (defn playback-settings-form
   [{:keys [url-for]}
    {:keys [min-volume max-volume max-volume-day max-volume-night
            max-led-brightness-day max-led-brightness-night
-           day-start night-start]}]
-  [:form {:class [ui/$page-margin (css :max-w-5xl)]
-          :id "playback-settings"
-          :data-signals:min_volume__ifmissing               (or min-volume "")
-          :data-signals:max_volume__ifmissing               (or max-volume "")
-          :data-signals:max_volume_day__ifmissing           (or max-volume-day "")
-          :data-signals:max_volume_night__ifmissing         (or max-volume-night "")
-          :data-signals:max_led_brightness_day__ifmissing   (or max-led-brightness-day "")
-          :data-signals:max_led_brightness_night__ifmissing (or max-led-brightness-night "")
-          :data-signals:day_start__ifmissing                (or day-start "")
-          :data-signals:night_start__ifmissing              (or night-start "")
-          :data-on:submit (str "evt.preventDefault(); @post('"
-                               save-playback-settings
-                               "')")}
+           day-start night-start card-removal-behavior
+           card-return-behavior]}]
+  [:div {:class [ui/$page-margin (css :max-w-5xl)]}
    (ui/setting-heading :label "Playback Settings")
-   [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8
-                      [:sm :grid-cols-6])}
-    (ui/integer-input :name "min-volume"
-                      :label "Min Volume"
-                      :value min-volume
-                      :data-bind "min_volume")
-    (ui/integer-input :name "max-volume"
-                      :label "Max Volume"
-                      :value max-volume
-                      :data-bind "max_volume")
-    (ui/integer-input :name "max-volume-day"
-                      :label "Max Volume (Day)"
-                      :value max-volume-day
-                      :data-bind "max_volume_day")
-    (ui/integer-input :name "max-volume-night"
-                      :label "Max Volume (Night)"
-                      :value max-volume-night
-                      :data-bind "max_volume_night")
-    (ui/integer-input :name "max-led-brightness-day"
-                      :label "Max LED Brightness (Day)"
-                      :value max-led-brightness-day
-                      :data-bind "max_led_brightness_day")
-    (ui/integer-input :name "max-led-brightness-night"
-                      :label "Max LED Brightness (Night)"
-                      :value max-led-brightness-night
-                      :data-bind "max_led_brightness_night")
-    (ui/time-input :name "day-start"
-                   :label "Day Starts At"
-                   :value day-start
-                   :data-bind "day_start")
-    (ui/time-input :name "night-start"
-                   :label "Night Starts At"
-                   :value night-start
-                   :data-bind "night_start")]
-   [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
-    (ui/button :tag :a
-               :href (url-for :page/settings)
-               :priority :link
-               :label "Back")
-    (ui/button :type :submit :label "Save")]])
+   [:form {:id             "playback-settings"
+           :data-on:submit (str "evt.preventDefault(); @post('"
+                                save-playback-settings
+                                "')")}
+    (card-behavior-settings
+     {:card-removal-behavior card-removal-behavior
+      :card-return-behavior  card-return-behavior})
+    [:div {:class (css :mt-10 :grid :grid-cols-1 :gap-x-6 :gap-y-8
+                       [:sm :grid-cols-6])}
+     (ui/integer-input :name "min-volume"
+                       :label "Min Volume"
+                       :value min-volume
+                       :data-bind "min_volume")
+     (ui/integer-input :name "max-volume"
+                       :label "Max Volume"
+                       :value max-volume
+                       :data-bind "max_volume")
+     (ui/integer-input :name "max-volume-day"
+                       :label "Max Volume (Day)"
+                       :value max-volume-day
+                       :data-bind "max_volume_day")
+     (ui/integer-input :name "max-volume-night"
+                       :label "Max Volume (Night)"
+                       :value max-volume-night
+                       :data-bind "max_volume_night")
+     (ui/integer-input :name "max-led-brightness-day"
+                       :label "Max LED Brightness (Day)"
+                       :value max-led-brightness-day
+                       :data-bind "max_led_brightness_day")
+     (ui/integer-input :name "max-led-brightness-night"
+                       :label "Max LED Brightness (Night)"
+                       :value max-led-brightness-night
+                       :data-bind "max_led_brightness_night")
+     (ui/time-input :name "day-start"
+                    :label "Day Starts At"
+                    :value day-start
+                    :data-bind "day_start")
+     (ui/time-input :name "night-start"
+                    :label "Night Starts At"
+                    :value night-start
+                    :data-bind "night_start")]
+    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
+     (ui/button :tag :a
+                :href (url-for :page/settings)
+                :priority :link
+                :label "Back")
+     (ui/button :type :submit :label "Save")]]])
 
 (defn playback-settings [{:fairy.box/keys [component] :as req}]
   [:div {:id "active-tab"}

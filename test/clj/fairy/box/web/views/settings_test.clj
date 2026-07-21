@@ -247,7 +247,9 @@
                         :max-led-brightness-day   75
                         :max-led-brightness-night 20
                         :day-start                "08:30"
-                        :night-start              "19:45"}}})
+                        :night-start              "19:45"
+                        :card-removal-behavior    :pause
+                        :card-return-behavior     :restart}}})
         req         (playback-request db-conn)
         action-path (ns-resolve 'fairy.box.web.views.settings
                                 'save-playback-settings)
@@ -257,26 +259,38 @@
            {:action (some? action-path)
             :render (some? render-page)}))
     (when (and action-path render-page)
-      (let [html          (h/html->str (render-page req))
-            inputs        (re-seq #"<input[^>]+>" html)
-            number-inputs (filter #(str/includes? % "type=\"number\"")
-                                  inputs)
-            time-inputs   (filter #(str/includes? % "type=\"time\"")
-                                  inputs)
-            signal-names  ["min_volume" "max_volume"
-                           "max_volume_day" "max_volume_night"
-                           "max_led_brightness_day"
-                           "max_led_brightness_night"
-                           "day_start" "night_start"]
-            labels        ["Min Volume" "Max Volume"
-                           "Max Volume (Day)" "Max Volume (Night)"
-                           "Max LED Brightness (Day)"
-                           "Max LED Brightness (Night)"
-                           "Day Starts At" "Night Starts At"]]
+      (let [html              (h/html->str (render-page req))
+            inputs            (re-seq #"<input[^>]+>" html)
+            number-inputs     (filter #(str/includes? % "type=\"number\"")
+                                      inputs)
+            time-inputs       (filter #(str/includes? % "type=\"time\"")
+                                      inputs)
+            playback-bindings ["min_volume" "max_volume"
+                               "max_volume_day" "max_volume_night"
+                               "max_led_brightness_day"
+                               "max_led_brightness_night"
+                               "day_start" "night_start"]
+            card-bindings     ["card_removal_behavior"
+                               "card_return_behavior"]
+            labels            ["Min Volume" "Max Volume"
+                               "Max Volume (Day)" "Max Volume (Night)"
+                               "Max LED Brightness (Day)"
+                               "Max LED Brightness (Night)"
+                               "Day Starts At" "Night Starts At"]
+            card-labels       ["RFID card behavior" "Keep playing"
+                               "Pause playback" "Resume playback"
+                               "Restart the playlist"]
+            radio-inputs      (filter #(str/includes? % "type=\"radio\"")
+                                      inputs)]
         (is (= {:legacy-layout                true
                 :labels true
-                :signals true
+                :form-signals-removed         true
                 :bindings true
+                :card-controls
+                {:labels           true
+                 :radio-count      4
+                 :bindings         true
+                 :checked-defaults true}
                 :number-input-count           6
                 :number-limits                true
                 :time-inputs
@@ -293,14 +307,26 @@
                      (str/includes? html "id=\"playback-settings\"")
                      (str/includes? html "Playback Settings"))
                 :labels             (every? #(str/includes? html %) labels)
-                :signals
-                (every? #(str/includes?
-                          html
-                          (str "data-signals:" % "__ifmissing="))
-                        signal-names)
+                :form-signals-removed
+                (not-any? #(str/includes?
+                            html
+                            (str "data-signals:" % "__ifmissing="))
+                          (concat playback-bindings card-bindings))
                 :bindings
                 (every? #(str/includes? html (str "data-bind=\"" % "\""))
-                        signal-names)
+                        playback-bindings)
+                :card-controls
+                {:labels      (every? #(str/includes? html %) card-labels)
+                 :radio-count (count radio-inputs)
+                 :bindings
+                 (every? #(str/includes? html (str "data-bind=\"" % "\""))
+                         card-bindings)
+                 :checked-defaults
+                 (every? (fn [value]
+                           (some #(and (str/includes? % (str "value=\"" value "\""))
+                                       (str/includes? % "checked"))
+                                 radio-inputs))
+                         ["pause" "restart"])}
                 :number-input-count (count number-inputs)
                 :number-limits
                 (every? #(and (str/includes? % "min=\"0\"")
@@ -334,6 +360,8 @@
                                    :max-led-brightness-night 100
                                    :day-start                "08:00"
                                    :night-start              "19:00"
+                                   :card-removal-behavior    :pause
+                                   :card-return-behavior     :restart
                                    :unknown                  :preserved}}
                           :unrelated :preserved})
         writes_    (atom 0)
@@ -342,14 +370,16 @@
                                 (swap! writes_ inc)))
         req        (playback-request db-conn)
         save!      (save-playback-action-fn)
-        valid-body {:min_volume               "2"
+        valid-body {:min_volume               2
                     :max_volume               91
-                    :max_volume_day           "81"
+                    :max_volume_day           81
                     :max_volume_night         51
-                    :max_led_brightness_day   "75"
+                    :max_led_brightness_day   75
                     :max_led_brightness_night 20
                     :day_start                "08:30"
-                    :night_start              "19:45"}]
+                    :night_start              "19:45"
+                    :card_removal_behavior    "keep-playing"
+                    :card_return_behavior     "resume"}]
     (is (some? save!))
     (when save!
       (save! (assoc req :body valid-body))
@@ -372,6 +402,8 @@
                           :max-led-brightness-night 20
                           :day-start                "08:30"
                           :night-start              "19:45"
+                          :card-removal-behavior    :keep-playing
+                          :card-return-behavior     :resume
                           :unknown                  :preserved}}
                  :unrelated :preserved}
                 :writes-after-valid  1

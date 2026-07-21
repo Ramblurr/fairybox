@@ -12,9 +12,11 @@
    [jp.nijohando.event :as ev]
    [medley.core :as m]))
 
-(def ^:private init-state {:system-state :system-state/booting
-                           :system-mode  :system-mode/normal
-                           :rfid         nil})
+(def ^:private init-state {:system-state    :system-state/booting
+                           :system-mode     :system-mode/normal
+                           :rfid            nil
+                           :active-card-uid nil
+                           :removed-card    nil})
 (defonce ^:private state (atom init-state))
 
 (defn system-state! []
@@ -37,7 +39,9 @@
   (swap! state (fn [s]
                  (-> s
                      (assoc :system-mode new-mode)
-                     (assoc :rfid nil)))))
+                     (assoc :rfid nil)
+                     (assoc :active-card-uid nil)
+                     (assoc :removed-card nil)))))
 
 (defn exit-card-id-mode [{:keys [emitter] :as sys}]
   (change-mode! sys :system-mode/normal)
@@ -98,16 +102,55 @@
                         :audio/play-one-shot false
                         :text                "This one is empty."})))
 
-(defn rfid-placed-play-mode [{:keys [emitter db-conn settings] :as _sys} {:keys [uid]}]
-  (if-let [item-path (browse/absoluteify settings (db/linked-folder @db-conn uid))]
-    (do
-      (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 1.0 :repeat-times 2})
-      (async/put! emitter {:path  "/player/commands"
-                           :value {:action              :audio/play-path
-                                   :announce-per-track? nil
-                                   :item-path           item-path
-                                   :uid                 uid}}))
-    (emit-led! emitter {:action :led/pulse :names [:audio/prev :audio/next] :after-set 1.0 :repeat-times 2})))
+(defn rfid-placed-play-mode
+  [{:keys [emitter db-conn settings]} {:keys [uid]}]
+  (let [database  @db-conn
+        item-path (browse/absoluteify settings (db/linked-folder database uid))]
+    (if item-path
+      (let [{removed-uid      :uid
+             removal-behavior :removal-behavior} (:removed-card @state)
+            returning-card? (= uid removed-uid)]
+        (emit-led! emitter {:action       :led/pulse
+                            :names        [:audio/volume-up :audio/volume-down]
+                            :after-set    1.0
+                            :repeat-times 2})
+        (cond
+          (and returning-card?
+               (= :keep-playing removal-behavior))
+          nil
+
+          (and returning-card?
+               (= :resume (db/card-return-behavior database)))
+          (emit-player! emitter {:action :audio/play})
+
+          :else
+          (emit-player! emitter {:action              :audio/play-path
+                                 :announce-per-track? nil
+                                 :item-path           item-path
+                                 :uid                 uid}))
+        (swap! state assoc
+               :active-card-uid uid
+               :removed-card nil))
+      (do
+        (swap! state assoc
+               :active-card-uid nil
+               :removed-card nil)
+        (emit-led! emitter {:action       :led/pulse
+                            :names        [:audio/prev :audio/next]
+                            :after-set    1.0
+                            :repeat-times 2})))))
+
+(defn rfid-removed-play-mode
+  [{:keys [emitter db-conn]} {:keys [uid]}]
+  (let [database         @db-conn
+        active-card?     (= uid (:active-card-uid @state))
+        removal-behavior (db/card-removal-behavior database)]
+    (swap! state assoc
+           :removed-card (when active-card?
+                           {:uid              uid
+                            :removal-behavior removal-behavior}))
+    (when (and active-card? (= :pause removal-behavior))
+      (emit-player! emitter {:action :audio/pause}))))
 
 (defn cap-volume! [emitter]
   ;; calls adjust volume with a 0 delta, which will ensure the volume is within the limits
@@ -122,8 +165,8 @@
       :placed (condp = (:system-mode @state)
                 :system-mode/normal (rfid-placed-play-mode sys value)
                 :system-mode/card-identification (rfid-placed-card-id-mode sys value))
-      :removed (async/put! emitter {:path  "/player/commands"
-                                    :value {:action :audio/pause}})
+      :removed (when (= :system-mode/normal (:system-mode @state))
+                 (rfid-removed-play-mode sys value))
       :error (do
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))

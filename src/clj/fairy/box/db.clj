@@ -19,7 +19,9 @@
    :max-led-brightness-day   100
    :max-led-brightness-night 100
    :day-start                "08:00"
-   :night-start              "19:00"})
+   :night-start              "19:00"
+   :card-removal-behavior    :pause
+   :card-return-behavior     :restart})
 
 (defn- valid-legacy-hour? [value]
   (and (integer? value)
@@ -37,7 +39,9 @@
   (let [audio-settings (get-in database [:settings :audio] {})
         migrated       (-> (merge (select-keys default-audio-settings
                                                [:max-led-brightness-day
-                                                :max-led-brightness-night])
+                                                :max-led-brightness-night
+                                                :card-removal-behavior
+                                                :card-return-behavior])
                                   audio-settings)
                            (assoc :day-start
                                   (canonical-start audio-settings
@@ -116,6 +120,12 @@
 
 (defn max-led-brightness-night [db]
   (:max-led-brightness-night (audio-settings db)))
+
+(defn card-removal-behavior [db]
+  (:card-removal-behavior (audio-settings db)))
+
+(defn card-return-behavior [db]
+  (:card-return-behavior (audio-settings db)))
 
 (defn ha-url [db]
   (get-in db [:settings :homeassistant :ha-url]))
