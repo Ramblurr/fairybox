@@ -10,7 +10,9 @@
    [exoscale.cloak :as cloak]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
-   [hato.client :as hc]))
+   [hato.client :as hc])
+  (:import
+   [java.time Duration]))
 
 (defn- private-var [symbol]
   (or (ns-resolve 'fairy.box.tts symbol)
@@ -393,6 +395,51 @@
               :normal-cache (:result
                              (tts/preview-cache-file
                               system (tts/hash-text :normal)))})))))
+
+(deftest cleans-only-browser-preview-cache-files
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-preview-cleanup-"}]
+    (let [cleanup!       (private-var 'cleanup-preview-cache!)
+          cleanup-period @(private-var 'preview-cache-cleanup-period)
+          preview-name   (tts/hash-text :preview tts/preview-cache-suffix)
+          normal-name    (tts/hash-text :normal)
+          preview-file   (fs/file cache-dir preview-name)]
+      (spit preview-file "preview")
+      (spit (fs/file cache-dir normal-name) "normal")
+      (spit (fs/file cache-dir "provider-catalogs.edn") "catalog")
+      (is (= {:cleanup-period (Duration/ofMinutes 5)
+              :deleted        1
+              :remaining      (set [normal-name "provider-catalogs.edn"])}
+             {:cleanup-period cleanup-period
+              :deleted        (cleanup! (str cache-dir))
+              :remaining      (->> (fs/list-dir cache-dir)
+                                   (map fs/file-name)
+                                   set)})))))
+
+(deftest runs-preview-cache-cleanup-on-chime-and-stops-with-tts
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-preview-chime-"}]
+    (let [start!       (private-var 'start-preview-cache-cleanup!)
+          period-var   (private-var 'preview-cache-cleanup-period)
+          preview-file (fs/file cache-dir
+                                (tts/hash-text :scheduled-preview
+                                               tts/preview-cache-suffix))
+          _            (spit preview-file "preview")
+          schedule     (with-redefs-fn {period-var (Duration/ofMillis 10)}
+                         #(start! (str cache-dir)))
+          result       (try
+                         {:removed?
+                          (loop [attempts 100]
+                            (cond
+                              (not (fs/exists? preview-file)) true
+                              (zero? attempts) false
+                              :else (do
+                                      (Thread/sleep 10)
+                                      (recur (dec attempts)))))}
+                         (finally
+                           (tts/stop-tts!
+                            {:preview-cache-cleanup schedule})))]
+      (is (= {:removed? true
+              :stopped? true}
+             (assoc result :stopped? (realized? schedule)))))))
 
 (deftest reveals-masked-home-assistant-token-only-at-http-boundary
   (let [request_ (atom nil)

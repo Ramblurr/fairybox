@@ -49,6 +49,7 @@
   and ElevenLabs synthesis examples that play the result through Vinyl."
   (:require
    [cheshire.core :as cheshire]
+   [chime.core :as chime]
    [clojure.core.async :as async]
    [clojure.java.io :as io]
    [clojure.string :as str]
@@ -63,7 +64,10 @@
    [hyperlith.core :as h]
    [jp.nijohando.event :as ev])
   (:import
+   [java.io File]
+   [java.lang AutoCloseable]
    [java.nio.file CopyOption Files Paths StandardCopyOption]
+   [java.time Duration Instant]
    [java.util Base64]))
 
 (def ->json cheshire/generate-string)
@@ -103,24 +107,25 @@
    :openai       "opus"
    :elevenlabs   "opus_48000_128"})
 
-(def ^:private normal-encodings
+(def normal-encodings
   {:google-cloud "MP3"
    :openai       "mp3"})
-(def ^:private openai-model-set (set openai-models))
-(def ^:private elevenlabs-output-format-set
+(def openai-model-set (set openai-models))
+(def elevenlabs-output-format-set
   (set elevenlabs-output-formats))
-(def ^:private openai-api-key-pattern
+(def openai-api-key-pattern
   #"^\s*(?:export\s+)?OPENAI_API_KEY\s*=\s*['\"]?([^'\"\s#]+)['\"]?\s*(?:#.*)?$")
-(def ^:private openai-tts-url "https://api.openai.com/v1/audio/speech")
-(def ^:private elevenlabs-api-key-pattern
+(def openai-tts-url "https://api.openai.com/v1/audio/speech")
+(def elevenlabs-api-key-pattern
   #"^\s*(?:export\s+)?ELEVENLABS_API_KEY\s*=\s*['\"]?([^'\"\s#]+)['\"]?\s*(?:#.*)?$")
-(def ^:private elevenlabs-tts-url "https://api.elevenlabs.io/v1/text-to-speech")
+(def elevenlabs-tts-url "https://api.elevenlabs.io/v1/text-to-speech")
 (def preview-cache-suffix ".preview.opus.tts-cache")
-(def ^:private normal-cache-suffix ".tts-cache")
-(def ^:private tts-cache-timeout-ms 60000)
-(def ^:private tts-http-client
+(def normal-cache-suffix ".tts-cache")
+(def tts-cache-timeout-ms 60000)
+(def preview-cache-cleanup-period (Duration/ofMinutes 5))
+(def tts-http-client
   (hc/build-http-client {:connect-timeout 10000}))
-(def ^:private tts-request-timeout-ms 30000)
+(def tts-request-timeout-ms 30000)
 
 (defn- nonblank-string [value]
   (let [value (cloak/unmask value)]
@@ -716,7 +721,7 @@
       (synthesize-configurable sys provider :normal text)
       nil)))
 
-(def ^:private preview-cache-basename-pattern
+(def preview-cache-basename-pattern
   #"^[A-Za-z0-9_-]+={0,2}\.preview\.opus\.tts-cache$")
 
 (defn browser-preview-tts
@@ -762,6 +767,33 @@
            :file   canonical}))
       (catch java.io.IOException _
         {:result :missing}))))
+
+(defn- cleanup-preview-cache! [cache-dir]
+  (let [^File cache-root (io/file cache-dir)]
+    (->> (.listFiles cache-root)
+         (filter (fn [^File file]
+                   (and (.isFile file)
+                        (re-matches preview-cache-basename-pattern
+                                    (.getName file)))))
+         (keep (fn [^File file]
+                 (try
+                   (when (Files/deleteIfExists (.toPath file))
+                     file)
+                   (catch Exception error
+                     (log/warn error
+                               "Unable to delete TTS preview cache file"
+                               (.getName file))
+                     nil))))
+         count)))
+
+(defn- start-preview-cache-cleanup! [cache-dir]
+  (let [first-cleanup-at (.plus (Instant/now)
+                                ^Duration preview-cache-cleanup-period)]
+    (chime/chime-at
+     (chime/periodic-seq first-cleanup-at
+                         preview-cache-cleanup-period)
+     (fn [_scheduled-time]
+       (cleanup-preview-cache! cache-dir)))))
 
 (defn emit-player! [{:keys [emitter]} event]
   (async/put! emitter {:path "/player/commands" :value event}))
@@ -858,25 +890,30 @@
 (defn init-tts! [{:keys [bus db-conn settings]}]
   (let [cache-dir (tts-cache-dir settings)]
     (.mkdirs (io/file cache-dir))
-    (let [listener      (async/chan)
-          emitter       (async/chan)
-          catalog-store (catalog/create-store
-                         {:cache-file (io/file cache-dir "provider-catalogs.edn")
-                          :refresh!   h/refresh-all!})
-          sys           {:listener             listener
-                         :emitter              emitter
-                         :db-conn              db-conn
-                         :settings             settings
-                         :tts-cache-dir        cache-dir
-                         :fallback-credentials (fallback-credentials)
-                         :catalog-store        catalog-store}]
+    (let [listener              (async/chan)
+          emitter               (async/chan)
+          catalog-store         (catalog/create-store
+                                 {:cache-file (io/file cache-dir "provider-catalogs.edn")
+                                  :refresh!   h/refresh-all!})
+          preview-cache-cleanup (start-preview-cache-cleanup! cache-dir)
+          sys                   {:listener              listener
+                                 :emitter               emitter
+                                 :db-conn               db-conn
+                                 :settings              settings
+                                 :tts-cache-dir         cache-dir
+                                 :fallback-credentials  (fallback-credentials)
+                                 :catalog-store         catalog-store
+                                 :preview-cache-cleanup preview-cache-cleanup}]
 
       (ev/emitize bus emitter)
       (ev/listen bus "/tts/commands" listener)
       (start-tts-loop! sys listener)
       sys)))
 
-(defn stop-tts! [{:keys [catalog-store emitter listener]}]
+(defn stop-tts!
+  [{:keys [catalog-store emitter listener preview-cache-cleanup]}]
+  (when preview-cache-cleanup
+    (.close ^AutoCloseable preview-cache-cleanup))
   (when catalog-store
     (catalog/stop! catalog-store))
   (when emitter
