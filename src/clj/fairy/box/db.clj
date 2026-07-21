@@ -6,7 +6,9 @@
    [donut.system :as ds]
    [duratom.core :as duratom]
    [duratom.utils :as dut]
+   [exoscale.cloak :as cloak]
    [fairy.box.db.media-meta :as mm]
+   [medley.core :as medley]
    [fairy.box.util :as util]))
 
 (def default-audio-settings
@@ -21,6 +23,47 @@
    :card-removal-behavior    :pause
    :card-return-behavior     :restart})
 
+(def default-tts-provider-settings
+  {:google-cloud
+   {:language-code "en-US"
+    :voice         "en-US-Polyglot-1"}
+
+   :openai
+   {:model        "gpt-4o-mini-tts"
+    :voice        "marin"
+    :instructions "Speak naturally."
+    :speed        1.0}
+
+   :elevenlabs
+   {:model          "eleven_multilingual_v2"
+    :voice-id       "JBFqnCBsd6RMkjVDRZzb"
+    :output-format  "opus_48000_128"
+    :voice-settings {:stability         0.5
+                     :similarity-boost  0.75
+                     :style             0.0
+                     :use-speaker-boost true
+                     :speed             1.0}}})
+
+(def default-tts-settings
+  {:engine         :google-cloud
+   :preview-target :fairybox
+   :providers      default-tts-provider-settings})
+
+(defn- complete-tts-settings [tts-settings]
+  (medley/deep-merge default-tts-settings
+                     (when (map? tts-settings)
+                       tts-settings)))
+
+(defn- mask-provider-secret [provider-settings]
+  (if (and (map? provider-settings)
+           (contains? provider-settings :api-key))
+    (update provider-settings :api-key cloak/mask)
+    provider-settings))
+
+(defn- mask-tts-secrets [tts-settings]
+  (update tts-settings :providers
+          #(when % (update-vals % mask-provider-secret))))
+
 (defn- valid-legacy-hour? [value]
   (and (integer? value)
        (<= 0 value 23)))
@@ -34,23 +77,27 @@
       :else (get default-audio-settings new-key))))
 
 (defn migrate-db [database]
-  (let [audio-settings (get-in database [:settings :audio] {})
-        migrated       (-> (merge (select-keys default-audio-settings
-                                               [:max-led-brightness-day
-                                                :max-led-brightness-night
-                                                :card-removal-behavior
-                                                :card-return-behavior])
-                                  audio-settings)
-                           (assoc :day-start
-                                  (canonical-start audio-settings
-                                                   :day-start
-                                                   :hour-day-start)
-                                  :night-start
-                                  (canonical-start audio-settings
-                                                   :night-start
-                                                   :hour-night-start))
-                           (dissoc :hour-day-start :hour-night-start))]
-    (assoc-in database [:settings :audio] migrated)))
+  (let [audio-settings          (get-in database [:settings :audio] {})
+        migrated-audio          (-> (merge (select-keys default-audio-settings
+                                                        [:max-led-brightness-day
+                                                         :max-led-brightness-night
+                                                         :card-removal-behavior
+                                                         :card-return-behavior])
+                                           audio-settings)
+                                    (assoc :day-start
+                                           (canonical-start audio-settings
+                                                            :day-start
+                                                            :hour-day-start)
+                                           :night-start
+                                           (canonical-start audio-settings
+                                                            :night-start
+                                                            :hour-night-start))
+                                    (dissoc :hour-day-start :hour-night-start))
+        migrated-tts-settings   (complete-tts-settings
+                                 (get-in database [:settings :tts]))]
+    (-> database
+        (assoc-in [:settings :audio] migrated-audio)
+        (assoc-in [:settings :tts] migrated-tts-settings))))
 
 (def DbComponent
   {::ds/start  (fn [{config ::ds/config}]
@@ -68,7 +115,8 @@
                                                                (pp/pprint data))))}
                                    :init {:_version       1
                                           :linked-tags    {}
-                                          :settings       {:audio default-audio-settings}
+                                          :settings       {:audio default-audio-settings
+                                                           :tts   default-tts-settings}
                                           :media-metadata {}})
                          current  @conn
                          migrated (migrate-db current)]
@@ -129,13 +177,54 @@
   (get-in db [:settings :homeassistant :ha-url]))
 
 (defn ha-bearer-token [db]
-  (get-in db [:settings :homeassistant :ha-bearer-token]))
+  (some-> (get-in db [:settings :homeassistant :ha-bearer-token])
+          cloak/mask))
+
+(defn tts-settings [db]
+  (-> (get-in db [:settings :tts])
+      complete-tts-settings
+      mask-tts-secrets))
+
+(defn tts-provider-settings [db provider]
+  (get-in (tts-settings db) [:providers provider]))
 
 (defn tts-engine [db]
-  (get-in db [:settings :tts :engine] :google-cloud))
+  (:engine (tts-settings db)))
+
+(defn tts-preview-target [db]
+  (:preview-target (tts-settings db)))
 
 (defn google-cloud-api-key [db]
-  (get-in db [:settings :google-cloud-api-key]))
+  (some-> (get-in db [:settings :google-cloud-api-key])
+          cloak/mask))
+
+(defn set-tts-engine! [conn engine]
+  (swap! conn assoc-in [:settings :tts :engine] engine))
+
+(defn set-tts-preview-target! [conn preview-target]
+  (swap! conn assoc-in [:settings :tts :preview-target] preview-target))
+
+(defn set-tts-provider-values! [conn provider values]
+  (swap! conn update-in [:settings :tts :providers provider]
+         #(medley/deep-merge (or % {}) values)))
+
+(defn replace-tts-provider-secret! [conn provider api-key]
+  (swap! conn
+         (fn [database]
+           (cond-> (assoc-in database
+                             [:settings :tts :providers provider :api-key]
+                             api-key)
+             (= :google-cloud provider)
+             (update :settings dissoc :google-cloud-api-key)))))
+
+(defn clear-tts-provider-secret! [conn provider]
+  (swap! conn
+         (fn [database]
+           (cond-> (update-in database
+                              [:settings :tts :providers provider]
+                              #(dissoc (or % {}) :api-key))
+             (= :google-cloud provider)
+             (update :settings dissoc :google-cloud-api-key)))))
 
 (defn upsert-settings! [conn settings]
   (swap! conn assoc :settings settings))

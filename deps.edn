@@ -19,6 +19,7 @@
            duratom/duratom                     {:mvn/version "0.5.9"}
            ;; Util
            medley/medley                       {:mvn/version "1.4.0"}
+           exoscale/cloak                      {:mvn/version "1.0.42"}
            ;; Routing
            metosin/reitit                      {:mvn/version "0.10.1"}
            ;; Ring

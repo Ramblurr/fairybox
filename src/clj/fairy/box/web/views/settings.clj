@@ -161,7 +161,8 @@
      [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
       (settings-option "RFID Tags" icon/radio-frequency (url-for :page.settings/rfid-link))
       (settings-option "Browse Audio" icon/file-audio (url-for :page.settings/browse))
-      (settings-option "Device" icon/cog (url-for :page.settings/device))]]]])
+      (settings-option "Device" icon/cog (url-for :page.settings/device))
+      (settings-option "Text to Speech" icon/tts (url-for :page.settings/tts))]]]])
 
 (defn browse-audio [req]
   [:div {:id "active-tab"}

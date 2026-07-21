@@ -2,7 +2,9 @@
   (:require
    [babashka.fs :as fs]
    [clojure.edn :as edn]
+   [clojure.string :as str]
    [clojure.test :refer [deftest is]]
+   [exoscale.cloak :as cloak]
    [donut.system :as ds]
    [fairy.box.db :as db])
   (:import
@@ -51,7 +53,8 @@
                                    :night-start              "20:00"
                                    :card-removal-behavior    :pause
                                    :card-return-behavior     :restart
-                                   :unknown                  :kept}}
+                                   :unknown                  :kept}
+                           :tts   db/default-tts-settings}
                           :media-metadata {}}
           _              (ds/stop first-running)
           fixed-time     (FileTime/fromMillis 946684800000)
@@ -117,3 +120,88 @@
             :idempotent?   (every? (fn [[_ database]]
                                      (= database (db/migrate-db database)))
                                    migrated)}))))
+(deftest migrates-partial-tts-settings-deeply-and-idempotently
+  (let [original {:settings
+                  {:tts {:engine :openai
+                         :providers
+                         {:openai       {:voice   "cedar"
+                                         :unknown :kept}
+                          :google-cloud {:api-key "migration-probe-key"}}}}
+                  :unrelated :kept}
+        migrated (db/migrate-db original)
+        visible  (db/tts-settings migrated)
+        secret   (get-in visible [:providers :google-cloud :api-key])]
+    (is (= {:engine                 :openai
+            :voice                  "cedar"
+            :model                  "gpt-4o-mini-tts"
+            :speed                  1.0
+            :unknown                :kept
+            :elevenlabs-defaults
+            (:elevenlabs db/default-tts-provider-settings)
+            :unrelated              :kept
+            :idempotent?            true
+            :secret-masked?         true
+            :secret-print-redacted? true}
+           {:engine              (:engine visible)
+            :voice               (get-in visible [:providers :openai :voice])
+            :model               (get-in visible [:providers :openai :model])
+            :speed               (get-in visible [:providers :openai :speed])
+            :unknown             (get-in visible [:providers :openai :unknown])
+            :elevenlabs-defaults (get-in visible [:providers :elevenlabs])
+            :unrelated           (:unrelated migrated)
+            :idempotent?         (= migrated (db/migrate-db migrated))
+            :secret-masked?      (cloak/secret? secret)
+            :secret-print-redacted?
+            (and (= "migration-probe-key" (cloak/reveal secret))
+                 (not (str/includes? (pr-str visible)
+                                     "migration-probe-key")))}))))
+
+(deftest updates-tts-settings-atomically-and-preserves-unrelated-data
+  (let [database (atom {:settings  {:google-cloud-api-key "legacy-probe"
+                                    :tts                  {:providers {:openai {:unknown :kept}}}}
+                        :unrelated :kept})
+        writes_  (atom 0)]
+    (add-watch database ::writes
+               (fn [_ _ _ _] (swap! writes_ inc)))
+    (db/set-tts-engine! database :elevenlabs)
+    (db/set-tts-preview-target! database :both)
+    (db/set-tts-provider-values! database :openai
+                                 {:model  "tts-1"
+                                  :nested {:kept true}})
+    (db/replace-tts-provider-secret! database :google-cloud "replacement-probe")
+    (db/clear-tts-provider-secret! database :google-cloud)
+    (remove-watch database ::writes)
+    (is (= {:writes          5
+            :engine          :elevenlabs
+            :preview-target  :both
+            :openai          {:unknown :kept
+                              :model   "tts-1"
+                              :nested  {:kept true}}
+            :legacy-removed? true
+            :secret-cleared? true
+            :unrelated       :kept}
+           {:writes          @writes_
+            :engine          (get-in @database [:settings :tts :engine])
+            :preview-target  (get-in @database [:settings :tts :preview-target])
+            :openai          (get-in @database [:settings :tts :providers :openai])
+            :legacy-removed? (not (contains? (:settings @database)
+                                             :google-cloud-api-key))
+            :secret-cleared? (not (contains?
+                                   (get-in @database
+                                           [:settings :tts :providers
+                                            :google-cloud])
+                                   :api-key))
+            :unrelated       (:unrelated @database)}))))
+
+(deftest masks-home-assistant-token-on-database-access
+  (let [token (db/ha-bearer-token
+               {:settings {:homeassistant
+                           {:ha-bearer-token "home-assistant-probe-token"}}})]
+    (is (= {:masked?         true
+            :revealable?     true
+            :print-redacted? true}
+           {:masked?         (cloak/secret? token)
+            :revealable?     (= "home-assistant-probe-token"
+                                (cloak/reveal token))
+            :print-redacted? (not (str/includes? (pr-str token)
+                                                 "home-assistant-probe-token"))}))))

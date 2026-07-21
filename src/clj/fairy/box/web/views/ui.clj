@@ -127,36 +127,229 @@
                     icon-class]}))
    [:span {:class "button-label"} label]])
 
+(def ^:private $setting-field (css [:sm :col-span-4]))
+(def ^:private $setting-label
+  (css :block :text-sm :font-medium :leading-6))
+(def ^:private $setting-input
+  (css [:focus-within :ring-2 :ring-inset :ring-smoky-600]
+       :block :w-full :rounded-md :shadow-sm :flex-1 :border :border-gray-300
+       :bg-smoky-100 :text-smoky-900 :py-1.5 :px-2
+       [:dark :bg-smoky-900 :text-smoky-100]
+       [:disabled :cursor-not-allowed :opacity-60]
+       [:focus :ring-0]
+       [:sm :text-sm :leading-6]))
+(def ^:private $setting-description
+  (css :mt-1 :text-xs :text-smoky-600 [:dark :text-smoky-400]))
+
+(defn- field-shell [id label description control]
+  [:div {:class $setting-field}
+   [:label {:for id :class $setting-label} label]
+   (when description
+     [:p {:class $setting-description} description])
+   [:div {:class (css :mt-2)}
+    [:div {:class (css :flex [:sm :max-w-md])}
+     control]]])
+
+(defn- input-attrs
+  [{:keys [type name id value min max step autocomplete data-bind change-action
+           disabled? placeholder]}]
+  (merge
+   (util/remove-nils
+    {:type           type
+     :min            min
+     :max            max
+     :step           step
+     :name           name
+     :id             (or id name)
+     :autocomplete   autocomplete
+     :value          value
+     :data-bind      data-bind
+     :data-on:change change-action
+     :placeholder    placeholder})
+   {:disabled disabled?
+    :class    $setting-input}))
+
 (defn integer-input [& {:keys [name value label min max step id autocomplete data-bind]
                         :or   {step 1 min 0 max 100}}]
-  [:div {:class (css [:sm :col-span-4])}
-   [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
-   [:div {:class (css :mt-2)}
-    [:div {:class (css :flex [:sm :max-w-md])}
-     [:input {:type      "number" :min min :max max :step step :name name :id (or id name) :autocomplete autocomplete
-              :value     value
-              :data-bind data-bind
-              :class     (css [:focus-within :ring-2 :ring-inset :ring-smoky-600] :block :rounded-md :shadow-sm :flex-1 :border :border-gray-300
-                              :bg-smoky-100 :text-smoky-900 :py-1.5 :pl-1
-                              [:dark :bg-smoky-900 :text-smoky-100]
-                              [:focus :ring-0] [:sm :text-sm :leading-6])}]]]])
+  (field-shell (or id name)
+               label
+               nil
+               [:input (input-attrs {:type         "number"
+                                     :name         name
+                                     :id           id
+                                     :value        value
+                                     :min          min
+                                     :max          max
+                                     :step         step
+                                     :autocomplete autocomplete
+                                     :data-bind    data-bind})]))
 
 (defn time-input [& {:keys [name value label id autocomplete data-bind]}]
-  [:div {:class (css [:sm :col-span-4])}
-   [:label {:for name :class (css :block :text-sm :font-medium :leading-6)} label]
-   [:div {:class (css :mt-2)}
-    [:div {:class (css :flex [:sm :max-w-md])}
-     [:input {:type         "time"
-              :step         60
-              :name         name
-              :id           (or id name)
-              :autocomplete autocomplete
-              :value        value
-              :data-bind    data-bind
-              :class        (css [:focus-within :ring-2 :ring-inset :ring-smoky-600]
-                                 :block :rounded-md :shadow-sm :flex-1 :border
-                                 :border-gray-300 :bg-smoky-100 :text-smoky-900
-                                 :py-1.5 :pl-1
-                                 [:dark :bg-smoky-900 :text-smoky-100]
-                                 [:focus :ring-0]
-                                 [:sm :text-sm :leading-6])}]]]])
+  (field-shell (or id name)
+               label
+               nil
+               [:input (input-attrs {:type         "time"
+                                     :name         name
+                                     :id           id
+                                     :value        value
+                                     :step         60
+                                     :autocomplete autocomplete
+                                     :data-bind    data-bind})]))
+
+(defn- labeled-input
+  [{:keys [type name value label id autocomplete data-bind change-action
+           disabled? placeholder description]}]
+  (field-shell (or id name)
+               label
+               description
+               [:input (input-attrs {:type          type
+                                     :name          name
+                                     :id            id
+                                     :value         value
+                                     :autocomplete  autocomplete
+                                     :data-bind     data-bind
+                                     :change-action change-action
+                                     :disabled?     disabled?
+                                     :placeholder   placeholder})]))
+
+(defn text-input
+  [& {:keys [name value label id autocomplete data-bind change-action
+             disabled? placeholder description]}]
+  (labeled-input {:type          "text"
+                  :name          name
+                  :value         value
+                  :label         label
+                  :id            id
+                  :autocomplete  autocomplete
+                  :data-bind     data-bind
+                  :change-action change-action
+                  :disabled?     disabled?
+                  :placeholder   placeholder
+                  :description   description}))
+
+(defn password-input
+  [& {:keys [name label id data-bind change-action disabled? placeholder
+             description]}]
+  (labeled-input {:type          "password"
+                  :name          name
+                  :value         ""
+                  :label         label
+                  :id            id
+                  :autocomplete  "new-password"
+                  :data-bind     data-bind
+                  :change-action change-action
+                  :disabled?     disabled?
+                  :placeholder   placeholder
+                  :description   description}))
+
+(defn textarea-input
+  [& {:keys [name value label id rows data-bind change-action disabled?
+             placeholder description]
+      :or   {rows 4}}]
+  (field-shell
+   (or id name)
+   label
+   description
+   [:textarea (merge
+               (util/remove-nils
+                {:name           name
+                 :id             (or id name)
+                 :rows           rows
+                 :data-bind      data-bind
+                 :data-on:change change-action
+                 :placeholder    placeholder})
+               {:disabled disabled?
+                :class    $setting-input})
+    value]))
+
+(defn select-input
+  [& {:keys [name label id options selected-value data-bind change-action
+             disabled? description]}]
+  (field-shell
+   (or id name)
+   label
+   description
+   [:select (merge
+             (util/remove-nils
+              {:name           name
+               :id             (or id name)
+               :data-bind      data-bind
+               :data-on:change change-action})
+             {:disabled disabled?
+              :class    $setting-input})
+    (map (fn [{:keys [value label disabled?]}]
+           [:option {:value    value
+                     :selected (= (str selected-value) (str value))
+                     :disabled disabled?}
+            label])
+         options)]))
+
+(defn checkbox-input
+  [& {:keys [name label id checked? data-bind change-action disabled?
+             description]}]
+  [:div {:class $setting-field}
+   [:div {:class (css :flex :items-start :gap-3)}
+    [:input (merge
+             (util/remove-nils
+              {:type           "checkbox"
+               :name           name
+               :id             (or id name)
+               :data-bind      data-bind
+               :data-on:change change-action})
+             {:checked  checked?
+              :disabled disabled?
+              :class    (css :mt-1 :h-4 :w-4 :rounded :border-gray-300
+                             :text-cloud-burst-600
+                             [:disabled :cursor-not-allowed :opacity-60])})]
+    [:div
+     [:label {:for (or id name) :class $setting-label} label]
+     (when description
+       [:p {:class $setting-description} description])]]])
+
+(defn decimal-input
+  [& {:keys [name value label id min max step data-bind change-action disabled?
+             description]
+      :or   {step 0.01}}]
+  (field-shell (or id name)
+               label
+               description
+               [:input (input-attrs {:type          "number"
+                                     :name          name
+                                     :id            id
+                                     :value         value
+                                     :min           min
+                                     :max           max
+                                     :step          step
+                                     :data-bind     data-bind
+                                     :change-action change-action
+                                     :disabled?     disabled?})]))
+
+(defn range-input
+  [& {:keys [name value label id min max step data-bind change-action disabled?
+             description]
+      :or   {step 0.01}}]
+  (field-shell
+   (or id name)
+   label
+   description
+   [:div {:class (css :flex :w-full :items-center :gap-3)}
+    [:input (merge
+             (input-attrs {:type          "range"
+                           :name          name
+                           :id            id
+                           :value         value
+                           :min           min
+                           :max           max
+                           :step          step
+                           :data-bind     data-bind
+                           :change-action change-action
+                           :disabled?     disabled?})
+             {:class (css :min-w-0 :flex-1 :cursor-pointer
+                          [:disabled :cursor-not-allowed :opacity-60])})]
+    [:output (merge
+              (util/remove-nils
+               {:for       (or id name)
+                :data-text (when data-bind (str "$" data-bind))})
+              {:class (css :w-12 :shrink-0 :text-right :text-sm :tabular-nums
+                           :text-smoky-700 [:dark :text-smoky-300])})
+     (str value)]]))
