@@ -267,9 +267,7 @@
   [:div {:class [ui/$page-margin (css :max-w-5xl)]}
    (ui/setting-heading :label "Playback Settings")
    [:form {:id             "playback-settings"
-           :data-on:submit (str "evt.preventDefault(); @post('"
-                                save-playback-settings
-                                "')")}
+           :data-on:change (str "@post('" save-playback-settings "')")}
     (card-behavior-settings
      {:card-removal-behavior card-removal-behavior
       :card-return-behavior  card-return-behavior})
@@ -311,8 +309,7 @@
      (ui/button :tag :a
                 :href (url-for :page/settings)
                 :priority :link
-                :label "Back")
-     (ui/button :type :submit :label "Save")]]])
+                :label "Back")]]])
 
 (defn playback-settings [{:fairy.box/keys [component] :as req}]
   [:div {:id "active-tab"}

@@ -298,7 +298,8 @@
                  :day         true
                  :night       true
                  :minute-step true}
-                :submit-action                true
+                :live-save-on-change          true
+                :save-button-removed          true
                 :ordinary-back-link           true
                 :settings-placeholder-removed true
                 :htmx-removed                 true}
@@ -341,9 +342,13 @@
                                     time-inputs)
                  :minute-step (every? #(str/includes? % "step=\"60\"")
                                       time-inputs)}
-                :submit-action
-                (and (str/includes? html "data-on:submit=")
+                :live-save-on-change
+                (and (str/includes? html "data-on:change=")
                      (str/includes? html (var-get action-path)))
+                :save-button-removed
+                (and (not (str/includes? html "data-on:submit="))
+                     (not (str/includes? html "type=\"submit\""))
+                     (not (str/includes? html ">Save</span>")))
                 :ordinary-back-link
                 (str/includes? html "href=\"/settings\"")
                 :settings-placeholder-removed
