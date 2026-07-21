@@ -6,33 +6,73 @@
    [donut.system :as ds]
    [duratom.core :as duratom]
    [duratom.utils :as dut]
-   [fairy.box.db.media-meta :as mm]))
+   [fairy.box.db.media-meta :as mm]
+   [fairy.box.util :as util]))
 
 (def DEFAULT_MAX_VOLUME 95)
+
+(def default-audio-settings
+  {:min-volume               0
+   :max-volume               DEFAULT_MAX_VOLUME
+   :max-volume-day           DEFAULT_MAX_VOLUME
+   :max-volume-night         DEFAULT_MAX_VOLUME
+   :max-led-brightness-day   100
+   :max-led-brightness-night 100
+   :day-start                "08:00"
+   :night-start              "19:00"})
+
+(defn- valid-legacy-hour? [value]
+  (and (integer? value)
+       (<= 0 value 23)))
+
+(defn- canonical-start [audio-settings new-key legacy-key]
+  (let [new-value    (get audio-settings new-key)
+        legacy-value (get audio-settings legacy-key)]
+    (cond
+      (util/valid-wall-clock-time? new-value) new-value
+      (valid-legacy-hour? legacy-value) (format "%02d:00" legacy-value)
+      :else (get default-audio-settings new-key))))
+
+(defn migrate-db [database]
+  (let [audio-settings (get-in database [:settings :audio] {})
+        migrated       (-> (merge (select-keys default-audio-settings
+                                               [:max-led-brightness-day
+                                                :max-led-brightness-night])
+                                  audio-settings)
+                           (assoc :day-start
+                                  (canonical-start audio-settings
+                                                   :day-start
+                                                   :hour-day-start)
+                                  :night-start
+                                  (canonical-start audio-settings
+                                                   :night-start
+                                                   :hour-night-start))
+                           (dissoc :hour-day-start :hour-night-start))]
+    (assoc-in database [:settings :audio] migrated)))
 
 (def DbComponent
   {::ds/start  (fn [{config ::ds/config}]
                  (let [path (get-in config [:opts :path])]
                    (assert path "Path is required for the db component")
                    (tap> [:db-start :path path :config config])
-                   (duratom/duratom
-                    :local-file
-                    :file-path path
-                    :rw {:commit-mode :sync
-                         :read        dut/read-edn-object
-                         :write       (fn [filepath data]
-                                        (spit filepath
-                                              (with-out-str
-                                                (pp/pprint data))))}
-                    :init {:_version       1
-                           :linked-tags    {}
-                           :settings       {:audio {:max-volume       DEFAULT_MAX_VOLUME
-                                                    :min-volume       0
-                                                    :max-volume-day   DEFAULT_MAX_VOLUME
-                                                    :max-volume-night DEFAULT_MAX_VOLUME
-                                                    :hour-day-start   8
-                                                    :hour-night-start 19}}
-                           :media-metadata {}})))
+                   (let [conn     (duratom/duratom
+                                   :local-file
+                                   :file-path path
+                                   :rw {:commit-mode :sync
+                                        :read        dut/read-edn-object
+                                        :write       (fn [filepath data]
+                                                       (spit filepath
+                                                             (with-out-str
+                                                               (pp/pprint data))))}
+                                   :init {:_version       1
+                                          :linked-tags    {}
+                                          :settings       {:audio default-audio-settings}
+                                          :media-metadata {}})
+                         current  @conn
+                         migrated (migrate-db current)]
+                     (when-not (= current migrated)
+                       (reset! conn migrated))
+                     conn)))
    ::ds/config {:opts (ds/ref [:config
                                :fairy.box/components
                                :fairy.box.db/db])}})
@@ -65,11 +105,17 @@
 (defn max-volume-night [db]
   (:max-volume-night (audio-settings db)))
 
-(defn hour-day-start [db]
-  (:hour-day-start (audio-settings db)))
+(defn day-start [db]
+  (:day-start (audio-settings db)))
 
-(defn hour-night-start [db]
-  (:hour-night-start (audio-settings db)))
+(defn night-start [db]
+  (:night-start (audio-settings db)))
+
+(defn max-led-brightness-day [db]
+  (:max-led-brightness-day (audio-settings db)))
+
+(defn max-led-brightness-night [db]
+  (:max-led-brightness-night (audio-settings db)))
 
 (defn ha-url [db]
   (get-in db [:settings :homeassistant :ha-url]))

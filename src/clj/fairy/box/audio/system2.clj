@@ -8,6 +8,7 @@
    [donut.system :as ds]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
+   [fairy.box.playback-limits :as playback-limits]
    [fairy.box.tts :as tts]
    [fairy.box.util :as util]
    [jp.nijohando.event :as ev]
@@ -105,21 +106,8 @@
             {:requested-path item-path
              :media-dir      (browse/media-dir settings)}))))
 
-(defn maximum-volume
-  ([db current-hour]
-   (let [;; user configured absolute max volume - can never be louder than this
-         absolute-max-volume (db/max-volume db)
-         hour-day-start      (db/hour-day-start db)
-         hour-night-start    (db/hour-night-start db)
-         max-volume-night    (db/max-volume-night db)
-         max-volume-day      (db/max-volume-day db)
-         m                   (min absolute-max-volume
-                                  (if (< (dec hour-day-start) current-hour hour-night-start)
-                                    (or max-volume-day absolute-max-volume)
-                                    (or max-volume-night absolute-max-volume)))]
-     m))
-  ([db]
-   (maximum-volume db (-> (java.time.LocalTime/now) (.getHour)))))
+(defn maximum-volume [policy]
+  (int (playback-limits/current-limit policy :audio/max-volume)))
 
 (defn- player-event
   "Constructs a valid event map for a player event"
@@ -136,22 +124,30 @@
   (swap! audio-state update :queue
          #(merge (select-keys % [:source-type :source-path]) val)))
 
-(defn wrap-volume [db-conn new-volume]
-  (let [db   @db-conn
-        minv (db/min-volume db)
-        maxv (maximum-volume db)
-        v    (max minv (min maxv new-volume))]
-    (int v)))
+(defn wrap-volume [db-conn policy new-volume]
+  (let [minimum (db/min-volume @db-conn)
+        maximum (maximum-volume policy)]
+    (int (min maximum (max minimum new-volume)))))
 
-(defn set-volume! [{:keys [player db-conn]} v]
-  (mp/dispatch player :mixer/set-volume :level (wrap-volume db-conn v)))
+(defn set-volume!
+  [{:keys [player db-conn playback-limits volume-lock]} volume]
+  (locking volume-lock
+    (mp/dispatch player
+                 :mixer/set-volume
+                 :level (wrap-volume db-conn playback-limits volume))))
 
-(defn adjust-volume! [{:keys [player db-conn]} delta]
-  (let [current    (mp/get-volume player)
-        new-volume (wrap-volume db-conn (+ current delta))]
-    (mp/dispatch player :mixer/set-volume :level new-volume)))
+(defn adjust-volume!
+  [{:keys [player db-conn playback-limits volume-lock]} delta]
+  (locking volume-lock
+    (let [current    (mp/get-volume player)
+          new-volume (wrap-volume db-conn
+                                  playback-limits
+                                  (+ current delta))]
+      (mp/dispatch player :mixer/set-volume :level new-volume))))
 
-(defn play-one-shot! [{:keys [emitter one-shot-player db-conn settings]} {:keys [item-path id]}]
+(defn play-one-shot!
+  [{:keys [emitter one-shot-player playback-limits settings]}
+   {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
   ;; we do this because we want to handle the events separate from the normal player
   (tap> [:one-shot-play item-path id :final-path (browse/canonicalize-path settings item-path)])
@@ -175,7 +171,9 @@
                                   (finally (deliver unsubscribe_ true))))
               subscription-id (mp/subscribe! one-shot-player handler #{:vlc/finished :vlc/error})]
 
-          (mp/dispatch one-shot-player :mixer/set-volume :level (maximum-volume @db-conn))
+          (mp/dispatch one-shot-player
+                       :mixer/set-volume
+                       :level (maximum-volume playback-limits))
           (mp/dispatch one-shot-player :playback/clear-all)
           (mp/dispatch one-shot-player :playback/append :paths [path])
           (mp/dispatch one-shot-player :playback/play)
@@ -280,10 +278,25 @@
     (catch Throwable e
       (log/error e "audio command error"))))
 
-(defn new-player! [db handler]
+(def audio-subscriber-id
+  ::main-player)
+
+(defn enforce-volume-limit! [player volume-lock snapshot]
+  (locking volume-lock
+    (let [actual-volume (mp/get-volume player)
+          maximum       (get-in snapshot [:limits :audio/max-volume])]
+      (when (and (number? actual-volume)
+                 (> actual-volume maximum))
+        (mp/dispatch player
+                     :mixer/set-volume
+                     :level (int maximum))))))
+
+(defn new-player! [policy handler]
   (let [player (mp/create-player {:media-player-factory factory})]
     (mp/subscribe! player handler)
-    (mp/dispatch player :mixer/set-volume :level (maximum-volume db))
+    (mp/dispatch player
+                 :mixer/set-volume
+                 :level (maximum-volume policy))
     player))
 
 (defn- release-all-resources! [{:keys [player one-shot-player]}]
@@ -306,30 +319,46 @@
                    (command-handler sys ev)
                    (recur)))))
 
-(defn- init-audio! [{:keys [bus settings db-conn]}]
+(defn- init-audio! [{:keys [bus settings db-conn playback-limits]}]
   (reset! audio-state audio-init-state)
   (let [emitter     (async/chan (async/sliding-buffer 512))
         commands-ch (async/chan (async/sliding-buffer 512))
         internal-ch (async/chan (async/sliding-buffer 512))
         exit-ch     (async/chan)
-        player      (new-player! @db-conn (fn [ev]
-                                            (try
-                                              (async/put! internal-ch ev)
-                                              (catch Exception e
-                                                (log/error e "player put internal-ch error")))))
+        volume-lock (Object.)
+        player      (new-player! playback-limits
+                                 (fn [event]
+                                   (try
+                                     (async/put! internal-ch event)
+                                     (catch Exception error
+                                       (log/error error
+                                                  "player put internal-ch error")))))
         sys         {:emitter         emitter
                      :settings        settings
                      :db-conn         db-conn
+                     :playback-limits playback-limits
+                     :subscriber-id   audio-subscriber-id
                      :commands-ch     commands-ch
                      :internal-ch     internal-ch
                      :exit-ch         exit-ch
+                     :volume-lock     volume-lock
                      :player          player
-                     :one-shot-player (mp/create-player {:media-player-factory factory})}]
+                     :one-shot-player (mp/create-player
+                                       {:media-player-factory factory})}]
+    (playback-limits/subscribe! playback-limits
+                                audio-subscriber-id
+                                (partial enforce-volume-limit!
+                                         player
+                                         volume-lock))
     (ev/listen bus "/player/commands" commands-ch)
     (ev/emitize bus emitter)
     (assoc sys :audio-loop (audio-loop sys))))
 
-(defn- halt-player! [{:keys [internal-ch exit-ch commands-ch emitter audio-loop]}]
+(defn- halt-player!
+  [{:keys [internal-ch exit-ch commands-ch emitter audio-loop
+           playback-limits subscriber-id]}]
+  (when (and playback-limits subscriber-id)
+    (playback-limits/unsubscribe! playback-limits subscriber-id))
   (async/put! exit-ch true)
   (async/close! commands-ch)
   (async/close! internal-ch)
@@ -342,9 +371,11 @@
                  (init-audio! config))
    ::ds/stop   (fn [{instance ::ds/instance}]
                  (halt-player! instance))
-   ::ds/config {:bus      (ds/ref [:fairy.box/components
-                                   :fairy.box.bus/bus])
-                :settings (ds/ref [:fairy.box/components
-                                   :fairy.box/settings])
-                :db-conn  (ds/ref [:fairy.box/components
-                                   :fairy.box.db/db])}})
+   ::ds/config {:bus             (ds/ref [:fairy.box/components
+                                          :fairy.box.bus/bus])
+                :settings        (ds/ref [:fairy.box/components
+                                          :fairy.box/settings])
+                :db-conn         (ds/ref [:fairy.box/components
+                                          :fairy.box.db/db])
+                :playback-limits (ds/ref [:fairy.box/components
+                                          :fairy.box.playback-limits/policy])}})

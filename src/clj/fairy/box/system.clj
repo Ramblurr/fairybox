@@ -11,6 +11,7 @@
    [fairy.box.hardware.led :as led]
    [fairy.box.hardware.rfid :as rfid]
    [fairy.box.mqtt :as mqtt]
+   [fairy.box.playback-limits :as playback-limits]
    [fairy.box.settings :as settings]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.tts :as tts]
@@ -89,12 +90,13 @@
   ([{:keys [config profile]
      :or   {profile (default-profile)}}]
    {::ds/defs {:config               (or config (read-config profile))
-               :fairy.box/components {:fairy.box/settings settings/SettingsComponent
-                                      :fairy.box.db/db db/DbComponent
-                                      :fairy.box.bus/bus bus/BusComponent
+               :fairy.box/components {:fairy.box/settings                 settings/SettingsComponent
+                                      :fairy.box.db/db                    db/DbComponent
+                                      :fairy.box.playback-limits/policy   playback-limits/PlaybackLimitsComponent
+                                      :fairy.box.bus/bus                  bus/BusComponent
                                       :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
                                       :fairy.box.audio.system2/player     audio/AudioSystemComponent
-                                      :fairy.box.tts/tts tts/TTSComponent
+                                      :fairy.box.tts/tts                  tts/TTSComponent
                                       :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent
                                       :fairy.box.web/player-progress      player-progress/ProgressStreamComponent
                                       :fairy.box.web/player-event-refresh player-events/PlayerEventRefreshComponent

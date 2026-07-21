@@ -237,15 +237,17 @@
                             :emitted?  false})
                  results)))))))
 
-(deftest playback-settings-use-legacy-layout-and-datastar-form
+(deftest playback-settings-use-time-and-brightness-controls
   (let [db-conn
         (atom {:settings
-               {:audio {:min-volume       1
-                        :max-volume       90
-                        :max-volume-day   80
-                        :max-volume-night 50
-                        :hour-day-start   8
-                        :hour-night-start 19}}})
+               {:audio {:min-volume               1
+                        :max-volume               90
+                        :max-volume-day           80
+                        :max-volume-night         50
+                        :max-led-brightness-day   75
+                        :max-led-brightness-night 20
+                        :day-start                "08:30"
+                        :night-start              "19:45"}}})
         req         (playback-request db-conn)
         action-path (ns-resolve 'fairy.box.web.views.settings
                                 'save-playback-settings)
@@ -255,20 +257,33 @@
            {:action (some? action-path)
             :render (some? render-page)}))
     (when (and action-path render-page)
-      (let [html         (h/html->str (render-page req))
-            inputs       (re-seq #"<input[^>]+>" html)
-            signal-names ["min_volume" "max_volume"
-                          "max_volume_day" "max_volume_night"
-                          "hour_day_start" "hour_night_start"]
-            labels       ["Min Volume" "Max Volume"
-                          "Max Volume (Day)" "Max Volume (Night)"
-                          "Day Starts At" "Night Starts At"]]
+      (let [html          (h/html->str (render-page req))
+            inputs        (re-seq #"<input[^>]+>" html)
+            number-inputs (filter #(str/includes? % "type=\"number\"")
+                                  inputs)
+            time-inputs   (filter #(str/includes? % "type=\"time\"")
+                                  inputs)
+            signal-names  ["min_volume" "max_volume"
+                           "max_volume_day" "max_volume_night"
+                           "max_led_brightness_day"
+                           "max_led_brightness_night"
+                           "day_start" "night_start"]
+            labels        ["Min Volume" "Max Volume"
+                           "Max Volume (Day)" "Max Volume (Night)"
+                           "Max LED Brightness (Day)"
+                           "Max LED Brightness (Night)"
+                           "Day Starts At" "Night Starts At"]]
         (is (= {:legacy-layout                true
                 :labels true
                 :signals true
                 :bindings true
-                :volume-limits                true
-                :hour-limits                  true
+                :number-input-count           6
+                :number-limits                true
+                :time-inputs
+                {:count       2
+                 :day         true
+                 :night       true
+                 :minute-step true}
                 :submit-action                true
                 :ordinary-back-link           true
                 :settings-placeholder-removed true
@@ -277,7 +292,7 @@
                 (and (str/includes? html "id=\"active-tab\"")
                      (str/includes? html "id=\"playback-settings\"")
                      (str/includes? html "Playback Settings"))
-                :labels        (every? #(str/includes? html %) labels)
+                :labels             (every? #(str/includes? html %) labels)
                 :signals
                 (every? #(str/includes?
                           html
@@ -286,16 +301,20 @@
                 :bindings
                 (every? #(str/includes? html (str "data-bind=\"" % "\""))
                         signal-names)
-                :volume-limits
+                :number-input-count (count number-inputs)
+                :number-limits
                 (every? #(and (str/includes? % "min=\"0\"")
                               (str/includes? % "max=\"100\"")
                               (str/includes? % "step=\"1\""))
-                        (take 4 inputs))
-                :hour-limits
-                (every? #(and (str/includes? % "min=\"0\"")
-                              (str/includes? % "max=\"23\"")
-                              (str/includes? % "step=\"1\""))
-                        (drop 4 inputs))
+                        number-inputs)
+                :time-inputs
+                {:count       (count time-inputs)
+                 :day         (some #(str/includes? % "name=\"day-start\"")
+                                    time-inputs)
+                 :night       (some #(str/includes? % "name=\"night-start\"")
+                                    time-inputs)
+                 :minute-step (every? #(str/includes? % "step=\"60\"")
+                                      time-inputs)}
                 :submit-action
                 (and (str/includes? html "data-on:submit=")
                      (str/includes? html (var-get action-path)))
@@ -303,40 +322,62 @@
                 (str/includes? html "href=\"/settings\"")
                 :settings-placeholder-removed
                 (not (str/includes? html ">Settings</h1>"))
-                :htmx-removed  (not (str/includes? html "hx-"))}))))))
+                :htmx-removed       (not (str/includes? html "hx-"))}))))))
 
-(deftest saves-playback-settings-through-component-lookup
-  (let [db-conn (atom {:settings  {:audio {:max-volume 95}}
-                       :unrelated :preserved})
-        req     (playback-request db-conn)
-        save!   (save-playback-action-fn)]
+(deftest saves-one-complete-playback-update
+  (let [db-conn    (atom {:settings
+                          {:audio {:min-volume               1
+                                   :max-volume               95
+                                   :max-volume-day           80
+                                   :max-volume-night         50
+                                   :max-led-brightness-day   100
+                                   :max-led-brightness-night 100
+                                   :day-start                "08:00"
+                                   :night-start              "19:00"
+                                   :unknown                  :preserved}}
+                          :unrelated :preserved})
+        writes_    (atom 0)
+        _          (add-watch db-conn ::write-count
+                              (fn [_ _ _ _]
+                                (swap! writes_ inc)))
+        req        (playback-request db-conn)
+        save!      (save-playback-action-fn)
+        valid-body {:min_volume               "2"
+                    :max_volume               91
+                    :max_volume_day           "81"
+                    :max_volume_night         51
+                    :max_led_brightness_day   "75"
+                    :max_led_brightness_night 20
+                    :day_start                "08:30"
+                    :night_start              "19:45"}]
     (is (some? save!))
     (when save!
-      (let [_full-save
-            (save! (assoc req :body
-                          {:min_volume       "2"
-                           :max_volume       91
-                           :max_volume_day   "81"
-                           :max_volume_night 51
-                           :hour_day_start   "7"
-                           :hour_night_start 20}))
-            after-full-save    @db-conn
-            _partial-save
-            (save! (assoc req :body
-                          {:min_volume     ""
-                           :max_volume_day "82"}))
-            after-partial-save @db-conn]
-        (is (= {:after-full-save
+      (save! (assoc req :body valid-body))
+      (let [after-valid        @db-conn
+            writes-after-valid @writes_]
+        (doseq [invalid-body [(assoc valid-body :day_start "")
+                              (assoc valid-body :night_start "19:60")
+                              (assoc valid-body
+                                     :max_led_brightness_day
+                                     101)]]
+          (save! (assoc req :body invalid-body)))
+        (remove-watch db-conn ::write-count)
+        (is (= {:database
                 {:settings
-                 {:audio {:min-volume       2
-                          :max-volume       91
-                          :max-volume-day   81
-                          :max-volume-night 51
-                          :hour-day-start   7
-                          :hour-night-start 20}}
+                 {:audio {:min-volume               2
+                          :max-volume               91
+                          :max-volume-day           81
+                          :max-volume-night         51
+                          :max-led-brightness-day   75
+                          :max-led-brightness-night 20
+                          :day-start                "08:30"
+                          :night-start              "19:45"
+                          :unknown                  :preserved}}
                  :unrelated :preserved}
-                :after-partial-save
-                {:settings  {:audio {:max-volume-day 82}}
-                 :unrelated :preserved}}
-               {:after-full-save    after-full-save
-                :after-partial-save after-partial-save}))))))
+                :writes-after-valid  1
+                :invalid-write-count 0
+                :invalid-changed?    false}
+               {:database            after-valid
+                :writes-after-valid  writes-after-valid
+                :invalid-write-count (- @writes_ writes-after-valid)
+                :invalid-changed?    (not= after-valid @db-conn)}))))))

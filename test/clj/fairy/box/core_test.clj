@@ -6,6 +6,7 @@
    [clojure.test :refer [deftest is]]
    [donut.system :as ds]
    [fairy.box.core]
+   [fairy.box.db :as db]
    [fairy.box.hardware.rfid :as rfid]
    [fairy.box.mqtt :as mqtt]
    [fairy.box.settings :as settings]
@@ -65,6 +66,7 @@
                                      :fairy.box.hardware/leds
                                      :fairy.box.hardware/rfid
                                      :fairy.box.mqtt/client
+                                     :fairy.box.playback-limits/policy
                                      :fairy.box.switchboard/switchboard
                                      :fairy.box.tts/tts
                                      :fairy.box.web/player-event-refresh
@@ -92,7 +94,13 @@
                         (component-id :fairy.box.hardware/leds)
                         (component-id :fairy.box.hardware/rfid)
                         (component-id :fairy.box.mqtt/client)}
-        running       (ds/start (system/system {:profile :test}) {} selected)
+        database      (atom {:settings {:audio db/default-audio-settings}})
+        test-system   (assoc-in (system/system {:profile :test})
+                                [::ds/defs
+                                 :fairy.box/components
+                                 :fairy.box.db/db]
+                                database)
+        running       (ds/start test-system {} selected)
         instance      #(ds/instance running (component-id %))
         rfid-instance (instance :fairy.box.hardware/rfid)]
     (try

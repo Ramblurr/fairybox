@@ -3,9 +3,13 @@
    [babashka.fs :as fs]
    [clojure.core.async :as async]
    [clojure.test :refer [deftest is use-fixtures]]
+   [donut.system :as ds]
    [fairy.box.audio.system2 :as audio]
+   [fairy.box.playback-limits :as limits]
    [fairy.box.media-test-utils :as media]
-   [ol.vinyl :as mp]))
+   [ol.vinyl :as mp])
+  (:import
+   [java.time ZoneId ZonedDateTime]))
 
 (defn- with-restored-audio-state [f]
   (let [original @audio/audio-state]
@@ -123,3 +127,97 @@
     (is (= [[:player :playback/set-repeat {:mode :track}]
             [:player :playback/set-shuffle {:shuffle? true}]]
            @dispatches))))
+
+(deftest enforces-policy-limits-without-raising-volume
+  (let [zone               (ZoneId/of "Europe/Berlin")
+        clock_             (atom (ZonedDateTime/of 2025 1 15 12 0 0 0 zone))
+        db-conn            (atom {:settings
+                                  {:audio {:min-volume               2
+                                           :max-volume               95
+                                           :max-volume-day           80
+                                           :max-volume-night         50
+                                           :max-led-brightness-day   100
+                                           :max-led-brightness-night 100
+                                           :day-start                "08:00"
+                                           :night-start              "19:30"}}})
+        scheduler          {:schedule! (fn [_ _] ::pending)
+                            :cancel!   (constantly nil)
+                            :shutdown! (constantly nil)}
+        policy             (limits/start-policy! {:db-conn   db-conn
+                                                  :now-fn    #(deref clock_)
+                                                  :scheduler scheduler})
+        actual-volume_     (atom 90)
+        dispatched-levels_ (atom [])
+        volume-lock        (Object.)]
+    (try
+      (with-redefs [mp/get-volume (fn [_] @actual-volume_)
+                    mp/dispatch   (fn [player command _ level]
+                                    (when (= command :mixer/set-volume)
+                                      (swap! dispatched-levels_ conj
+                                             [player level])
+                                      (reset! actual-volume_ level)))]
+        (limits/subscribe! policy
+                           audio/audio-subscriber-id
+                           (partial audio/enforce-volume-limit!
+                                    :player
+                                    volume-lock))
+        (let [after-initial @dispatched-levels_]
+          (swap! db-conn assoc-in [:settings :audio :max-volume-day] 90)
+          (let [after-raise @dispatched-levels_]
+            (swap! db-conn assoc-in [:settings :audio :max-volume-day] 60)
+            (reset! actual-volume_ 55)
+            (swap! db-conn assoc-in [:settings :audio :night-start] "11:45")
+            (is (= {:dispatched-levels       [[:player 80]
+                                              [:player 60]
+                                              [:player 50]]
+                    :raise-dispatched?       false
+                    :actual-volume           50
+                    :wrapped-low             2
+                    :wrapped-high            50
+                    :conflicting-min-clamped 50}
+                   {:dispatched-levels @dispatched-levels_
+                    :raise-dispatched? (not= after-initial after-raise)
+                    :actual-volume     @actual-volume_
+                    :wrapped-low       (audio/wrap-volume db-conn policy -10)
+                    :wrapped-high      (audio/wrap-volume db-conn policy 100)
+                    :conflicting-min-clamped
+                    (audio/wrap-volume
+                     (atom (assoc-in @db-conn
+                                     [:settings :audio :min-volume]
+                                     80))
+                     policy
+                     40)})))))
+      (finally
+        ((::ds/stop limits/PlaybackLimitsComponent)
+         {::ds/instance policy})))))
+
+(deftest serializes-policy-enforcement-with-volume-commands
+  (let [volume-lock  (Object.)
+        read-started (promise)
+        continue     (promise)
+        dispatches_  (atom [])
+        sys          {:player          :player
+                      :db-conn         (atom {:settings
+                                              {:audio {:min-volume 0}}})
+                      :playback-limits :policy
+                      :volume-lock     volume-lock}]
+    (with-redefs [mp/get-volume        (fn [_]
+                                         (deliver read-started true)
+                                         @continue
+                                         90)
+                  mp/dispatch          (fn [_ _ _ level]
+                                         (swap! dispatches_ conj level))
+                  audio/maximum-volume (constantly 50)]
+      (let [enforcement (future
+                          (audio/enforce-volume-limit!
+                           :player
+                           volume-lock
+                           {:limits {:audio/max-volume 50}}))
+            command     (future
+                          @read-started
+                          (audio/set-volume! sys 40))]
+        @read-started
+        (deliver continue true)
+        @enforcement
+        @command
+        (is (= [50 40] @dispatches_))))))

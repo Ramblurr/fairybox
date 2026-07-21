@@ -2,7 +2,32 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.util
   (:require
-   [clojure.core.async :as async]))
+   [clojure.core.async :as async])
+  (:import
+   [java.time LocalTime]))
+
+(def ^:private wall-clock-time-pattern
+  #"(?:[01][0-9]|2[0-3]):[0-5][0-9]")
+
+(defn parse-wall-clock-time
+  ([value]
+   (parse-wall-clock-time nil value))
+  ([setting-key value]
+   (if (and (string? value)
+            (re-matches wall-clock-time-pattern value))
+     (LocalTime/of (parse-long (subs value 0 2))
+                   (parse-long (subs value 3 5)))
+     (throw (ex-info "Wall-clock time must use HH:mm"
+                     (cond-> {:expected-format "HH:mm"
+                              :value           value}
+                       setting-key (assoc :setting-key setting-key)))))))
+
+(defn valid-wall-clock-time? [value]
+  (try
+    (parse-wall-clock-time value)
+    true
+    (catch clojure.lang.ExceptionInfo _
+      false)))
 
 (defn debounce [in ms]
   (let [out (async/chan)]

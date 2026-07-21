@@ -46,22 +46,49 @@
                                                          canonical-path))
           (rfid/refresh! presence))))))
 
+(def ^:private playback-number-fields
+  {:min_volume               :min-volume
+   :max_volume               :max-volume
+   :max_volume_day           :max-volume-day
+   :max_volume_night         :max-volume-night
+   :max_led_brightness_day   :max-led-brightness-day
+   :max_led_brightness_night :max-led-brightness-night})
+
+(defn- parse-playback-integer [value]
+  (cond
+    (integer? value) value
+    (string? value) (parse-long value)
+    :else nil))
+
+(defn- playback-settings-update [body]
+  (let [numbers     (reduce-kv (fn [update body-key setting-key]
+                                 (assoc update
+                                        setting-key
+                                        (parse-playback-integer
+                                         (get body body-key))))
+                               {}
+                               playback-number-fields)
+        day-start   (:day_start body)
+        night-start (:night_start body)]
+    (when (and (every? (fn [[_ value]]
+                         (and (integer? value)
+                              (<= 0 value 100)))
+                       numbers)
+               (util/valid-wall-clock-time? day-start)
+               (util/valid-wall-clock-time? night-start))
+      (assoc numbers
+             :day-start day-start
+             :night-start night-start))))
+
 (defaction save-playback-settings
-  [{:fairy.box/keys [component]
-    {:keys [min_volume max_volume max_volume_day max_volume_night
-            hour_day_start hour_night_start]} :body}]
-  (let [audio (-> {:min-volume       min_volume
-                   :max-volume       max_volume
-                   :max-volume-day   max_volume_day
-                   :max-volume-night max_volume_night
-                   :hour-day-start   hour_day_start
-                   :hour-night-start hour_night_start}
-                  (update-vals #(if (string? %) (parse-long %) %))
-                  util/remove-nils)]
-    (db/upsert-audio-settings!
-     (component :fairy.box.db/db)
-     audio)
-    nil))
+  [{:fairy.box/keys [component] :as request}]
+  (when-let [update (playback-settings-update (:body request))]
+    (swap! (component :fairy.box.db/db)
+           update-in
+           [:settings :audio]
+           merge
+           update))
+  nil)
 
 (defn current-rfid [rfid-uid linked-folder]
   [:div {:id "current-rfid"}
@@ -155,15 +182,18 @@
 (defn playback-settings-form
   [{:keys [url-for]}
    {:keys [min-volume max-volume max-volume-day max-volume-night
-           hour-day-start hour-night-start]}]
+           max-led-brightness-day max-led-brightness-night
+           day-start night-start]}]
   [:form {:class [ui/$page-margin (css :max-w-5xl)]
           :id "playback-settings"
-          :data-signals:min_volume__ifmissing       (or min-volume "")
-          :data-signals:max_volume__ifmissing       (or max-volume "")
-          :data-signals:max_volume_day__ifmissing   (or max-volume-day "")
-          :data-signals:max_volume_night__ifmissing (or max-volume-night "")
-          :data-signals:hour_day_start__ifmissing   (or hour-day-start "")
-          :data-signals:hour_night_start__ifmissing (or hour-night-start "")
+          :data-signals:min_volume__ifmissing               (or min-volume "")
+          :data-signals:max_volume__ifmissing               (or max-volume "")
+          :data-signals:max_volume_day__ifmissing           (or max-volume-day "")
+          :data-signals:max_volume_night__ifmissing         (or max-volume-night "")
+          :data-signals:max_led_brightness_day__ifmissing   (or max-led-brightness-day "")
+          :data-signals:max_led_brightness_night__ifmissing (or max-led-brightness-night "")
+          :data-signals:day_start__ifmissing                (or day-start "")
+          :data-signals:night_start__ifmissing              (or night-start "")
           :data-on:submit (str "evt.preventDefault(); @post('"
                                save-playback-settings
                                "')")}
@@ -186,18 +216,22 @@
                       :label "Max Volume (Night)"
                       :value max-volume-night
                       :data-bind "max_volume_night")
-    (ui/integer-input :name "hour-day-start"
-                      :label "Day Starts At"
-                      :value hour-day-start
-                      :min 0
-                      :max 23
-                      :data-bind "hour_day_start")
-    (ui/integer-input :name "hour-night-start"
-                      :label "Night Starts At"
-                      :value hour-night-start
-                      :min 0
-                      :max 23
-                      :data-bind "hour_night_start")]
+    (ui/integer-input :name "max-led-brightness-day"
+                      :label "Max LED Brightness (Day)"
+                      :value max-led-brightness-day
+                      :data-bind "max_led_brightness_day")
+    (ui/integer-input :name "max-led-brightness-night"
+                      :label "Max LED Brightness (Night)"
+                      :value max-led-brightness-night
+                      :data-bind "max_led_brightness_night")
+    (ui/time-input :name "day-start"
+                   :label "Day Starts At"
+                   :value day-start
+                   :data-bind "day_start")
+    (ui/time-input :name "night-start"
+                   :label "Night Starts At"
+                   :value night-start
+                   :data-bind "night_start")]
    [:div {:class (css :mt-6 :flex :items-center :justify-end :gap-x-6)}
     (ui/button :tag :a
                :href (url-for :page/settings)
