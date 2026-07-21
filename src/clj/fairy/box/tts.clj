@@ -60,7 +60,6 @@
    [fairy.box.db :as db]
    [fairy.box.tts.catalog :as catalog]
    [hato.client :as hc]
-   [hyperlith.core :as h]
    [fairy.box.util :refer [->json <-json]]
    [jp.nijohando.event :as ev])
   (:import
@@ -891,7 +890,7 @@
           emitter               (async/chan)
           catalog-store         (catalog/create-store
                                  {:cache-file (io/file cache-dir "provider-catalogs.edn")
-                                  :refresh!   h/refresh-all!})
+                                  :emitter    emitter})
           preview-cache-cleanup (start-preview-cache-cleanup! cache-dir)
           sys                   {:listener              listener
                                  :emitter               emitter

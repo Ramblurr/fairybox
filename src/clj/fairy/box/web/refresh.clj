@@ -25,6 +25,9 @@
    "/hardware/output/leds/events" #{:led/changed}
    "/sleep/events"                #{:sleep/changed}
    "/auto-shutdown/events"        #{:auto-shutdown/changed}
+   "/tts/events"                  #{:tts/catalog-refresh-failed
+                                    :tts/catalog-refresh-started
+                                    :tts/catalog-updated}
    "/system" #{:system/initialized
                :system/warming-up
                :system/ready
@@ -42,6 +45,9 @@
     (when (= :placed action)
       uid)))
 
+(defn current-event [{:keys [current-event_]}]
+  (some-> current-event_ deref))
+
 (defn request! [{:keys [requests]}]
   (when requests
     (async/offer! requests refresh-token))
@@ -58,10 +64,10 @@
     (= rfid-path (:path event))
     (do
       (reset! rfid-presence (:value event))
-      refresh-token)
+      event)
 
     :else
-    refresh-token))
+    event))
 
 (defn start-refresh! [{:keys [bus db-conn refresh! interval-ms]
                        :or   {interval-ms refresh-interval-ms}}]
@@ -69,27 +75,33 @@
   (assert db-conn "Database connection is required")
   (assert refresh! "Hyperlith refresh function is required")
   (assert (pos? interval-ms) "Refresh interval must be positive")
-  (let [rfid-presence (atom {:action :removed :uid nil})
-        requests      (async/chan
-                       (async/dropping-buffer 1)
-                       (keep (partial event->request rfid-presence)))
-        throttled     (util/throttle requests interval-ms)
-        worker        (async/thread
-                        (loop []
-                          (when-some [_ (async/<!! throttled)]
-                            (try
-                              (refresh!)
-                              (catch Throwable error
-                                (log/error error
-                                           "Hyperlith refresh failed")))
-                            (recur))))
-        watch-key     (Object.)
-        instance      {:db-conn       db-conn
-                       :requests      requests
-                       :rfid-presence rfid-presence
-                       :throttled     throttled
-                       :watch-key     watch-key
-                       :worker        worker}]
+  (let [rfid-presence  (atom {:action :removed :uid nil})
+        current-event_ (atom nil)
+        requests       (async/chan
+                        (async/dropping-buffer 1)
+                        (keep (partial event->request rfid-presence)))
+        throttled      (util/throttle requests interval-ms)
+        worker         (async/thread
+                         (loop []
+                           (when-some [event (async/<!! throttled)]
+                             (reset! current-event_
+                                     (when (map? event) event))
+                             (try
+                               (refresh!)
+                               (catch Throwable error
+                                 (log/error error
+                                            "Hyperlith refresh failed"))
+                               (finally
+                                 (reset! current-event_ nil)))
+                             (recur))))
+        watch-key      (Object.)
+        instance       {:current-event_ current-event_
+                        :db-conn        db-conn
+                        :requests       requests
+                        :rfid-presence  rfid-presence
+                        :throttled      throttled
+                        :watch-key      watch-key
+                        :worker         worker}]
     (doseq [path (keys refresh-events-by-path)]
       (ev/listen bus path requests))
     (ev/listen bus rfid-path requests)

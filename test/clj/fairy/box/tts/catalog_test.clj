@@ -1,6 +1,7 @@
 (ns fairy.box.tts.catalog-test
   (:require
    [babashka.fs :as fs]
+   [clojure.core.async :as async]
    [clojure.edn :as edn]
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
@@ -10,6 +11,20 @@
 (defn- google-credentials [secret]
   {:google-cloud {:credential (cloak/mask secret)
                   :source     :database}})
+
+(defn- await-value [channel timeout-ms]
+  (let [[value port] (async/alts!! [channel (async/timeout timeout-ms)])]
+    (when (= port channel)
+      value)))
+
+(defn- await-event [events event]
+  (let [timeout (async/timeout 2000)]
+    (loop []
+      (let [[message port] (async/alts!! [events timeout])]
+        (when (= port events)
+          (if (= event (get-in message [:value :event]))
+            message
+            (recur)))))))
 
 (def google-response
   {:voices [{:name                   "de-DE-Neural2-C"
@@ -62,14 +77,12 @@
                                     (swap! requests_ inc)
                                     google-response)})]
       (try
-        (is (= {:workers   {}
-                :requests  0
-                :eligible? false
-                :source    :built-in}
-               (let [workers  (catalog/ensure-eligible-fresh! store {})
-                     snapshot (catalog/snapshot store {})]
-                 {:workers   workers
-                  :requests  @requests_
+        (catalog/ensure-eligible-fresh! store {})
+        (let [snapshot (catalog/snapshot store {})]
+          (is (= {:requests  0
+                  :eligible? false
+                  :source    :built-in}
+                 {:requests  @requests_
                   :eligible? (get-in snapshot
                                      [:providers :google-cloud
                                       :credential-eligible?])
@@ -78,15 +91,17 @@
         (finally
           (catalog/stop! store))))))
 
-(deftest refreshes-persists-and-expires-google-catalog
+(deftest refreshes-persists-expires-and-emits-lifecycle-events
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-catalog-success-"}]
     (let [now_        (atom 1000)
           requests_   (atom [])
+          events      (async/chan 16)
           cache-file  (fs/file cache-dir "catalog.edn")
           secret      "catalog-probe-key"
           credentials (google-credentials secret)
           store       (catalog/create-store
                        {:cache-file cache-file
+                        :emitter    events
                         :now        #(deref now_)
                         :request!   (fn [_ opts]
                                       (swap! requests_ conj
@@ -96,24 +111,38 @@
                                                          "X-Goog-Api-Key"])))
                                       google-response)})]
       (try
-        (doseq [worker (vals (catalog/ensure-eligible-fresh!
-                              store credentials))]
-          @worker)
-        (let [fresh (catalog/snapshot store credentials)
-              disk  (slurp cache-file)]
+        (catalog/ensure-eligible-fresh! store credentials)
+        (let [lifecycle (mapv (fn [_]
+                                (some-> (await-value events 1000)
+                                        :value
+                                        (select-keys [:event
+                                                      :operation
+                                                      :provider])))
+                              (range 3))
+              fresh     (catalog/snapshot store credentials)
+              disk      (slurp cache-file)]
           (swap! now_ + (inc catalog/catalog-ttl-ms))
-          (let [stale         (catalog/snapshot store credentials)
-                second-worker (get (catalog/ensure-eligible-fresh!
-                                    store credentials)
-                                   :google-cloud)]
-            @second-worker
-            (is (= {:requests         [true true]
+          (let [stale (catalog/snapshot store credentials)]
+            (catalog/ensure-eligible-fresh! store credentials)
+            (await-event events :tts/catalog-updated)
+            (is (= {:lifecycle
+                    [{:event     :tts/catalog-refresh-queued
+                      :operation :refresh
+                      :provider  :google-cloud}
+                     {:event     :tts/catalog-refresh-started
+                      :operation :refresh
+                      :provider  :google-cloud}
+                     {:event     :tts/catalog-updated
+                      :operation :refresh
+                      :provider  :google-cloud}]
+                    :requests         [true true]
                     :fresh-source     :remote
                     :fresh-stale?     false
                     :stale-after-ttl? true
                     :disk-version     catalog/cache-version
                     :secret-absent?   true}
-                   {:requests         @requests_
+                   {:lifecycle        lifecycle
+                    :requests         @requests_
                     :fresh-source     (get-in fresh
                                               [:providers :google-cloud :source])
                     :fresh-stale?     (get-in fresh
@@ -123,18 +152,21 @@
                     :disk-version     (:version (edn/read-string disk))
                     :secret-absent?   (not (str/includes? disk secret))}))))
         (finally
-          (catalog/stop! store))))))
+          (catalog/stop! store)
+          (async/close! events))))))
 
 (deftest backs-off-with-redacted-errors-and-recovers-malformed-cache
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-catalog-failure-"}]
     (let [now_        (atom 5000)
           requests_   (atom 0)
+          events      (async/chan 16)
           cache-file  (fs/file cache-dir "catalog.edn")
           _           (spit cache-file "not edn[")
           credentials (google-credentials "failure-probe-key")
           fail?_      (atom true)
           store       (catalog/create-store
                        {:cache-file cache-file
+                        :emitter    events
                         :now        #(deref now_)
                         :request!   (fn [_ _]
                                       (swap! requests_ inc)
@@ -144,43 +176,103 @@
                                                          :secret "must-not-escape"}))
                                         google-response))})]
       (try
-        (let [first-worker (get (catalog/ensure-eligible-fresh!
-                                 store credentials)
-                                :google-cloud)]
-          @first-worker)
+        (catalog/ensure-eligible-fresh! store credentials)
+        (await-event events :tts/catalog-refresh-failed)
         (let [failed    (catalog/snapshot store credentials)
               retry-at  (get-in failed
                                 [:providers :google-cloud :retry-at])
-              blocked   (catalog/ensure-eligible-fresh! store credentials)
               malformed (slurp cache-file)]
-          (reset! fail?_ false)
-          (reset! now_ retry-at)
-          @(get (catalog/ensure-eligible-fresh! store credentials)
-                :google-cloud)
-          (let [recovered (catalog/snapshot store credentials)
-                disk      (slurp cache-file)]
-            (is (= {:error-kind           :rate-limited
-                    :safe-message         "Provider temporarily rate-limited catalog discovery."
-                    :blocked-workers      {}
-                    :requests             2
-                    :malformed-preserved? true
-                    :recovered-source     :remote
-                    :safe-state?          true
-                    :safe-disk?           true}
-                   {:error-kind           (get-in failed
-                                                  [:providers :google-cloud
-                                                   :last-error :kind])
-                    :safe-message         (get-in failed
-                                                  [:providers :google-cloud
-                                                   :last-error :message])
-                    :blocked-workers      blocked
-                    :requests             @requests_
-                    :malformed-preserved? (= "not edn[" malformed)
-                    :recovered-source     (get-in recovered
-                                                  [:providers :google-cloud :source])
-                    :safe-state?          (not (str/includes? (pr-str @(:state_ store))
-                                                              "must-not-escape"))
-                    :safe-disk?           (not (str/includes? disk
-                                                              "must-not-escape"))}))))
+          (catalog/ensure-eligible-fresh! store credentials)
+          (let [blocked-event (await-value events 50)]
+            (reset! fail?_ false)
+            (reset! now_ retry-at)
+            (catalog/ensure-eligible-fresh! store credentials)
+            (await-event events :tts/catalog-updated)
+            (let [recovered (catalog/snapshot store credentials)
+                  disk      (slurp cache-file)]
+              (is (= {:error-kind           :rate-limited
+                      :safe-message         "Provider temporarily rate-limited catalog discovery."
+                      :blocked-event        nil
+                      :requests             2
+                      :malformed-preserved? true
+                      :recovered-source     :remote
+                      :safe-state?          true
+                      :safe-disk?           true}
+                     {:error-kind           (get-in failed
+                                                    [:providers :google-cloud
+                                                     :last-error :kind])
+                      :safe-message         (get-in failed
+                                                    [:providers :google-cloud
+                                                     :last-error :message])
+                      :blocked-event        blocked-event
+                      :requests             @requests_
+                      :malformed-preserved? (= "not edn[" malformed)
+                      :recovered-source     (get-in recovered
+                                                    [:providers :google-cloud :source])
+                      :safe-state?          (not (str/includes? (pr-str @(:state_ store))
+                                                                "must-not-escape"))
+                      :safe-disk?           (not (str/includes? disk
+                                                                "must-not-escape"))})))))
         (finally
-          (catalog/stop! store))))))
+          (catalog/stop! store)
+          (async/close! events))))))
+
+(deftest serializes-provider-fetch-jobs
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-catalog-serial-"}]
+    (let [events         (async/chan 16)
+          release        (promise)
+          google-started (promise)
+          requests_      (atom [])
+          active_        (atom 0)
+          peak_          (atom 0)
+          request!       (fn [url _]
+                           (let [active (swap! active_ inc)]
+                             (swap! peak_ max active)
+                             (swap! requests_ conj url)
+                             (try
+                               (cond
+                                 (= url catalog/google-voices-url)
+                                 (do
+                                   (deliver google-started true)
+                                   @release
+                                   google-response)
+
+                                 (= url catalog/elevenlabs-models-url)
+                                 []
+
+                                 (= url catalog/elevenlabs-voices-url)
+                                 {:voices [] :has_more false})
+                               (finally
+                                 (swap! active_ dec)))))
+          store          (catalog/create-store
+                          {:cache-file (fs/file cache-dir "catalog.edn")
+                           :emitter    events
+                           :request!   request!})
+          credentials    {:google-cloud {:credential (cloak/mask "google")
+                                         :source     :database}
+                          :elevenlabs   {:credential (cloak/mask "eleven")
+                                         :source     :database}}]
+      (try
+        (catalog/ensure-eligible-fresh! store credentials)
+        (deref google-started 1000 false)
+        (let [before-release @requests_]
+          (deliver release true)
+          (await-event events :tts/catalog-updated)
+          (await-event events :tts/catalog-updated)
+          (is (= {:before-release before-release
+                  :requests       [catalog/google-voices-url
+                                   catalog/elevenlabs-models-url
+                                   catalog/elevenlabs-voices-url]
+                  :peak           1
+                  :sources        {:google-cloud :remote
+                                   :elevenlabs   :remote}}
+                 {:before-release before-release
+                  :requests       @requests_
+                  :peak           @peak_
+                  :sources        (-> (catalog/snapshot store credentials)
+                                      :providers
+                                      (update-vals :source))})))
+        (finally
+          (deliver release true)
+          (catalog/stop! store)
+          (async/close! events))))))

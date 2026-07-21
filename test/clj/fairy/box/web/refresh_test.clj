@@ -23,6 +23,15 @@
                    :value {:event :sleep/changed}}
                   {:path  "/auto-shutdown/events"
                    :value {:event :auto-shutdown/changed}}
+                  {:path  "/tts/events"
+                   :value {:event    :tts/catalog-refresh-started
+                           :provider :google-cloud}}
+                  {:path  "/tts/events"
+                   :value {:event    :tts/catalog-updated
+                           :provider :google-cloud}}
+                  {:path  "/tts/events"
+                   :value {:event    :tts/catalog-refresh-failed
+                           :provider :google-cloud}}
                   {:path  "/hardware/output/leds/events"
                    :value {:event  :led/changed
                            :values {:audio/play-pause 1.0}}}
@@ -38,6 +47,12 @@
                    :value {:event :sleep/tick}}
                   {:path  "/auto-shutdown/events"
                    :value {:event :auto-shutdown/tick}}
+                  {:path  "/tts/events"
+                   :value {:event    :tts/catalog-refresh-queued
+                           :provider :google-cloud}}
+                  {:path  "/tts/events"
+                   :value {:event    :tts/catalog-refresh-skipped
+                           :provider :google-cloud}}
                   {:path  "/hardware/output/leds/events"
                    :value {:event :led/unknown}}
                   {:path  "/hardware/input/rfid"
@@ -65,6 +80,9 @@
                    ["/sleep/events" {:event :sleep/changed}]
                    ["/auto-shutdown/events"
                     {:event :auto-shutdown/changed}]
+                   ["/tts/events"
+                    {:event    :tts/catalog-refresh-started
+                     :provider :google-cloud}]
                    ["/system" {:event :system/ready}]]]
     (try
       (ev/emitize bus emitter)
@@ -77,6 +95,37 @@
         (refresh/stop-refresh! component)
         (async/close! emitter)
         (async/close! refreshes)
+        (ev/close! bus)))))
+
+(deftest exposes-current-event-only-while-rendering
+  (let [bus        (ev/bus)
+        emitter    (async/chan 2)
+        observed   (async/chan 1)
+        component_ (atom nil)
+        component  (refresh/start-refresh!
+                    {:bus         bus
+                     :db-conn     (atom {})
+                     :interval-ms 5
+                     :refresh!
+                     #(async/>!! observed
+                                 (refresh/current-event @component_))})
+        event      {:path  "/tts/events"
+                    :value {:event     :tts/catalog-refresh-started
+                            :operation :refresh
+                            :provider  :google-cloud}}]
+    (reset! component_ component)
+    (try
+      (ev/emitize bus emitter)
+      (emit! emitter (:path event) (:value event))
+      (is (= {:during-render event
+              :after-render  nil}
+             {:during-render (some-> (await-value observed 1000)
+                                     (select-keys [:path :value]))
+              :after-render  (refresh/current-event component)}))
+      (finally
+        (refresh/stop-refresh! component)
+        (async/close! emitter)
+        (async/close! observed)
         (ev/close! bus)))))
 
 (deftest throttles-led-change-refreshes

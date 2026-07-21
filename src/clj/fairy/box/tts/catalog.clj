@@ -3,12 +3,12 @@
 (ns fairy.box.tts.catalog
   "Credential-gated provider catalog discovery and durable safe caching.
 
-  Google Cloud and ElevenLabs refresh independently. Runtime generations,
-  workers, and credentials stay in memory; only normalized catalogs and
-  redacted refresh metadata are written to disk."
+  One I/O worker serially consumes catalog jobs. Credentials stay in memory;
+  only normalized catalogs and redacted refresh metadata are written to disk."
   (:require
+   [babashka.fs :as fs]
+   [clojure.core.async :as async]
    [clojure.edn :as edn]
-   [clojure.java.io :as io]
    [clojure.string :as str]
    [exoscale.cloak :as cloak]
    [hato.client :as hc])
@@ -221,8 +221,7 @@
                (:providers value))))
 
 (defn- empty-disk-state []
-  {:version   cache-version
-   :providers {}})
+  {:providers {}})
 
 (defn- read-cache-file [^java.io.File cache-file]
   (if-not (.isFile cache-file)
@@ -244,16 +243,12 @@
          :parse-error     (safe-error :cache-read)}))))
 
 (defn- runtime-provider-state [provider-state]
-  (cond-> (merge {:generation           0
-                  :in-flight            nil
-                  :consecutive-failures 0}
-                 provider-state)
+  (cond-> (merge {:consecutive-failures 0} provider-state)
     (:catalog provider-state)
     (assoc :catalog-origin :disk)))
 
 (defn- initial-runtime-state [{:keys [disk-state cache-writable? parse-error]}]
-  {:version         cache-version
-   :providers       (merge (zipmap remote-providers
+  {:providers       (merge (zipmap remote-providers
                                    (repeat (runtime-provider-state {})))
                            (update-vals (:providers disk-state)
                                         runtime-provider-state))
@@ -273,7 +268,7 @@
 
 (defn- atomic-write! [^java.io.File cache-file value]
   (let [^java.io.File parent    (.getParentFile cache-file)
-        ^java.io.File temp-file (io/file parent
+        ^java.io.File temp-file (fs/file parent
                                          (str "." (.getName cache-file) "."
                                               (UUID/randomUUID) ".tmp"))]
     (try
@@ -286,9 +281,8 @@
       (finally
         (Files/deleteIfExists (.toPath temp-file))))))
 
-(defn- persist! [{:keys [state_ cache-file write-lock]}]
-  (locking write-lock
-    (atomic-write! cache-file (disk-state @state_))))
+(defn- persist! [{:keys [state_ cache-file]}]
+  (atomic-write! cache-file (disk-state @state_)))
 
 (defn- default-request-fn [http-client]
   (fn [url opts]
@@ -347,29 +341,33 @@
     (throw (ex-info "Unsupported remote TTS catalog provider"
                     {:provider provider}))))
 
+(declare ^:private run-jobs!)
+
 (defn create-store
-  "Creates a provider catalog store and loads its safe disk state.
+  "Creates a provider catalog store and starts its job worker.
 
   Options:
 
   | key           | description
   |---------------|------------
   | `:cache-file` | Catalog EDN path (required)
+  | `:emitter`    | TTS event-bus emitter channel
   | `:request!`   | Injected JSON GET boundary returning a response body
-  | `:now`        | Epoch-millisecond clock function
-  | `:refresh!`   | Callback after refresh publication"
-  [{:keys [cache-file request! now refresh!]
-    :or   {now      #(System/currentTimeMillis)
-           refresh! (fn [])}}]
-  (let [cache-file  (io/file cache-file)
-        http-client (hc/build-http-client {:connect-timeout 10000})]
-    {:state_     (atom (initial-runtime-state (read-cache-file cache-file)))
-     :workers_   (atom #{})
-     :cache-file cache-file
-     :write-lock (Object.)
-     :request!   (or request! (default-request-fn http-client))
-     :now        now
-     :refresh!   refresh!}))
+  | `:now`        | Epoch-millisecond clock function"
+  [{:keys [cache-file emitter request! now]
+    :or   {now #(System/currentTimeMillis)}}]
+  (let [cache-file  (fs/file cache-file)
+        http-client (hc/build-http-client {:connect-timeout 10000})
+        jobs        (async/chan 16)
+        store       {:state_     (atom (initial-runtime-state
+                                        (read-cache-file cache-file)))
+                     :cache-file cache-file
+                     :emitter    emitter
+                     :jobs       jobs
+                     :request!   (or request! (default-request-fn http-client))
+                     :now        now}
+        worker      (async/io-thread (run-jobs! store))]
+    (assoc store :worker worker)))
 
 (defn- credential-entry [credentials provider]
   (let [{:keys [credential source]} (get credentials provider)]
@@ -382,25 +380,23 @@
         credential-source (:source credential)
         remote-catalog    (when eligible? (:catalog provider-state))
         fetched-at        (:fetched-at provider-state)]
-    (merge
-     {:catalog              (or remote-catalog fallback)
-      :source               (if remote-catalog
-                              (:catalog-origin provider-state :disk)
-                              :built-in)
-      :credential-eligible? eligible?
-      :credential-source    credential-source
-      :refreshing?          (boolean (:in-flight provider-state))
-      :stale?               (and remote-catalog
-                                 (not (fresh? provider-state
-                                              now
-                                              credential-source)))
-      :age-ms               (when (number? fetched-at)
-                              (max 0 (- now fetched-at)))
-      :fetched-at           fetched-at
-      :last-attempt-at      (:last-attempt-at provider-state)
-      :consecutive-failures (:consecutive-failures provider-state 0)
-      :retry-at             (:retry-at provider-state)
-      :last-error           (:last-error provider-state)})))
+    {:catalog              (or remote-catalog fallback)
+     :source               (if remote-catalog
+                             (:catalog-origin provider-state :disk)
+                             :built-in)
+     :credential-eligible? eligible?
+     :credential-source    credential-source
+     :stale?               (and remote-catalog
+                                (not (fresh? provider-state
+                                             now
+                                             credential-source)))
+     :age-ms               (when (number? fetched-at)
+                             (max 0 (- now fetched-at)))
+     :fetched-at           fetched-at
+     :last-attempt-at      (:last-attempt-at provider-state)
+     :consecutive-failures (:consecutive-failures provider-state 0)
+     :retry-at             (:retry-at provider-state)
+     :last-error           (:last-error provider-state)}))
 
 (defn snapshot
   "Returns a redacted, selector-ready snapshot for `credentials`."
@@ -420,28 +416,49 @@
                     (credential-entry credentials provider))]))
            remote-providers)}))
 
-(defn- current-refresh? [state provider generation token]
-  (and (not (:stopped? state))
-       (= generation (get-in state [:providers provider :generation]))
-       (= token (get-in state [:providers provider :in-flight :token]))))
+(defn- emit-catalog-event!
+  [{:keys [emitter]} {:keys [operation provider]} event]
+  (when emitter
+    (async/put! emitter
+                {:path  "/tts/events"
+                 :value {:event     event
+                         :operation operation
+                         :provider  provider}})))
 
 (defn- publish-cache-write-error! [{:keys [state_]}]
   (swap! state_ assoc :parse-error (safe-error :cache-write)))
 
-(defn- notify-refresh! [{:keys [refresh!]}]
+(defn- persist-catalog! [store]
   (try
-    (refresh!)
+    (persist! store)
     (catch Throwable _
-      nil)))
+      (publish-cache-write-error! store))))
+
+(defn- refresh-eligible?
+  [{:keys [state_ now]} provider credential force?]
+  (let [state          @state_
+        provider-state (get-in state [:providers provider])
+        retry-at       (:retry-at provider-state)
+        timestamp      (now)]
+    (and credential
+         (not (:stopped? state))
+         (or force?
+             (and (not (fresh? provider-state
+                               timestamp
+                               (:source credential)))
+                  (or (nil? retry-at)
+                      (<= retry-at timestamp)))))))
 
 (defn- publish-success!
   [{:keys [state_ now] :as store}
-   provider generation token credential-source catalog]
+   {:keys [credential provider] :as job}
+   catalog]
   (let [published?_ (atom false)
         timestamp   (now)]
     (swap! state_
            (fn [state]
-             (if (current-refresh? state provider generation token)
+             (if (:stopped? state)
+               state
                (do
                  (reset! published?_ true)
                  (-> state
@@ -452,29 +469,26 @@
                                 {:catalog              catalog
                                  :catalog-origin       :remote
                                  :fetched-at           timestamp
-                                 :credential-source    credential-source
+                                 :credential-source    (:source credential)
                                  :last-attempt-at      timestamp
                                  :consecutive-failures 0
                                  :retry-at             nil
-                                 :last-error           nil
-                                 :in-flight            nil})))
-               state)))
+                                 :last-error           nil}))))))
     (when @published?_
-      (try
-        (persist! store)
-        (catch Throwable _
-          (publish-cache-write-error! store)))
-      (notify-refresh! store))))
+      (persist-catalog! store)
+      (emit-catalog-event! store job :tts/catalog-updated))))
 
 (defn- publish-failure!
   [{:keys [state_ now] :as store}
-   provider generation token error]
+   {:keys [provider] :as job}
+   error]
   (let [published?_  (atom false)
         timestamp    (now)
         safe-failure (categorized-error error)]
     (swap! state_
            (fn [state]
-             (if (current-refresh? state provider generation token)
+             (if (:stopped? state)
+               state
                (let [failure-count (inc (get-in state
                                                 [:providers provider
                                                  :consecutive-failures]
@@ -487,135 +501,104 @@
                              :consecutive-failures failure-count
                              :retry-at             (+ timestamp
                                                       (retry-delay-ms failure-count))
-                             :last-error           safe-failure
-                             :in-flight            nil}))
-               state)))
+                             :last-error           safe-failure})))))
     (when @published?_
       (when (:cache-writable? @state_)
-        (try
-          (persist! store)
-          (catch Throwable _
-            (publish-cache-write-error! store))))
-      (notify-refresh! store))))
+        (persist-catalog! store))
+      (emit-catalog-event! store job :tts/catalog-refresh-failed))))
 
-(defn- refresh-worker!
+(defn- refresh-provider!
   [{:keys [request!] :as store}
-   provider generation token {:keys [credential source]}]
-  (try
-    (publish-success! store
-                      provider
-                      generation
-                      token
-                      source
-                      (fetch-provider-catalog request! provider credential))
-    (catch Throwable error
-      (publish-failure! store provider generation token error))))
+   {:keys [credential force? provider] :as job}]
+  (if-not (refresh-eligible? store provider credential force?)
+    (emit-catalog-event! store job :tts/catalog-refresh-skipped)
+    (do
+      (emit-catalog-event! store job :tts/catalog-refresh-started)
+      (try
+        (publish-success! store
+                          job
+                          (fetch-provider-catalog request!
+                                                  provider
+                                                  (:credential credential)))
+        (catch Throwable error
+          (publish-failure! store job error))))))
 
-(defn- reserve-refresh!
-  [{:keys [state_ now] :as store} provider credential force?]
-  (let [timestamp (now)
-        token     (Object.)]
-    (loop []
-      (let [state          @state_
-            provider-state (get-in state [:providers provider])
-            retry-at       (:retry-at provider-state)
-            eligible?      (and credential
-                                (not (:stopped? state))
-                                (nil? (:in-flight provider-state))
-                                (or force?
-                                    (and (not (fresh? provider-state
-                                                      timestamp
-                                                      (:source credential)))
-                                         (or (nil? retry-at)
-                                             (<= retry-at timestamp)))))
-            reserved-state (when eligible?
-                             (-> state
-                                 (assoc-in [:providers provider :last-attempt-at]
-                                           timestamp)
-                                 (assoc-in [:providers provider :in-flight]
-                                           {:token  token
-                                            :future nil})))]
-        (cond
-          (not eligible?) nil
+(defn- purge-provider!
+  [{:keys [state_] :as store} provider]
+  (let [purged?_ (atom false)]
+    (swap! state_
+           (fn [state]
+             (if (:stopped? state)
+               state
+               (do
+                 (reset! purged?_ true)
+                 (assoc-in state
+                           [:providers provider]
+                           (runtime-provider-state {}))))))
+    (when (and @purged?_ (:cache-writable? @state_))
+      (persist-catalog! store))
+    @purged?_))
 
-          (compare-and-set! state_ state reserved-state)
-          (let [generation (:generation provider-state)
-                worker     (future
-                             (refresh-worker! store
-                                              provider
-                                              generation
-                                              token
-                                              credential))]
-            (swap! (:workers_ store)
-                   (fn [workers]
-                     (conj (set (remove future-done? workers)) worker)))
-            (swap! state_
-                   (fn [current-state]
-                     (if (current-refresh? current-state
-                                           provider
-                                           generation
-                                           token)
-                       (assoc-in current-state
-                                 [:providers provider :in-flight :future]
-                                 worker)
-                       current-state)))
-            worker)
+(defn- process-job!
+  [store {:keys [credential operation] :as job}]
+  (case operation
+    :refresh
+    (refresh-provider! store job)
 
-          :else
-          (recur))))))
+    :invalidate
+    (when (purge-provider! store (:provider job))
+      (if credential
+        (refresh-provider! store (assoc job :force? true))
+        (emit-catalog-event! store job :tts/catalog-updated)))))
+
+(defn- run-jobs! [{:keys [jobs state_] :as store}]
+  (loop []
+    (when-some [job (async/<!! jobs)]
+      (when-not (:stopped? @state_)
+        (process-job! store job))
+      (recur))))
+
+(defn- enqueue!
+  [{:keys [jobs] :as store} job]
+  (async/put! jobs
+              job
+              (fn [queued?]
+                (when queued?
+                  (emit-catalog-event! store
+                                       job
+                                       :tts/catalog-refresh-queued))))
+  nil)
 
 (defn ensure-eligible-fresh!
-  "Schedules one refresh for each eligible stale provider and returns handles."
+  "Queues refresh jobs for eligible stale providers."
   [store credentials]
-  (into {}
-        (keep (fn [provider]
-                (when-let [worker (reserve-refresh!
-                                   store
-                                   provider
-                                   (credential-entry credentials provider)
-                                   false)]
-                  [provider worker])))
-        remote-providers))
+  (doseq [provider remote-providers
+          :let     [credential (credential-entry credentials provider)]
+          :when    (refresh-eligible? store provider credential false)]
+    (enqueue! store
+              {:operation  :refresh
+               :provider   provider
+               :credential credential}))
+  nil)
 
 (defn invalidate-provider!
-  "Purges `provider`, advances its generation, and force-refreshes if eligible."
-  [{:keys [state_] :as store} provider credentials]
+  "Queues invalidation and refresh of `provider` under the effective credential."
+  [store provider credentials]
   (when-not (some #{provider} remote-providers)
     (throw (ex-info "Unsupported remote TTS catalog provider"
                     {:provider provider})))
-  (swap! state_
-         (fn [state]
-           (let [generation (inc (get-in state
-                                         [:providers provider :generation]
-                                         0))]
-             (assoc-in state
-                       [:providers provider]
-                       {:generation           generation
-                        :in-flight            nil
-                        :consecutive-failures 0}))))
-  (when (:cache-writable? @state_)
-    (try
-      (persist! store)
-      (catch Throwable _
-        (publish-cache-write-error! store))))
-  (reserve-refresh! store
-                    provider
-                    (credential-entry credentials provider)
-                    true))
+  (enqueue! store
+            {:operation  :invalidate
+             :provider   provider
+             :credential (credential-entry credentials provider)})
+
+  nil)
 
 (defn stop!
-  "Stops the store, cancels tracked workers, and rejects late publication."
-  [{:keys [state_ workers_]}]
-  (swap! state_
-         (fn [state]
-           (-> state
-               (assoc :stopped? true)
-               (update :providers
-                       update-vals
-                       (fn [provider-state]
-                         (-> provider-state
-                             (update :generation inc)
-                             (assoc :in-flight nil)))))))
-  (doseq [worker @workers_]
-    (future-cancel worker))
-  (reset! workers_ #{}))
+  "Stops accepting catalog jobs and allows the I/O worker to terminate."
+  [{:keys [jobs state_ worker]}]
+  (swap! state_ assoc :stopped? true)
+  (async/close! jobs)
+  (when worker
+    (async/alts!! [worker (async/timeout 1000)]))
+  nil)

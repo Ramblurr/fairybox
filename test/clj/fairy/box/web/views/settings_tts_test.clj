@@ -33,7 +33,8 @@
     (fn [key]
       (case key
         :fairy.box.db/db database
-        :fairy.box.tts/tts tts-system))
+        :fairy.box.tts/tts tts-system
+        nil))
     :url-for             {:page/home     "/"
                           :page/queue    "/queue"
                           :page/settings "/settings"}}))
@@ -147,6 +148,37 @@
                                "saved output format is unsupported")
                 :ordinary-back-link
                 (str/includes? html "href=\"/settings\"")}))))))
+
+(deftest renders-refresh-started-event-as-transient-status
+  (let [database          (atom (db/migrate-db {:settings {}}))
+        tts-system        {:db-conn database}
+        current-event_    (atom {:path  "/tts/events"
+                                 :value {:event    :tts/catalog-refresh-started
+                                         :provider :google-cloud}})
+        refresh-component {:current-event_ current-event_}
+        req               (assoc
+                           (request database tts-system)
+                           :fairy.box/component
+                           (fn [key]
+                             (case key
+                               :fairy.box.db/db database
+                               :fairy.box.tts/tts tts-system
+                               :fairy.box.web/refresh refresh-component)))]
+    (with-redefs [tts/ensure-provider-catalogs! (constantly nil)
+                  tts/provider-catalog-snapshot (constantly catalog-snapshot)
+                  tts/credential-status
+                  (fn [_ _] {:configured? true :source :database})]
+      (let [during-refresh (h/html->str (view/tts-settings req))
+            _              (reset! current-event_ nil)
+            after-refresh  (h/html->str (view/tts-settings req))]
+        (is (= {:during-refresh true
+                :after-refresh  false}
+               {:during-refresh
+                (str/includes? during-refresh
+                               "Refreshing provider catalog…")
+                :after-refresh
+                (str/includes? after-refresh
+                               "Refreshing provider catalog…")}))))))
 
 (deftest actions-allowlist-and-persist-one-typed-setting
   (let [database     (atom (assoc (db/migrate-db {:settings {}})

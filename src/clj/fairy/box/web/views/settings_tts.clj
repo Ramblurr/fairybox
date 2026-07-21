@@ -4,6 +4,7 @@
    [clojure.string :as str]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
+   [fairy.box.web.refresh :as web-refresh]
    [fairy.box.web.views.common :as uic]
    [fairy.box.web.views.ui :as ui]
    [hyperlith.core :as h :refer [defaction defview]]
@@ -705,26 +706,34 @@
      :tts_preview_status          ""}))
 
 (defn tts-settings [{:fairy.box/keys [component] :as request}]
-  (let [db-conn    (component :fairy.box.db/db)
-        tts-system (component :fairy.box.tts/tts)
-        _          (when tts-system
-                     (tts/ensure-provider-catalogs! tts-system))
-        catalogs   (when tts-system
-                     (tts/provider-catalog-snapshot tts-system))
-        settings   (db/tts-settings @db-conn)
-        providers  (:providers settings)
-        statuses   (into {}
-                         (map (fn [provider]
-                                (let [catalog-status
-                                      (get-in catalogs [:providers provider])]
-                                  [provider
-                                   (merge
-                                    catalog-status
-                                    {:catalog-source (:source catalog-status)}
-                                    (when tts-system
-                                      (tts/credential-status
-                                       tts-system provider)))])))
-                         tts/configurable-providers)]
+  (let [db-conn             (component :fairy.box.db/db)
+        tts-system          (component :fairy.box.tts/tts)
+        refresh-event       (some-> (component :fairy.box.web/refresh)
+                                    web-refresh/current-event
+                                    :value)
+        refreshing-provider (when (= :tts/catalog-refresh-started
+                                     (:event refresh-event))
+                              (:provider refresh-event))
+        _                   (when tts-system
+                              (tts/ensure-provider-catalogs! tts-system))
+        catalogs            (when tts-system
+                              (tts/provider-catalog-snapshot tts-system))
+        settings            (db/tts-settings @db-conn)
+        providers           (:providers settings)
+        statuses            (into {}
+                                  (map (fn [provider]
+                                         (let [catalog-status
+                                               (get-in catalogs [:providers provider])]
+                                           [provider
+                                            (merge
+                                             catalog-status
+                                             {:catalog-source (:source catalog-status)
+                                              :refreshing?
+                                              (= provider refreshing-provider)}
+                                             (when tts-system
+                                               (tts/credential-status
+                                                tts-system provider)))])))
+                                  tts/configurable-providers)]
     [:div {:id "active-tab"}
      [:div {:class                   [ui/$page-margin
                                       (css :mx-auto :max-w-5xl)]
