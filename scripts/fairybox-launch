@@ -48,7 +48,6 @@ printf 'fairybox-launch: release=%s aot=%s jar=%s\n' \
 exec "$authbind" --deep "$java" \
   -XX:-OmitStackTraceInFastThrow \
   -DPIGPIOD_HOST=127.0.0.1 \
-  -XX:+UseZGC \
   --enable-native-access=ALL-UNNAMED \
   "${aot_args[@]}" \
   -jar "$jar"

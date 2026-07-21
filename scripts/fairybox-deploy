@@ -187,6 +187,8 @@ cleanup_after_error() {
   fi
   if ((service_was_active && service_stopped)); then
     systemctl_user start "$service_unit" >/dev/null 2>&1
+  elif ((!service_was_active && production_started)); then
+    systemctl_user reset-failed "$service_unit" >/dev/null 2>&1
   fi
   exit "$status"
 }
@@ -228,7 +230,7 @@ java_internal_version=$("$java" -Xinternalversion 2>&1)
 java_flags=$("$java" -XX:+PrintFlagsFinal -version 2>&1)
 grep -Fq AOTMode <<< "$java_flags" || fail "$java does not support AOTMode"
 grep -Fq AOTCacheOutput <<< "$java_flags" || fail "$java does not support AOTCacheOutput"
-"$java" -XX:+UseZGC --enable-native-access=ALL-UNNAMED -version >/dev/null 2>&1 \
+"$java" --enable-native-access=ALL-UNNAMED -version >/dev/null 2>&1 \
   || fail "$java does not support the production JVM options"
 java_fingerprint=$(printf '%s' "$java_internal_version" | "$sha256sum" | awk '{print $1}')
 architecture=${FAIRYBOX_ARCHITECTURE:-$(uname -m)}
@@ -317,7 +319,6 @@ if ((needs_training)); then
     "$authbind" --deep "$java" \
       -XX:-OmitStackTraceInFastThrow \
       -DPIGPIOD_HOST=127.0.0.1 \
-      -XX:+UseZGC \
       --enable-native-access=ALL-UNNAMED \
       -XX:AOTMode=record \
       "-XX:AOTCacheOutput=$release_cache_part" \

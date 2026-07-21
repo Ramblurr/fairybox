@@ -54,7 +54,9 @@ EOF
   grep -Fxq -- "-XX:AOTCache=$release/box-standalone.aot" "$arguments"
   grep -Fxq -- -Xlog:aot=info "$arguments"
   grep -Fxq -- "$release/box-standalone.jar" "$arguments"
-  grep -Fxq -- -XX:+UseZGC "$arguments"
+  if grep -Fxq -- -XX:+UseZGC "$arguments"; then
+    fail "launcher enabled ZGC, which disables AOT-linked classes on the target JDK"
+  fi
   grep -Fxq -- --enable-native-access=ALL-UNNAMED "$arguments"
 
   rm -- "$release/box-standalone.aot"
@@ -128,7 +130,7 @@ case "$command" in
   stop)
     unit=$1
     if [[ "$unit" == fairybox.service ]]; then
-      printf inactive > "$FAIRYBOX_TEST_STATE/service"
+      printf failed > "$FAIRYBOX_TEST_STATE/service"
     else
       printf failed > "$FAIRYBOX_TEST_STATE/training"
     fi
@@ -289,7 +291,9 @@ successful_active_deploy() {
   assert_equal "$(cat "$fixture/state/service")" active
   assert_equal "$(cat "$fixture/state/trained-jar")" \
     "$fixture/root/releases/$sha/box-standalone.jar"
-  grep -Fxq -- -XX:+UseZGC "$fixture/state/training-arguments"
+  if grep -Fxq -- -XX:+UseZGC "$fixture/state/training-arguments"; then
+    fail "training enabled ZGC, which disables AOT-linked classes on the target JDK"
+  fi
   grep -Fxq -- --enable-native-access=ALL-UNNAMED "$fixture/state/training-arguments"
   [[ -s "$fixture/root/releases/$sha/box-standalone.aot" ]]
   [[ -f "$fixture/root/releases/$sha/release.env" ]]
@@ -355,10 +359,26 @@ readiness_failure_rolls_back() {
   [[ -f "$fixture/root/releases/$sha/.complete" ]]
 }
 
+readiness_failure_preserves_inactive_state() {
+  local fixture
+  local sha
+  local old_sha
+  fixture=$(setup_deploy_fixture rollback-inactive inactive)
+  sha=$(stage_release "$fixture" rollback-inactive-new)
+  if run_deploy "$fixture" training-then-fail "$sha" >/dev/null 2>&1; then
+    fail "inactive readiness failure unexpectedly succeeded"
+  fi
+  old_sha=$(cat "$fixture/state/old-sha")
+  assert_equal "$(readlink -f -- "$fixture/root/current")" \
+    "$fixture/root/releases/$old_sha"
+  assert_equal "$(cat "$fixture/state/service")" inactive
+}
+
 launcher_scenarios
 successful_active_deploy
 successful_inactive_deploy
 checksum_failure_precedes_downtime
 missing_current_is_rejected
 readiness_failure_rolls_back
+readiness_failure_preserves_inactive_state
 printf 'deployment integration scenarios passed\n'
