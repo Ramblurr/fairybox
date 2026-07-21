@@ -27,12 +27,21 @@
   ((requiring-resolve 'fairy.box.system/restart!)
    {:profile (profile)}))
 
+(defn reload
+  "Reloads changed namespaces, rebuilds CSS, and refreshes connected views."
+  []
+  (let [result (clj-reload/reload)]
+    ((requiring-resolve 'fairy.box.css/start))
+    ((requiring-resolve 'hyperlith.core/refresh-all!))
+    result))
+
 (defn reset
   "Reset the application system by stopping, reloading code, and starting again."
   []
-  (stop-system!)
-  (clj-reload/reload)
-  (start-system!))
+  #_(stop-system!)
+  #_(clj-reload/reload)
+  #_(start-system!)
+  (reload))
 
 (defn rfid-comp []
   ((requiring-resolve 'fairy.box.system/component)
@@ -58,6 +67,7 @@
 (comment
   (restart)
   (reset) ;; rcf A reset is a stop, code reload, and start.
+  (reload)
   (clj-reload/reload {:only :all})
   (clojure.repl.deps/sync-deps)
   ;;
