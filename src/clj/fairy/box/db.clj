@@ -9,13 +9,11 @@
    [fairy.box.db.media-meta :as mm]
    [fairy.box.util :as util]))
 
-(def DEFAULT_MAX_VOLUME 95)
-
 (def default-audio-settings
   {:min-volume               0
-   :max-volume               DEFAULT_MAX_VOLUME
-   :max-volume-day           DEFAULT_MAX_VOLUME
-   :max-volume-night         DEFAULT_MAX_VOLUME
+   :max-volume               95
+   :max-volume-day           95
+   :max-volume-night         95
    :max-led-brightness-day   100
    :max-led-brightness-night 100
    :day-start                "08:00"
