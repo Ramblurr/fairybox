@@ -20,6 +20,35 @@
 (def ->json cheshire/generate-string)
 (def <-json #(cheshire/parse-string % true))
 
+(def ^:private openai-api-key-pattern
+  #"^\s*(?:export\s+)?OPENAI_API_KEY\s*=\s*['\"]?([^'\"\s#]+)['\"]?\s*(?:#.*)?$")
+(def ^:private openai-tts-url "https://api.openai.com/v1/audio/speech")
+
+(defn- openai-api-key-from-file []
+  (let [key-file (io/file (System/getProperty "user.home") ".llm-keys")]
+    (when (.isFile key-file)
+      (with-open [reader (io/reader key-file)]
+        (some (fn [line]
+                (second (re-matches openai-api-key-pattern line)))
+              (line-seq reader))))))
+
+(defn- openai-api-key []
+  (or (some-> (System/getenv "OPENAI_API_KEY") str/trim not-empty)
+      (openai-api-key-from-file)))
+
+(defn- openai-input [text]
+  (-> (str text)
+      (str/replace #"(?i)<break\b[^>]*>" "\n")
+      (str/replace #"(?s)</?[A-Za-z][^>]*>" " ")
+      (str/replace "&quot;" "\"")
+      (str/replace "&apos;" "'")
+      (str/replace "&gt;" ">")
+      (str/replace "&lt;" "<")
+      (str/replace "&amp;" "&")
+      (str/replace #"[ \t]+" " ")
+      (str/replace #" *\n *" "\n")
+      str/trim))
+
 (defn tts-cache-dir [settings]
   (str (browse/media-dir settings) "/tts-cache"))
 
@@ -127,6 +156,34 @@
     (let [in (google-cloud-tts sys text)]
       (cache-input-stream tts-cache-dir text in))))
 
+(defn openai-tts
+  [{:keys [model voice instructions]
+    :or   {model        "gpt-4o-mini-tts"
+           voice        "marin"
+           instructions "Speak naturally."}}
+   text]
+  (let [api-key (openai-api-key)]
+    (assert api-key "OPENAI_API_KEY must be set in the environment or ~/.llm-keys")
+    (-> (hc/post openai-tts-url
+                 {:as           :stream
+                  :body         (->json {"model"           model
+                                         "input"           (openai-input text)
+                                         "voice"           voice
+                                         "instructions"    instructions
+                                         "response_format" "mp3"})
+                  :content-type :json
+                  :headers      {"Authorization" (str "Bearer " api-key)}})
+        :body)))
+
+(defn caching-openai-tts [{:keys [tts-cache-dir] :as sys} text]
+  (let [cache-key [::openai
+                   (select-keys sys [:model :voice :instructions])
+                   text]]
+    (if-let [local-url (cache-get tts-cache-dir cache-key)]
+      local-url
+      (let [in (openai-tts sys text)]
+        (cache-input-stream tts-cache-dir cache-key in)))))
+
 (defn with-db [sys]
   (assoc sys :db @(:db-conn sys)))
 
@@ -137,7 +194,8 @@
     (condp = (db/tts-engine (:db sys))
       :mimic3 (caching-mimic3-tts sys text)
       :ha (caching-home-assistant-tts sys text)
-      :google-cloud (caching-google-cloud-tts sys text))))
+      :google-cloud (caching-google-cloud-tts sys text)
+      :openai (caching-openai-tts sys text))))
 
 (defn emit-player! [{:keys [emitter]} event]
   (async/put! emitter {:path "/player/commands" :value event}))
@@ -288,3 +346,39 @@ This one is Piglet has a Bath
   (caching-mimic3-tts sys "hello there!23")
   ;;
   )
+
+(comment
+  (require '[ol.vinyl :as vinyl])
+
+  (defn openai-test [args prompt]
+    (let [audio-path      (caching-openai-tts
+                           (assoc args
+                                  :tts-cache-dir
+                                  (System/getProperty "java.io.tmpdir"))
+                           prompt)
+          player          (vinyl/create-player)
+          playback-result (promise)]
+      (try
+        (vinyl/subscribe!
+         player
+         (fn [{:ol.vinyl/keys [event] :as event-data}]
+           (when (#{:vlc/finished :vlc/error} event)
+             (deliver playback-result event-data)))
+         #{:vlc/finished :vlc/error})
+        (vinyl/dispatch player :playback/append :paths [audio-path])
+        (vinyl/dispatch player :playback/play)
+        {:audio-path     audio-path
+         :playback-event (:ol.vinyl/event
+                          (deref playback-result
+                                 30000
+                                 {:ol.vinyl/event :timeout}))}
+        (finally
+          (vinyl/release-player! player)))))
+
+  (openai-test
+   {:model        "gpt-4o-mini-tts"
+    :voice        "marin"
+    :instructions "Speak cheerfully."}
+   "Hello world")
+
+  :rcf)
