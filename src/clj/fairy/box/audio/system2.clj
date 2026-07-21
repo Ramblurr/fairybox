@@ -14,8 +14,6 @@
    [jp.nijohando.event :as ev]
    [ol.vinyl :as mp]))
 
-(defonce factory (mp/init!))
-
 (def ^:private audio-init-state {:playback {:state nil}
                                  :mixer    {:muted? nil
                                             :volume nil}
@@ -334,7 +332,17 @@
                      :mixer/set-volume
                      :level (int maximum))))))
 
-(defn new-player! [policy handler]
+(defn- media-player-factory! []
+  (or (mp/factory)
+      (let [started-at-nanos (System/nanoTime)
+            factory          (mp/init!)
+            elapsed-ms       (quot (- (System/nanoTime) started-at-nanos)
+                                   1000000)]
+        (log/info "Initialized VLC media player factory"
+                  {:elapsed-ms elapsed-ms})
+        factory)))
+
+(defn new-player! [factory policy handler]
   (let [player (mp/create-player {:media-player-factory factory})]
     (mp/subscribe! player handler)
     (mp/dispatch player
@@ -364,12 +372,14 @@
 
 (defn- init-audio! [{:keys [bus settings db-conn playback-limits]}]
   (reset! audio-state audio-init-state)
-  (let [emitter     (async/chan (async/sliding-buffer 512))
+  (let [factory     (media-player-factory!)
+        emitter     (async/chan (async/sliding-buffer 512))
         commands-ch (async/chan (async/sliding-buffer 512))
         internal-ch (async/chan (async/sliding-buffer 512))
         exit-ch     (async/chan)
         volume-lock (Object.)
-        player      (new-player! playback-limits
+        player      (new-player! factory
+                                 playback-limits
                                  (fn [event]
                                    (try
                                      (async/put! internal-ch event)

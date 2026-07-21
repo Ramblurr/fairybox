@@ -5,8 +5,9 @@
    [clojure.test :refer [deftest is use-fixtures]]
    [donut.system :as ds]
    [fairy.box.audio.system2 :as audio]
-   [fairy.box.playback-limits :as limits]
    [fairy.box.media-test-utils :as media]
+   [fairy.box.playback-limits :as limits]
+   [jp.nijohando.event :as ev]
    [ol.vinyl :as mp])
   (:import
    [java.time ZoneId ZonedDateTime]))
@@ -19,6 +20,46 @@
         (reset! audio/audio-state original)))))
 
 (use-fixtures :each with-restored-audio-state)
+
+(deftest initializes-vlc-during-audio-component-start
+  (let [bus            (ev/bus)
+        init-count_    (atom 0)
+        created-with_  (atom [])
+        release-count_ (atom 0)
+        released       (promise)]
+    (try
+      (with-redefs [mp/factory           (constantly nil)
+                    mp/init!             (fn []
+                                           (swap! init-count_ inc)
+                                           ::factory)
+                    mp/create-player     (fn [opts]
+                                           (swap! created-with_ conj opts)
+                                           [::player (count @created-with_)])
+                    mp/subscribe!        (constantly nil)
+                    mp/dispatch          (constantly nil)
+                    mp/release-player!   (fn [_]
+                                           (when (= 2 (swap! release-count_ inc))
+                                             (deliver released true)))
+                    audio/maximum-volume (constantly 50)
+                    limits/subscribe!    (constantly nil)
+                    limits/unsubscribe!  (constantly nil)]
+        (let [instance ((::ds/start audio/AudioSystemComponent)
+                        {::ds/config {:bus             bus
+                                      :settings        {}
+                                      :db-conn         (atom {})
+                                      :playback-limits ::policy}})]
+          (try
+            (is (= {:init-count   1
+                    :created-with [{:media-player-factory ::factory}
+                                   {:media-player-factory ::factory}]}
+                   {:init-count   @init-count_
+                    :created-with @created-with_}))
+            (finally
+              ((::ds/stop audio/AudioSystemComponent)
+               {::ds/instance instance})))
+          (is (true? (deref released 1000 false)))))
+      (finally
+        (ev/close! bus)))))
 
 (deftest metadata-excludes-parsed-files-without-audio-tracks
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-metadata-"}]
