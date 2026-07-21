@@ -3,8 +3,8 @@
    [fairy.box.audio.current :as player]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
-   [fairy.box.sleep :as sleep]
    [fairy.box.switchboard :as switchboard]
+   [fairy.box.timers :as timers]
    [fairy.box.web.views.ui :as ui]
    [fairy.box.web.controllers.artwork :as artwork]
    [fairy.box.web.player-progress :as progress]
@@ -147,9 +147,6 @@
 
 (router/add-route! [:get "/api/current-artwork"] #'artwork/current-artwork)
 
-(def duration-data progress/duration-data)
-(def format-duration progress/format-duration)
-
 (defn- command-expression [command]
   (str "@post('" control-player
        (h/url-query-string {:command command})
@@ -242,7 +239,7 @@
   [:div {:id        "current-time"
          :data-text "$_server_time"
          :class     (css :transition-all :duration-500)}
-   (format-duration (or current-time 0))])
+   (progress/time-label (or current-time 0))])
 
 (defn current-artwork [current]
   [:img {:id    "current-artwork"
@@ -268,7 +265,7 @@
          :data-length (str duration)
          :class       (css :transition-all :duration-500 :text-smoky-500
                            [:dark :text-smoky-500])}
-   (format-duration duration)])
+   (progress/time-label duration)])
 
 (defn time-left [current-time duration]
   (when duration
@@ -277,7 +274,7 @@
            :data-text   "$_server_time_left"
            :class       (css :transition-all :duration-500 :text-smoky-500
                              [:dark :text-smoky-500])}
-     (progress/format-time-left current-time duration)]))
+     (progress/time-left-label current-time duration)]))
 
 (defn play-pause-button [state]
   (let [button-icon (condp = state
@@ -393,7 +390,7 @@
   (let [ready?                (= (switchboard/system-state!) :system-state/ready)
         track-loaded?         (and (player/mrl current) (player/state current))
         sleep-countdown-state (when sleep-timer
-                                (sleep/countdown-state sleep-timer))
+                                (timers/sleep-countdown-state sleep-timer))
         $button-base          (css :transition-all :duration-500
                                    :text-smoky-800
                                    [:hover-mouse [:hover :scale-110]]

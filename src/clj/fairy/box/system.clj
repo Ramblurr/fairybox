@@ -13,8 +13,8 @@
    [fairy.box.mqtt :as mqtt]
    [fairy.box.playback-limits :as playback-limits]
    [fairy.box.settings :as settings]
-   [fairy.box.sleep :as sleep]
    [fairy.box.switchboard :as switchboard]
+   [fairy.box.timers :as timers]
    [fairy.box.tts :as tts]
    [fairy.box.web.front-panel :as front-panel]
    [fairy.box.web.player-events :as player-events]
@@ -77,6 +77,7 @@
                              :fairy.box.bus/bus                  (component-ref :fairy.box.bus/bus)
                              :fairy.box.switchboard/switchboard  (component-ref :fairy.box.switchboard/switchboard)
                              :fairy.box.audio.system2/player     (component-ref :fairy.box.audio.system2/player)
+                             :fairy.box.auto-shutdown/timer      (component-ref :fairy.box.auto-shutdown/timer)
                              :fairy.box.sleep/timer              (component-ref :fairy.box.sleep/timer)
                              :fairy.box.tts/tts                  (component-ref :fairy.box.tts/tts)
                              :fairy.box.web/front-panel-refresh  (component-ref :fairy.box.web/front-panel-refresh)
@@ -100,7 +101,8 @@
                                       :fairy.box.bus/bus                  bus/BusComponent
                                       :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
                                       :fairy.box.audio.system2/player     audio/AudioSystemComponent
-                                      :fairy.box.sleep/timer              sleep/SleepTimerComponent
+                                      :fairy.box.auto-shutdown/timer      timers/AutoShutdownTimerComponent
+                                      :fairy.box.sleep/timer              timers/SleepTimerComponent
                                       :fairy.box.tts/tts                  tts/TTSComponent
                                       :fairy.box.web/front-panel-refresh  front-panel/FrontPanelRefreshComponent
                                       :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent

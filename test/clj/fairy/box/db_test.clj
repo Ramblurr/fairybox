@@ -54,6 +54,8 @@
                                    :card-removal-behavior    :pause
                                    :card-return-behavior     :restart
                                    :unknown                  :kept}
+                           :auto-shutdown
+                           db/default-auto-shutdown-settings
                            :sleep db/default-sleep-settings
                            :tts   db/default-tts-settings}
                           :media-metadata {}}
@@ -121,6 +123,20 @@
             :idempotent?   (every? (fn [[_ database]]
                                      (= database (db/migrate-db database)))
                                    migrated)}))))
+
+(deftest migrates-partial-auto-shutdown-settings-and-preserves-unknown-data
+  (let [original {:settings
+                  {:auto-shutdown {:enabled? true :unknown :kept}}
+                  :unrelated :kept}
+        migrated (db/migrate-db original)]
+    (is (= {:auto-shutdown {:enabled?         true
+                            :duration-minutes 30
+                            :unknown          :kept}
+            :unrelated     :kept
+            :idempotent?   true}
+           {:auto-shutdown (db/auto-shutdown-settings migrated)
+            :unrelated     (:unrelated migrated)
+            :idempotent?   (= migrated (db/migrate-db migrated))}))))
 
 (deftest migrates-partial-sleep-settings-and-preserves-unknown-data
   (let [original {:settings  {:sleep {:shutdown-delay-minutes 0

@@ -4,7 +4,7 @@
    [clojure.core.async :as async]
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
-   [fairy.box.sleep :as sleep]
+   [fairy.box.timers :as timers]
    [fairy.box.media-test-utils :as media]
    [fairy.box.web.views :as views]
    [fairy.box.web.views.settings :as settings-view]
@@ -21,11 +21,19 @@
               'save-device-settings-fn))
 
 (defn- device-request [db-conn]
-  {:url-for             {:page/home            "/"
-                         :page/queue           "/queue"
-                         :page/settings        "/settings"
-                         :page.settings/device "/settings/device"}
-   :fairy.box/component {:fairy.box.db/db db-conn}})
+  {:url-for
+   {:page/home            "/"
+    :page/queue           "/queue"
+    :page/settings        "/settings"
+    :page.settings/device "/settings/device"}
+   :fairy.box/component
+   {:fairy.box.auto-shutdown/timer
+    {:fairy.box.timers/current
+     (constantly {:enabled? true :selected-minutes 45 :idle? true})}
+    :fairy.box.db/db               db-conn
+    :fairy.box.sleep/timer
+    {:fairy.box.timers/current
+     (constantly {:enabled? false :selected-minutes 30 :phase :off})}}})
 
 (defn- browse-request [tree dir]
   (assoc (media/request tree dir)
@@ -287,7 +295,9 @@
                              "Day &amp; night profiles" "Day" "Night"
                              "Starts at" "Maximum volume" "LED brightness"
                              "Sleep timer" "Fade-out time"
-                             "Delay before shutdown"]
+                             "Delay before shutdown" "Auto shutdown"
+                             "Idle time" "45 minutes"
+                             "Disable auto shutdown"]
             card-labels     ["RFID card behavior" "Keep playing"
                              "Pause playback" "Resume playback"
                              "Restart the playlist"]
@@ -295,17 +305,19 @@
                              "card-behavior-settings"
                              "day-night-settings"
                              "day-profile" "night-profile"
-                             "timers-power-settings"]
+                             "sleep-timer-settings"
+                             "auto-shutdown-settings"]
             radio-inputs    (filter #(str/includes? % "type=\"radio\"")
                                     inputs)]
-        (is (= {:device-page         true
-                :device-route        true
-                :menu-link           true
-                :responsive-cards    true
-                :labels              true
-                :signals-initialized true
-                :bindings            true
-                :sleep-chevron-icons true
+        (is (= {:device-page            true
+                :device-route           true
+                :menu-link              true
+                :responsive-cards       true
+                :labels                 true
+                :signals-initialized    true
+                :bindings               true
+                :sleep-chevron-icons    true
+                :auto-shutdown-controls true
                 :card-controls
                 {:labels           true
                  :radio-count      4
@@ -323,11 +335,11 @@
                  :day         true
                  :night       true
                  :minute-step true}
-                :live-save-on-change true
-                :save-button-removed true
-                :ordinary-back-link  true
-                :legacy-name-removed true
-                :htmx-removed        true}
+                :live-save-on-change    true
+                :save-button-removed    true
+                :ordinary-back-link     true
+                :legacy-name-removed    true
+                :htmx-removed           true}
                {:device-page
                 (and (str/includes? html "id=\"active-tab\"")
                      (str/includes? html "id=\"device-settings\"")
@@ -358,6 +370,16 @@
                      (str/includes? html "rotate(180 320 320)")
                      (not (or (str/includes? html "‹")
                               (str/includes? html "›"))))
+                :auto-shutdown-controls
+                (and (str/includes?
+                      html
+                      "aria-label=\"Previous auto shutdown duration\"")
+                     (str/includes?
+                      html
+                      "aria-label=\"Next auto shutdown duration\"")
+                     (str/includes? html ">45 minutes</p>")
+                     (str/includes? html ">Disable auto shutdown</button>")
+                     (not (str/includes? html "Auto shuts down at")))
                 :card-controls
                 {:labels      (every? #(str/includes? html %) card-labels)
                  :radio-count (count radio-inputs)
@@ -509,30 +531,42 @@
              {:sleep                   (get-in @db-conn [:settings :sleep])
               :negative-delay-changed? (not= after-valid @db-conn)})))))
 
-(deftest sleep-actions-rely-on-the-change-event-for-one-page-refresh
-  (let [toggle!    (ns-resolve 'fairy.box.web.views.settings
-                               'toggle-sleep-timer-fn)
-        cycle!     (ns-resolve 'fairy.box.web.views.settings
-                               'cycle-sleep-duration-fn)
-        enabled_   (atom false)
-        calls_     (atom [])
-        refreshes_ (atom 0)
-        request    {:fairy.box/component
-                    {:fairy.box.sleep/timer ::timer}}]
-    (with-redefs [sleep/enabled? (fn [_] @enabled_)
-                  sleep/enable!  (fn [_]
-                                   (reset! enabled_ true)
-                                   (swap! calls_ conj :enable))
-                  sleep/disable! (fn [_]
-                                   (reset! enabled_ false)
-                                   (swap! calls_ conj :disable))
-                  sleep/cycle!   (fn [_ direction]
-                                   (swap! calls_ conj [:cycle direction]))
-                  h/refresh-all! (fn [& _]
-                                   (swap! refreshes_ inc))]
-      (toggle! request)
-      (toggle! request)
-      (cycle! (assoc request :query-params {"direction" "next"})))
-    (is (= {:calls            [:enable :disable [:cycle :next]]
+(deftest timer-actions-rely-on-change-events-for-page-refreshes
+  (let [sleep-toggle! (ns-resolve 'fairy.box.web.views.settings
+                                  'toggle-sleep-timer-fn)
+        sleep-cycle!  (ns-resolve 'fairy.box.web.views.settings
+                                  'cycle-sleep-duration-fn)
+        auto-toggle!  (ns-resolve 'fairy.box.web.views.settings
+                                  'toggle-auto-shutdown-timer-fn)
+        auto-cycle!   (ns-resolve 'fairy.box.web.views.settings
+                                  'cycle-auto-shutdown-duration-fn)
+        states_       (atom {::sleep false ::auto true})
+        calls_        (atom [])
+        refreshes_    (atom 0)
+        request       {:fairy.box/component
+                       {:fairy.box.sleep/timer         ::sleep
+                        :fairy.box.auto-shutdown/timer ::auto}}]
+    (with-redefs [timers/enabled? #(get @states_ %)
+                  timers/enable!  (fn [timer]
+                                    (swap! states_ assoc timer true)
+                                    (swap! calls_ conj [timer :enable]))
+                  timers/disable! (fn [timer]
+                                    (swap! states_ assoc timer false)
+                                    (swap! calls_ conj [timer :disable]))
+                  timers/cycle!   (fn [timer direction]
+                                    (swap! calls_ conj
+                                           [timer :cycle direction]))
+                  h/refresh-all!  (fn [& _]
+                                    (swap! refreshes_ inc))]
+      (sleep-toggle! request)
+      (auto-toggle! request)
+      (sleep-cycle! (assoc request
+                           :query-params {"direction" "next"}))
+      (auto-cycle! (assoc request
+                          :query-params {"direction" "previous"})))
+    (is (= {:calls            [[::sleep :enable]
+                               [::auto :disable]
+                               [::sleep :cycle :next]
+                               [::auto :cycle :previous]]
             :direct-refreshes 0}
            {:calls @calls_ :direct-refreshes @refreshes_}))))

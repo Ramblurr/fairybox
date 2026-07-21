@@ -2,9 +2,9 @@
   (:require
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
-   [fairy.box.sleep :as sleep]
    [fairy.box.settings :as app-settings]
    [fairy.box.switchboard :as switchboard]
+   [fairy.box.timers :as timers]
    [fairy.box.util :as util]
    [fairy.box.web.rfid :as rfid]
    [fairy.box.web.views.common :as uic]
@@ -100,27 +100,48 @@
                sleep (update-in [:settings :sleep] merge sleep)))))
   nil)
 
-(def ^:private sleep-cycle-directions
+(def ^:private timer-cycle-directions
   {"next"     :next
    "previous" :previous})
 
-(defn- sleep-timer-component [{:fairy.box/keys [component]}]
+(defn- timer-component
+  [{:fairy.box/keys [component]} component-key]
   (when (ifn? component)
-    (component :fairy.box.sleep/timer)))
+    (component component-key)))
+
+(defn- toggle-timer! [timer]
+  (if (timers/enabled? timer)
+    (timers/disable! timer)
+    (timers/enable! timer)))
 
 (defaction cycle-sleep-duration
   [{:keys [query-params] :as request}]
-  (when-let [direction (sleep-cycle-directions
+  (when-let [direction (timer-cycle-directions
                         (get query-params "direction"))]
-    (when-let [timer (sleep-timer-component request)]
-      (sleep/cycle! timer direction)))
+    (when-let [timer (timer-component request :fairy.box.sleep/timer)]
+      (timers/cycle! timer direction)))
   nil)
 
 (defaction toggle-sleep-timer [request]
-  (when-let [timer (sleep-timer-component request)]
-    (if (sleep/enabled? timer)
-      (sleep/disable! timer)
-      (sleep/enable! timer)))
+  (when-let [timer (timer-component request :fairy.box.sleep/timer)]
+    (toggle-timer! timer))
+  nil)
+
+(defaction cycle-auto-shutdown-duration
+  [{:keys [query-params] :as request}]
+  (when-let [direction (timer-cycle-directions
+                        (get query-params "direction"))]
+    (when-let [timer (timer-component
+                      request
+                      :fairy.box.auto-shutdown/timer)]
+      (timers/cycle! timer direction)))
+  nil)
+
+(defaction toggle-auto-shutdown-timer [request]
+  (when-let [timer (timer-component
+                    request
+                    :fairy.box.auto-shutdown/timer)]
+    (toggle-timer! timer))
   nil)
 
 (defn current-rfid [rfid-uid linked-folder]
@@ -452,66 +473,82 @@
       :brightness        max-led-brightness-night
       :brightness-signal "max_led_brightness_night"})]))
 
-(defn- sleep-cycle-expression [direction]
-  (str "@post('" cycle-sleep-duration
+(defn- timer-cycle-expression [action direction]
+  (str "@post('" action
        (h/url-query-string {:direction (name direction)})
        "')"))
+
+(defn- timer-controls
+  [{:keys [heading selected-minutes detail cycle-action toggle-action
+           previous-label next-label enabled? timer-label]}]
+  [:div {:class (css :rounded-lg :border :border-smoky-200 :bg-white :p-4
+                     [:dark :border-smoky-700 :bg-smoky-950])}
+   [:p {:class (css :text-sm :font-semibold :text-smoky-900
+                    [:dark :text-smoky-100])}
+    heading]
+   [:div {:class (css :mt-4 :flex :items-center :justify-between :gap-3)}
+    [:button {:type          "button"
+              :aria-label    previous-label
+              :data-on:click (timer-cycle-expression cycle-action :previous)
+              :class         (css :flex :h-12 :w-12 :shrink-0 :items-center
+                                  :justify-center :rounded-full :border
+                                  :border-smoky-300 :text-smoky-800
+                                  [:dark :border-smoky-700 :text-smoky-100])}
+     (icon/chevron-left {:class (css :h-5 :w-5)})]
+    [:div {:class (css :min-w-32 :text-center)}
+     [:p {:class (css :text-xl :font-bold :tabular-nums :text-smoky-900
+                      [:dark :text-smoky-100])}
+      (timers/duration-label selected-minutes)]
+     (when detail
+       [:p {:class (css :mt-1 :text-xs :tabular-nums :text-smoky-600
+                        [:dark :text-smoky-400])}
+        detail])]
+    [:button {:type          "button"
+              :aria-label    next-label
+              :data-on:click (timer-cycle-expression cycle-action :next)
+              :class         (css :flex :h-12 :w-12 :shrink-0 :items-center
+                                  :justify-center :rounded-full :border
+                                  :border-smoky-300 :text-smoky-800
+                                  [:dark :border-smoky-700 :text-smoky-100])}
+     (icon/chevron-right {:class (css :h-5 :w-5)})]]
+   [:button {:type          "button"
+             :data-on:click (str "@post('" toggle-action "')")
+             :class         [(css :mt-5 :w-full :rounded-md :px-4 :py-3
+                                  :text-sm :font-bold :text-white)
+                             (if enabled?
+                               (css :bg-red-700)
+                               (css :bg-cloud-burst-700))]}
+    timer-label]])
 
 (defn- sleep-timer-settings [timer sleep-settings]
   (let [{:keys [enabled? selected-minutes fade-at shutdown-at phase]}
         (if timer
-          (sleep/current timer)
+          (timers/current timer)
           {:enabled? false :selected-minutes nil :phase :off})
-        {:keys [shutdown? shutdown-delay-minutes]}                    sleep-settings
-        timer-label (if enabled? "Disable sleep timer" "Enable sleep timer")]
+        {:keys [shutdown? shutdown-delay-minutes]}                    sleep-settings]
     (settings-card
-     {:id          "timers-power-settings"
+     {:id          "sleep-timer-settings"
       :title       "Sleep timer"
       :description "Fade playback to silence over the final two minutes, then optionally power off Fairybox."
       :class       (css [:lg :col-span-12])}
      [:div {:class (css :mt-6 :grid :grid-cols-1 :gap-6
                         [:md :grid-cols-2])}
-      [:div {:class (css :rounded-lg :border :border-smoky-200 :bg-white :p-4
-                         [:dark :border-smoky-700 :bg-smoky-950])}
-       [:p {:class (css :text-sm :font-semibold :text-smoky-900
-                        [:dark :text-smoky-100])}
-        "Fade-out time"]
-       [:div {:class (css :mt-4 :flex :items-center :justify-between :gap-3)}
-        [:button {:type          "button"
-                  :aria-label    "Previous sleep duration"
-                  :data-on:click (sleep-cycle-expression :previous)
-                  :class         (css :flex :h-12 :w-12 :shrink-0 :items-center
-                                      :justify-center :rounded-full :border
-                                      :border-smoky-300 :text-smoky-800
-                                      [:dark :border-smoky-700 :text-smoky-100])}
-         (icon/chevron-left {:class (css :h-5 :w-5)})]
-        [:div {:class (css :min-w-32 :text-center)}
-         [:p {:class (css :text-xl :font-bold :tabular-nums :text-smoky-900
-                          [:dark :text-smoky-100])}
-          (sleep/format-duration selected-minutes)]
-         [:p {:class (css :mt-1 :min-h-5 :text-xs :tabular-nums :text-smoky-600
-                          [:dark :text-smoky-400])}
-          (when enabled?
-            (str (if (= :shutdown-wait phase)
-                   "Audio stopped at "
-                   "Audio stops at ")
-                 fade-at))]]
-        [:button {:type          "button"
-                  :aria-label    "Next sleep duration"
-                  :data-on:click (sleep-cycle-expression :next)
-                  :class         (css :flex :h-12 :w-12 :shrink-0 :items-center
-                                      :justify-center :rounded-full :border
-                                      :border-smoky-300 :text-smoky-800
-                                      [:dark :border-smoky-700 :text-smoky-100])}
-         (icon/chevron-right {:class (css :h-5 :w-5)})]]
-       [:button {:type          "button"
-                 :data-on:click (str "@post('" toggle-sleep-timer "')")
-                 :class         [(css :mt-5 :w-full :rounded-md :px-4 :py-3
-                                      :text-sm :font-bold :text-white)
-                                 (if enabled?
-                                   (css :bg-red-700)
-                                   (css :bg-cloud-burst-700))]}
-        timer-label]]
+      (timer-controls
+       {:heading          "Fade-out time"
+        :selected-minutes selected-minutes
+        :detail           (when enabled?
+                            (str (if (= :shutdown-wait phase)
+                                   "Audio stopped at "
+                                   "Audio stops at ")
+                                 fade-at))
+        :cycle-action     cycle-sleep-duration
+        :toggle-action    toggle-sleep-timer
+        :previous-label   "Previous sleep duration"
+        :next-label       "Next sleep duration"
+        :enabled?         enabled?
+        :timer-label      (if enabled?
+                            "Disable sleep timer"
+                            "Enable sleep timer")})
       [:div {:class (css :space-y-5 :rounded-lg :border :border-smoky-200
                          :bg-white :p-4
                          [:dark :border-smoky-700 :bg-smoky-950])}
@@ -520,13 +557,14 @@
                  :name      "sleep-shutdown"
                  :checked   shutdown?
                  :data-bind "sleep_shutdown"
-                 :class     (css :mt-1 :h-5 :w-5 :rounded :border-smoky-300)}]
+                 :class     (css :mt-1 :h-5 :w-5 :rounded
+                                 :border-smoky-300)}]
         [:span
          [:span {:class (css :block :text-sm :font-semibold :text-smoky-900
                              [:dark :text-smoky-100])}
           "Shut down after fade-out"]
-         [:span {:class (css :mt-1 :block :text-xs :leading-5 :text-smoky-600
-                             [:dark :text-smoky-400])}
+         [:span {:class (css :mt-1 :block :text-xs :leading-5
+                             :text-smoky-600 [:dark :text-smoky-400])}
           "Power off without playing the shutdown sound."]]]
        [:div
         [:label {:for   "sleep-shutdown-delay"
@@ -542,10 +580,11 @@
                   :value              shutdown-delay-minutes
                   :data-bind          "sleep_shutdown_delay_minutes"
                   :data-attr:disabled "!$sleep_shutdown"
-                  :class              (css :w-24 :rounded-md :border :border-smoky-300
-                                           :bg-white :px-3 :py-2 :text-smoky-900
-                                           [:dark :border-smoky-700 :bg-smoky-900
-                                            :text-smoky-100])}]
+                  :class              (css :w-24 :rounded-md :border
+                                           :border-smoky-300 :bg-white
+                                           :px-3 :py-2 :text-smoky-900
+                                           [:dark :border-smoky-700
+                                            :bg-smoky-900 :text-smoky-100])}]
          [:span {:class (css :text-sm :text-smoky-700
                              [:dark :text-smoky-300])}
           "minutes"]]
@@ -557,6 +596,29 @@
                            :text-smoky-800 [:dark :text-smoky-200])}
            (str "Power off at " shutdown-at)])]]])))
 
+(defn- auto-shutdown-settings [timer]
+  (let [{:keys [enabled? selected-minutes]}
+        (if timer
+          (timers/current timer)
+          {:enabled? false :selected-minutes nil})]
+    (settings-card
+     {:id          "auto-shutdown-settings"
+      :title       "Auto shutdown"
+      :description "Power off after Fairybox has had no interaction and no audio playing for the selected time."
+      :class       (css [:lg :col-span-6])}
+     [:div {:class (css :mt-6)}
+      (timer-controls
+       {:heading          "Idle time"
+        :selected-minutes selected-minutes
+        :cycle-action     cycle-auto-shutdown-duration
+        :toggle-action    toggle-auto-shutdown-timer
+        :previous-label   "Previous auto shutdown duration"
+        :next-label       "Next auto shutdown duration"
+        :enabled?         enabled?
+        :timer-label      (if enabled?
+                            "Disable auto shutdown"
+                            "Enable auto shutdown")})])))
+
 (defn device-settings-form
   [{:keys [url-for]}
    {:keys [min-volume max-volume max-volume-day max-volume-night
@@ -564,7 +626,8 @@
            day-start night-start card-removal-behavior
            card-return-behavior] :as audio-settings}
    sleep-settings
-   timer]
+   sleep-timer
+   auto-shutdown-timer]
   [:div {:class [ui/$page-margin (css :mx-auto :max-w-6xl)]}
    [:div
     [:h2 {:class (css :text-2xl :font-bold :text-smoky-900
@@ -597,7 +660,8 @@
       {:card-removal-behavior card-removal-behavior
        :card-return-behavior  card-return-behavior})
      (day-night-settings audio-settings)
-     (sleep-timer-settings timer sleep-settings)]
+     (sleep-timer-settings sleep-timer sleep-settings)
+     (auto-shutdown-settings auto-shutdown-timer)]
     [:div {:class (css :mt-6 :flex :items-center :justify-end)}
      (ui/button :tag :a
                 :href (url-for :page/settings)
@@ -611,7 +675,8 @@
       req
       (db/audio-settings database)
       (db/sleep-settings database)
-      (component :fairy.box.sleep/timer))]))
+      (component :fairy.box.sleep/timer)
+      (component :fairy.box.auto-shutdown/timer))]))
 
 (defview render-device {:path         "/settings/device"
                         :shim-headers ui/shim-headers}

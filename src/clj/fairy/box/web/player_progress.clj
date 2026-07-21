@@ -11,7 +11,7 @@
 (def stream-path "/api/player/progress-stream")
 (def component-key :fairy.box.web/player-progress)
 
-(defn duration-data
+(defn- milliseconds->parts
   [^long duration-in-millis]
   (let [milliseconds      (mod duration-in-millis 1000)
         duration-in-secs  (quot duration-in-millis 1000)
@@ -27,10 +27,10 @@
      :hours        hours
      :days         days}))
 
-(defn format-duration [milliseconds]
+(defn time-label [milliseconds]
   (when milliseconds
     (let [{:keys [days hours minutes seconds milliseconds]}
-          (duration-data milliseconds)
+          (milliseconds->parts milliseconds)
           rounded-seconds (if (> milliseconds 0)
                             (inc seconds)
                             seconds)]
@@ -40,10 +40,10 @@
            ":"
            (format "%02d" rounded-seconds)))))
 
-(defn format-time-left [current-time duration]
+(defn time-left-label [current-time duration]
   (if (or (nil? duration) (zero? duration))
-    (format-duration duration)
-    (str "-" (format-duration (- duration (or current-time 0))))))
+    (time-label duration)
+    (str "-" (time-label (- duration (or current-time 0))))))
 
 (defn progress-percentage [current-position]
   (if (number? current-position)
@@ -57,8 +57,8 @@
         duration     (player/duration current)]
     {:_server_progress
      (progress-percentage (player/position current))
-     :_server_time      (format-duration current-time)
-     :_server_time_left (format-time-left current-time duration)}))
+     :_server_time      (time-label current-time)
+     :_server_time_left (time-left-label current-time duration)}))
 
 (defn start-progress-stream! []
   {:connections (atom #{})})

@@ -20,6 +20,7 @@
     :player/shuffle-changed
     :player/state-changed
     :player/volume-changed
+    :auto-shutdown/changed
     :sleep/changed})
 
 (defn progress-event? [{:keys [value]}]
@@ -55,6 +56,7 @@
         refresh-worker     (start-worker refresh-throttled
                                          refresh!
                                          "player refresh failed")]
+    (ev/listen bus "/auto-shutdown/events" refresh-listener)
     (ev/listen bus "/player/events" progress-listener)
     (ev/listen bus "/player/events" refresh-listener)
     (ev/listen bus "/sleep/events" refresh-listener)

@@ -77,6 +77,7 @@
                 [:fairy.box.web/server ::ds/config :components])]
     (is (= {:component-keys        #{:fairy.box/settings
                                      :fairy.box/startup
+                                     :fairy.box.auto-shutdown/timer
                                      :fairy.box.audio.system2/player
                                      :fairy.box.bus/bus
                                      :fairy.box.db/db

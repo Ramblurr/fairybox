@@ -8,7 +8,7 @@
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
-   [fairy.box.sleep :as sleep]
+   [fairy.box.timers :as timers]
    [fairy.box.web.controllers.artwork :as artwork]
    [fairy.box.web.views.player :as player]
    [jp.nijohando.event :as ev]
@@ -140,7 +140,8 @@
                          :deadline-ms 1784630400000
                          :countdown   "05:00"}
         html
-        (with-redefs [sleep/countdown-state (constantly countdown-state)]
+        (with-redefs [timers/sleep-countdown-state
+                      (constantly countdown-state)]
           (h/html->str
            (player/player
             (assoc (player-request)

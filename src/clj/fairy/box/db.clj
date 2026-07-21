@@ -23,6 +23,15 @@
    :card-removal-behavior    :pause
    :card-return-behavior     :restart})
 
+(def default-auto-shutdown-settings
+  {:enabled?         false
+   :duration-minutes 30})
+
+(defn- complete-auto-shutdown-settings [auto-shutdown-settings]
+  (merge default-auto-shutdown-settings
+         (when (map? auto-shutdown-settings)
+           auto-shutdown-settings)))
+
 (def default-sleep-settings
   {:shutdown?              true
    :shutdown-delay-minutes 1})
@@ -102,12 +111,17 @@
                                                             :night-start
                                                             :hour-night-start))
                                     (dissoc :hour-day-start :hour-night-start))
+        migrated-auto-shutdown-settings
+        (complete-auto-shutdown-settings
+         (get-in database [:settings :auto-shutdown]))
         migrated-tts-settings   (complete-tts-settings
                                  (get-in database [:settings :tts]))
         migrated-sleep-settings (complete-sleep-settings
                                  (get-in database [:settings :sleep]))]
     (-> database
         (assoc-in [:settings :audio] migrated-audio)
+        (assoc-in [:settings :auto-shutdown]
+                  migrated-auto-shutdown-settings)
         (assoc-in [:settings :tts] migrated-tts-settings)
         (assoc-in [:settings :sleep] migrated-sleep-settings))))
 
@@ -127,9 +141,14 @@
                                                                (pp/pprint data))))}
                                    :init {:_version       1
                                           :linked-tags    {}
-                                          :settings       {:audio default-audio-settings
-                                                           :sleep default-sleep-settings
-                                                           :tts   default-tts-settings}
+                                          :settings       {:audio
+                                                           default-audio-settings
+                                                           :auto-shutdown
+                                                           default-auto-shutdown-settings
+                                                           :sleep
+                                                           default-sleep-settings
+                                                           :tts
+                                                           default-tts-settings}
                                           :media-metadata {}})
                          current  @conn
                          migrated (migrate-db current)]
@@ -192,6 +211,10 @@
 (defn ha-bearer-token [db]
   (some-> (get-in db [:settings :homeassistant :ha-bearer-token])
           cloak/mask))
+
+(defn auto-shutdown-settings [db]
+  (complete-auto-shutdown-settings
+   (get-in db [:settings :auto-shutdown])))
 
 (defn sleep-settings [db]
   (complete-sleep-settings (get-in db [:settings :sleep])))
