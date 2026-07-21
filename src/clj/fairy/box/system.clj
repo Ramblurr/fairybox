@@ -49,7 +49,8 @@
    :url-for             views/url-for})
 
 (defn start-web-server! [{:keys [components port]}]
-  (css/start)
+  (when-not (css/precompiled?)
+    (css/start))
   (h/start-app
    {:port      port
     :ctx-start #(web-context components)

@@ -29,7 +29,8 @@
            hato/hato                           {:mvn/version "1.0.0"}
            ;; troubleshoot in prod
            djblue/portal                       {:mvn/version "0.67.0"}}
- :aliases {:build      {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
+ :aliases {:build      {:deps       {fairy/box                     {:local/root "."}
+                                     io.github.clojure/tools.build {:mvn/version "0.10.14"}}
                         :ns-default build}
            :dev        {:extra-deps  {dev.weavejester/hashp {:mvn/version "0.5.1"}
                                       org.slf4j/slf4j-nop   {:mvn/version "2.0.17"}}

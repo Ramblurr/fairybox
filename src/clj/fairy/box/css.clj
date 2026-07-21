@@ -4,6 +4,7 @@
   (:require
    [clojure.edn :as edn]
    [clojure.java.io :as io]
+   [clojure.java.shell :as shell]
    [clojure.string :as str]
    [shadow.css.build :as cb]))
 
@@ -29,7 +30,30 @@
    "}"))
 
 (def index-path "src/clj")
-(def css-out-dir "resources/public/css")
+(def compiled-css-marker "fairybox/compiled-css")
+(def fairybox-css-source "resources/public/css/fairybox.css")
+(def fairybox-css-resource "public/css/fairybox.compiled.css")
+(def shadow-css-resource "public/css/shadow.compiled.css")
+
+(defn precompiled? []
+  (boolean (io/resource compiled-css-marker)))
+
+(defn load-compiled [resource-path]
+  (if-let [resource (io/resource resource-path)]
+    (slurp resource)
+    (throw (ex-info "Compiled CSS resource was not found"
+                    {:resource resource-path}))))
+
+(defn compile-css! [in]
+  (let [{:keys [exit err out]} (shell/sh "lightningcss"
+                                         "--bundle"
+                                         "--custom-media"
+                                         "--targets" "defaults"
+                                         in)]
+    (when-not (zero? exit)
+      (throw (ex-info "Lightning CSS compilation failed"
+                      {:exit exit :stderr err})))
+    out))
 
 (def aliases {:dark             "@media (prefers-color-scheme: dark)"
               :light            "@media (prefers-color-scheme: light)"

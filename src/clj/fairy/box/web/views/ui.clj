@@ -2,7 +2,6 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.web.views.ui
   (:require
-   [clojure.java.shell :as shell]
    [fairy.box.css :as css]
    [fairy.box.util :as util]
    [hyperlith.core :as h]
@@ -15,20 +14,20 @@
         :margin     0
         :padding    0}]]))
 
-(defn compile-css! [in]
-  (let [{:keys [exit err out]} (shell/sh "lightningcss"
-                                         "--bundle"
-                                         "--custom-media"
-                                         "--targets" "defaults"
-                                         in)]
-    (when-not (zero? exit)
-      (throw (ex-info "Lightning CSS compilation failed"
-                      {:exit exit :stderr err})))
-    out))
-
 #_(def tailwind-css (h/static-asset {:body (h/load-resource "public/css/tailwind.css") :content-type "text/css"}))
-(defn fairybox-css [] (h/static-asset {:body (compile-css! "resources/public/css/fairybox.css") :content-type "text/css"}))
-(defn shadow-css [] (h/static-asset {:body (css/generate-css) :content-type "text/css"}))
+(defn fairybox-css []
+  (h/static-asset
+   {:body         (if (css/precompiled?)
+                    (css/load-compiled css/fairybox-css-resource)
+                    (css/compile-css! css/fairybox-css-source))
+    :content-type "text/css"}))
+
+(defn shadow-css []
+  (h/static-asset
+   {:body         (if (css/precompiled?)
+                    (css/load-compiled css/shadow-css-resource)
+                    (css/generate-css))
+    :content-type "text/css"}))
 
 (def shim-headers
   (h/html
