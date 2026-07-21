@@ -13,25 +13,24 @@
 (def ^:private rfid-path "/hardware/input/rfid")
 (def ^:private rfid-actions #{:placed :removed})
 (def ^:private refresh-events-by-path
-  {"/player/events"
-   #{:player/current-track-changed
-     :player/muted
-     :player/position-changed
-     :player/queue-changed
-     :player/repeat-changed
-     :player/shuffle-changed
-     :player/state-changed
-     :player/time-changed
-     :player/volume-changed}
-   "/sleep/events"         #{:sleep/changed}
-   "/auto-shutdown/events" #{:auto-shutdown/changed}
-   "/system"
-   #{:system/initialized
-     :system/warming-up
-     :system/ready
-     :system/cooling-down
-     :system/shutdown
-     :system/poweroff-now}})
+  {"/player/events"               #{:player/current-track-changed
+                                    :player/muted
+                                    :player/position-changed
+                                    :player/queue-changed
+                                    :player/repeat-changed
+                                    :player/shuffle-changed
+                                    :player/state-changed
+                                    :player/time-changed
+                                    :player/volume-changed}
+   "/hardware/output/leds/events" #{:led/changed}
+   "/sleep/events"                #{:sleep/changed}
+   "/auto-shutdown/events"        #{:auto-shutdown/changed}
+   "/system" #{:system/initialized
+               :system/warming-up
+               :system/ready
+               :system/cooling-down
+               :system/shutdown
+               :system/poweroff-now}})
 
 (defn refresh-event? [{:keys [path value]}]
   (if (= rfid-path path)

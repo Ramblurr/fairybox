@@ -174,11 +174,13 @@
 
 (deftest renders-wired-hardware-buttons-from-applied-led-values
   (reset! audio-system/audio-state (sample-state))
-  (let [controller (led/output-controller
+  (let [emitter    (async/chan 8)
+        controller (led/output-controller
                     (led/virtual-handles
                      (map #(hash-map :name (:button-id %)
                                      :led-type :pwm)
-                          player/front-panel-buttons)))
+                          player/front-panel-buttons))
+                    emitter)
         component  {:fairy.box.hardware/leds {:controller controller}}
         request    (assoc (player-request) :fairy.box/component component)]
     (try
@@ -239,7 +241,8 @@
                 (str/includes? page-html
                                "</div><section id=\"hardware-buttons\"")})))
       (finally
-        (led/stop-controller! controller)))))
+        (led/stop-controller! controller)
+        (async/close! emitter)))))
 
 (deftest range-controls-handle-track-clicks-and-drags-without-rerender-overrides
   (reset! audio-system/audio-state (sample-state))

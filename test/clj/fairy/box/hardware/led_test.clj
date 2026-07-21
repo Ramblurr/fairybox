@@ -9,60 +9,75 @@
   (:import
    [java.time ZonedDateTime]))
 
+(defn- await-value [channel timeout-ms]
+  (let [[value port] (async/alts!! [channel (async/timeout timeout-ms)])]
+    (when (= port channel)
+      value)))
+
 (deftest routes-direct-and-animated-values-through-limit
   (let [writes_ (atom [])
-        handles {:status {:name :status :handle ::fake :led-type :pwm}}]
+        handles {:status {:name :status :handle ::fake :led-type :pwm}}
+        emitter (async/chan 8)]
     (with-redefs [led/led-value! (fn [handle value]
                                    (swap! writes_ conj [(:name handle) value]))]
-      (let [controller (led/output-controller handles)]
-        (led/refresh-limit! controller 0.2)
-        (reset! writes_ [])
-        (led/events-handler! {:controller controller :groups {}}
-                             {:value {:action :led/set
-                                      :names  [:status]
-                                      :groups []
-                                      :value  1.0}})
-        (led/apply-tween! controller {:value 0.9 :data [:status]})
-        (led/refresh-limit! controller 0.7)
-        (led/set-led! controller :unknown 1.0)
-        (led/refresh-limit! controller 0.3)
-        (is (= [[:status 0.2]
-                [:status 0.2]
-                [:status 0.7]
-                [:status 0.3]]
-               @writes_))))))
+      (let [controller (led/output-controller handles emitter)]
+        (try
+          (led/refresh-limit! controller 0.2)
+          (reset! writes_ [])
+          (led/events-handler! {:controller controller :groups {}}
+                               {:value {:action :led/set
+                                        :names  [:status]
+                                        :groups []
+                                        :value  1.0}})
+          (led/apply-tween! controller {:value 0.9 :data [:status]})
+          (led/refresh-limit! controller 0.7)
+          (led/set-led! controller :unknown 1.0)
+          (led/refresh-limit! controller 0.3)
+          (is (= [[:status 0.2]
+                  [:status 0.2]
+                  [:status 0.7]
+                  [:status 0.3]]
+                 @writes_))
+          (finally
+            (led/stop-controller! controller)
+            (async/close! emitter)))))))
 
-(deftest publishes-applied-values-outside-controller-lock
-  (let [controller  (led/output-controller
-                     (led/virtual-handles
-                      [{:name :status :led-type :pwm}]))
-        deliveries_ (atom [])
-        mutation_   (promise)
-        first-set?  (atom true)]
+(deftest publishes-applied-values-on-event-bus
+  (let [bus        (ev/bus)
+        emitter    (async/chan)
+        changes    (async/chan 3)
+        controller (led/output-controller
+                    (led/virtual-handles
+                     [{:name :status :led-type :pwm}])
+                    emitter)]
     (try
-      (led/subscribe!
-       controller
-       ::observer
-       (fn [values]
-         (swap! deliveries_ conj values)
-         (when (and (= 1.0 (:status values))
-                    (compare-and-set! first-set? true false))
-           (deliver mutation_
-                    (deref (future
-                             (led/set-led! controller :status 0.5))
-                           500
-                           ::timeout)))))
+      (ev/emitize bus emitter)
+      (ev/listen bus led/led-events-path changes)
       (led/set-led! controller :status 1.0)
-      (is (= {:mutation-result 0.5
-              :current-values  {:status 0.5}
-              :deliveries      [{:status 0.0}
-                                {:status 1.0}
-                                {:status 0.5}]}
-             {:mutation-result (deref mutation_ 1000 ::timeout)
-              :current-values  (led/current-values controller)
-              :deliveries      @deliveries_}))
+      (let [first-event (await-value changes 1000)]
+        (led/set-led! controller :status 1.0)
+        (let [duplicate-event (await-value changes 50)]
+          (led/refresh-limit! controller 0.5)
+          (is (= {:first-event
+                  {:path  "/hardware/output/leds/events"
+                   :value {:event  :led/changed
+                           :values {:status 1.0}}}
+                  :duplicate-event nil
+                  :limited-event
+                  {:path  "/hardware/output/leds/events"
+                   :value {:event  :led/changed
+                           :values {:status 0.5}}}
+                  :current-values  {:status 0.5}}
+                 {:first-event     (select-keys first-event [:path :value])
+                  :duplicate-event duplicate-event
+                  :limited-event   (some-> (await-value changes 1000)
+                                           (select-keys [:path :value]))
+                  :current-values  (led/current-values controller)}))))
       (finally
-        (led/stop-controller! controller)))))
+        (led/stop-controller! controller)
+        (async/close! emitter)
+        (async/close! changes)
+        (ev/close! bus)))))
 
 (defn- test-policy [db-conn]
   (limits/start-policy!
@@ -182,48 +197,48 @@
                                 :day-start                "08:00"
                                 :night-start              "19:00"}}})
         policy  (test-policy db-conn)
-        bus     (ev/bus)]
+        bus     (ev/bus)
+        changes (async/chan 4)]
     (try
+      (ev/listen bus led/led-events-path changes)
       (with-redefs [led/open-handles!
                     (fn [_]
                       (throw (ex-info "Virtual LEDs opened GPIO" {})))]
-        (let [instance    (led/start-component!
-                           {:hardware-enablement {:leds false}
-                            :bus                 bus
-                            :leds                [{:name     :status
-                                                   :led-type :pwm}]
-                            :groups              {}
-                            :playback-limits     policy})
-              controller  (:controller instance)
-              deliveries_ (atom [])]
+        (let [instance   (led/start-component!
+                          {:hardware-enablement {:leds false}
+                           :bus                 bus
+                           :leds                [{:name     :status
+                                                  :led-type :pwm}]
+                           :groups              {}
+                           :playback-limits     policy})
+              controller (:controller instance)]
           (try
-            (led/subscribe! controller ::observer
-                            #(swap! deliveries_ conj %))
             (led/set-led! controller :status 1.0)
-            (swap! db-conn assoc-in
-                   [:settings :audio :max-led-brightness-night]
-                   50)
-            (led/unsubscribe! controller ::observer)
-            (let [after-unsubscribe @deliveries_]
-              (led/set-led! controller :status 0.1)
-              (is (= {:enabled?              false
-                      :gpio-handles          {}
-                      :configured-leds       #{:status}
-                      :current-values        {:status 0.1}
-                      :deliveries            [{:status 0.0}
-                                              {:status 0.2}
-                                              {:status 0.5}]
-                      :post-unsubscribe-push false}
-                     {:enabled?              (:enabled? instance)
-                      :gpio-handles          (:leds instance)
-                      :configured-leds       (set (get-in instance
-                                                          [:groups :all]))
-                      :current-values        (led/current-values controller)
-                      :deliveries            after-unsubscribe
-                      :post-unsubscribe-push (not= after-unsubscribe
-                                                   @deliveries_)})))
+            (let [limited-event (await-value changes 1000)]
+              (swap! db-conn assoc-in
+                     [:settings :audio :max-led-brightness-night]
+                     50)
+              (let [policy-event (await-value changes 1000)]
+                (led/set-led! controller :status 0.1)
+                (is (= {:enabled?        false
+                        :gpio-handles    {}
+                        :configured-leds #{:status}
+                        :current-values  {:status 0.1}
+                        :events
+                        [{:event :led/changed :values {:status 0.2}}
+                         {:event :led/changed :values {:status 0.5}}
+                         {:event :led/changed :values {:status 0.1}}]}
+                       {:enabled?        (:enabled? instance)
+                        :gpio-handles    (:leds instance)
+                        :configured-leds (set (get-in instance [:groups :all]))
+                        :current-values  (led/current-values controller)
+                        :events          (mapv :value
+                                               [limited-event
+                                                policy-event
+                                                (await-value changes 1000)])}))))
             (finally
               (led/stop-component! instance)))))
       (finally
         (stop-policy! policy)
+        (async/close! changes)
         (ev/close! bus)))))

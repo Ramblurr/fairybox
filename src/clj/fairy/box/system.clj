@@ -16,7 +16,6 @@
    [fairy.box.switchboard :as switchboard]
    [fairy.box.timers :as timers]
    [fairy.box.tts :as tts]
-   [fairy.box.web.front-panel :as front-panel]
    [fairy.box.web.refresh :as web-refresh]
    [fairy.box.web.views :as views]
    [hyperlith.core :as h]))
@@ -78,7 +77,6 @@
                              :fairy.box.auto-shutdown/timer     (component-ref :fairy.box.auto-shutdown/timer)
                              :fairy.box.sleep/timer             (component-ref :fairy.box.sleep/timer)
                              :fairy.box.tts/tts                 (component-ref :fairy.box.tts/tts)
-                             :fairy.box.web/front-panel-refresh (component-ref :fairy.box.web/front-panel-refresh)
                              :fairy.box.web/refresh             (component-ref :fairy.box.web/refresh)
                              :fairy.box.hardware/rfid           (component-ref :fairy.box.hardware/rfid)
                              :fairy.box.hardware/buttons        (component-ref :fairy.box.hardware/buttons)
@@ -100,7 +98,6 @@
                                       :fairy.box.auto-shutdown/timer     timers/AutoShutdownTimerComponent
                                       :fairy.box.sleep/timer             timers/SleepTimerComponent
                                       :fairy.box.tts/tts                 tts/TTSComponent
-                                      :fairy.box.web/front-panel-refresh front-panel/FrontPanelRefreshComponent
                                       :fairy.box.web/refresh             web-refresh/RefreshComponent
                                       :fairy.box.hardware/rfid           rfid/RfidComponent
                                       :fairy.box.hardware/buttons        buttons/ButtonsComponent
