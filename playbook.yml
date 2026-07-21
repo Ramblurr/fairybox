@@ -4,8 +4,8 @@
   become: false
   vars:
     user_uid: 1000
-    babashka_version: "1.12.206"
-    java_version: "21"
+    babashka_version: "1.12.218"
+    java_version: "25"
   tasks:
     - name: Install SSH key
       ansible.builtin.copy:
@@ -13,35 +13,60 @@
         dest: /home/ramblurr/.ssh/authorized_keys
         mode: "0640"
 
-    - name: Create keyrings directory
+    - name: Configure Azul repository
+      become: true
+      ansible.builtin.deb822_repository:
+        name: zulu
+        types:
+          - deb
+        uris:
+          - https://repos.azul.com/zulu/deb
+        suites:
+          - stable
+        components:
+          - main
+        signed_by: https://repos.azul.com/azul-repo.key
+        install_python_debian: true
+        state: present
+      register: azul_repository
+      tags: [java]
+
+    - name: Configure Debian backports repository
+      become: true
+      ansible.builtin.deb822_repository:
+        name: bookworm-backports
+        types:
+          - deb
+        uris:
+          - http://deb.debian.org/debian
+        suites:
+          - bookworm-backports
+        components:
+          - main
+        install_python_debian: true
+        state: present
+      register: backports_repository
+      tags: [java]
+
+    - name: Remove legacy APT repository files
       become: true
       ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: "0755"
-
-    - name: Add Azul GPG key
-      become: true
-      ansible.builtin.apt_key:
-        url: https://repos.azul.com/azul-repo.key
-        state: present
-        keyring: /etc/apt/keyrings/azul.gpg
+        path: "/etc/apt/sources.list.d/{{ item }}"
+        state: absent
+      loop:
+        - zulu.list
+        - bookworm-backports.list
+      register: legacy_apt_sources
       tags: [java]
 
-    - name: Add Azul repository
+    - name: Update APT cache after repository changes
       become: true
-      ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/azul.gpg] https://repos.azul.com/zulu/deb stable main"
-        filename: zulu
+      ansible.builtin.apt:
         update_cache: true
-      tags: [java]
-
-    - name: Add backports repository
-      become: true
-      ansible.builtin.apt_repository:
-        repo: "deb http://deb.debian.org/debian bookworm-backports main"
-        filename: bookworm-backports
-        update_cache: true
+      when: >-
+        azul_repository.changed
+        or backports_repository.changed
+        or legacy_apt_sources.changed
       tags: [java]
 
     - name: Remove default packages
@@ -147,12 +172,14 @@
 
     - name: Turn on Next/Prev LEDs very very early to show that something is happening
       become: true
-      ansible.builtin.blockinfile:
+      ansible.builtin.lineinfile:
         path: /boot/firmware/config.txt
-        block: |
-          # turn on the next/prev leds right at boot to show something is happening
-          gpio=7=op,dh
-          gpio=14=op,dh
+        line: "{{ item }}"
+        state: present
+      loop:
+        - "# turn on the next/prev leds right at boot to show something is happening"
+        - gpio=7=op,dh
+        - gpio=14=op,dh
 
     - name: Ensure pigpiod.service directory exists for overrides
       become: true
@@ -230,6 +257,8 @@
       ansible.builtin.file:
         path: /etc/authbind/byport/80
         state: touch
+        access_time: preserve
+        modification_time: preserve
         owner: ramblurr
         group: root
         mode: "0755"
@@ -238,7 +267,6 @@
       tags: [app]
       ansible.builtin.file:
         path: /home/ramblurr/.config/systemd/user
-        recurse: true
         state: directory
         owner: ramblurr
         group: ramblurr
@@ -398,16 +426,14 @@
           ResultAny=yes
           ResultInactive=no
           ResultActive=yes
-      notify: restart policykit
+      notify: restart polkit
 
   handlers:
-    - name: restart policykit
+    - name: restart polkit
       become: true
       ansible.builtin.systemd_service:
-        name: policykit.service
+        name: polkit.service
         state: restarted
-        daemon_reload: true
-        enabled: true
 
     - name: restart pigpiod
       become: true
