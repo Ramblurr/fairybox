@@ -1,5 +1,6 @@
 (ns fairy.box.web.views
   (:require
+   [fairy.box.web.controllers.health]
    [fairy.box.web.views.player]
    [fairy.box.web.views.queue]
    [fairy.box.web.views.settings]))

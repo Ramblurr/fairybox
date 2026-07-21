@@ -38,11 +38,16 @@ def sigterm_handler(*_):
 FAIRYBOX_API = os.getenv("FAIRYBOX_API", "http://localhost:3000/api")
 
 
+def api_request(url):
+    # Hyperlith rejects clients that do not advertise Brotli support.
+    return urllib.request.Request(url, headers={"Accept-Encoding": "br"})
+
+
 def is_fairybox_ready():
     try:
         url = f"{FAIRYBOX_API}/ready"
         print(f"checking ready: {url}")
-        response = urllib.request.urlopen(url)
+        response = urllib.request.urlopen(api_request(url))
         print(f"checking ready got: {response.getcode()}")
         return response.getcode() == 200
     except urllib.error.HTTPError as e:
@@ -53,9 +58,12 @@ def is_fairybox_ready():
 
 def leds_on():
     try:
-        response = urllib.request.urlopen(f"{FAIRYBOX_API}/leds-on")
-        print(f"leds on = {response.getcode()}")
-        return response.getcode() == 200
+        response = urllib.request.urlopen(
+            api_request(f"{FAIRYBOX_API}/leds-on")
+        )
+        status = response.getcode()
+        print(f"leds on = {status}")
+        return 200 <= status < 300
     except urllib.error.HTTPError as e:
         return False
     except urllib.error.URLError:
