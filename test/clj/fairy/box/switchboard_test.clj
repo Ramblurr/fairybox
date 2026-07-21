@@ -89,6 +89,42 @@
         (async/close! emitter)
         result))))
 
+(defn- track-announcement-command [state_ settings announce?]
+  (let [emitter (async/chan 4)
+        db-conn (atom {:linked-tags
+                       {"card-a"
+                        {:folder "audiobooks/Author One/Book One"}}
+                       :settings    {:tts {:announce-tracks? announce?}}})]
+    (reset! state_ {:system-state             :system-state/ready
+                    :system-mode              :system-mode/normal
+                    :rfid nil
+                    :active-card-uid          nil
+                    :removed-card             nil
+                    :pending-system-operation nil})
+    (switchboard/rfid-placed-play-mode
+     {:emitter emitter :db-conn db-conn :settings settings}
+     {:uid "card-a"})
+    (let [command (->> (drain-events emitter)
+                       (filter #(= "/player/commands" (:path %)))
+                       first
+                       :value)]
+      (async/close! emitter)
+      command)))
+
+(defn- card-identification-command [announce?]
+  (let [emitter (async/chan 4)
+        db-conn (atom {:linked-tags {}
+                       :settings    {:tts {:announce-tracks? announce?}}})]
+    (switchboard/rfid-placed-card-id-mode
+     {:emitter emitter :db-conn db-conn :settings {}}
+     {:uid "empty-card"})
+    (let [command (->> (drain-events emitter)
+                       (filter #(= "/tts/commands" (:path %)))
+                       first
+                       :value)]
+      (async/close! emitter)
+      command)))
+
 (deftest applies-card-removal-and-return-settings
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-card-behavior-"}]
     (let [{:keys [settings]}   (media/populate-media-tree! temp-dir)
@@ -118,6 +154,38 @@
         (finally
           (reset! state_ previous-state)
           (reset! audio-system/audio-state previous-audio-state))))))
+
+(deftest applies-track-announcement-setting-only-to-normal-card-playback
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-track-announcement-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          state_             (var-get (ns-resolve 'fairy.box.switchboard
+                                                  'state))
+          previous-state     @state_]
+      (try
+        (is (= {:normal-playback
+                {:disabled {:action              :audio/play-path
+                            :announce-per-track? false}
+                 :enabled  {:action              :audio/play-path
+                            :announce-per-track? true}}
+                :card-identification
+                {:disabled {:action              :tts/speak
+                            :audio/play-one-shot false
+                            :text                "This one is empty."}
+                 :enabled  {:action              :tts/speak
+                            :audio/play-one-shot false
+                            :text                "This one is empty."}}}
+               {:normal-playback
+                {:disabled (select-keys
+                            (track-announcement-command state_ settings false)
+                            [:action :announce-per-track?])
+                 :enabled  (select-keys
+                            (track-announcement-command state_ settings true)
+                            [:action :announce-per-track?])}
+                :card-identification
+                {:disabled (card-identification-command false)
+                 :enabled  (card-identification-command true)}}))
+        (finally
+          (reset! state_ previous-state))))))
 
 (deftest ignores-card-removal-when-playback-is-manually-paused
   (let [state_               (var-get (ns-resolve 'fairy.box.switchboard

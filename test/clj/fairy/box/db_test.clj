@@ -164,6 +164,7 @@
         visible  (db/tts-settings migrated)
         secret   (get-in visible [:providers :google-cloud :api-key])]
     (is (= {:engine                 :openai
+            :announce-tracks?       false
             :voice                  "cedar"
             :model                  "gpt-4o-mini-tts"
             :speed                  1.0
@@ -175,6 +176,7 @@
             :secret-masked?         true
             :secret-print-redacted? true}
            {:engine              (:engine visible)
+            :announce-tracks?    (db/announce-tracks? migrated)
             :voice               (get-in visible [:providers :openai :voice])
             :model               (get-in visible [:providers :openai :model])
             :speed               (get-in visible [:providers :openai :speed])
@@ -202,28 +204,31 @@
                                   :nested {:kept true}})
     (db/replace-tts-provider-secret! database :google-cloud "replacement-probe")
     (db/clear-tts-provider-secret! database :google-cloud)
+    (db/set-announce-tracks! database true)
     (remove-watch database ::writes)
-    (is (= {:writes          5
-            :engine          :elevenlabs
-            :preview-target  :both
-            :openai          {:unknown :kept
-                              :model   "tts-1"
-                              :nested  {:kept true}}
-            :legacy-removed? true
-            :secret-cleared? true
-            :unrelated       :kept}
-           {:writes          @writes_
-            :engine          (get-in @database [:settings :tts :engine])
-            :preview-target  (get-in @database [:settings :tts :preview-target])
-            :openai          (get-in @database [:settings :tts :providers :openai])
-            :legacy-removed? (not (contains? (:settings @database)
-                                             :google-cloud-api-key))
-            :secret-cleared? (not (contains?
-                                   (get-in @database
-                                           [:settings :tts :providers
-                                            :google-cloud])
-                                   :api-key))
-            :unrelated       (:unrelated @database)}))))
+    (is (= {:writes           6
+            :engine           :elevenlabs
+            :preview-target   :both
+            :announce-tracks? true
+            :openai           {:unknown :kept
+                               :model   "tts-1"
+                               :nested  {:kept true}}
+            :legacy-removed?  true
+            :secret-cleared?  true
+            :unrelated        :kept}
+           {:writes           @writes_
+            :engine           (get-in @database [:settings :tts :engine])
+            :preview-target   (get-in @database [:settings :tts :preview-target])
+            :announce-tracks? (db/announce-tracks? @database)
+            :openai           (get-in @database [:settings :tts :providers :openai])
+            :legacy-removed?  (not (contains? (:settings @database)
+                                              :google-cloud-api-key))
+            :secret-cleared?  (not (contains?
+                                    (get-in @database
+                                            [:settings :tts :providers
+                                             :google-cloud])
+                                    :api-key))
+            :unrelated        (:unrelated @database)}))))
 
 (deftest masks-home-assistant-token-on-database-access
   (let [token (db/ha-bearer-token

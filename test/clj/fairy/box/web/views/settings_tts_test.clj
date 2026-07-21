@@ -70,6 +70,7 @@
                 :providers true
                 :provider-visibility-bindings  5
                 :live-save true
+                :track-announcement-control    true
                 :passwords 3
                 :password-autocomplete         3
                 :credential-clearing-explained true
@@ -95,6 +96,11 @@
                 :provider-visibility-bindings
                 (count (re-seq #"data-show=\"\$tts_engine" html))
                 :live-save          (str/includes? html "data-on:change")
+                :track-announcement-control
+                (and (str/includes? html "Announce tracks before playback")
+                     (str/includes? html "tts_announce_tracks")
+                     (< (str/index-of html "Track announcements")
+                        (str/index-of html "Active provider")))
                 :passwords          (count (re-seq #"type=\"password\"" html))
                 :password-autocomplete
                 (count (re-seq #"autocomplete=\"new-password\"" html))
@@ -255,6 +261,23 @@
                                       [:settings :tts :providers :openai])
                               :untrusted))
               :unrelated       (:unrelated @database)})))))
+
+(deftest saves-only-boolean-track-announcement-values
+  (let [database (atom (db/migrate-db {:settings {}}))
+        req      (request database)
+        save!    (action 'save-track-announcements-fn)]
+    (with-redefs [h/refresh-all! (constantly nil)]
+      (save! (assoc req :body {:tts_announce_tracks true}))
+      (let [after-enable (db/announce-tracks? @database)]
+        (save! (assoc req :body {:tts_announce_tracks "false"}))
+        (let [after-invalid (db/announce-tracks? @database)]
+          (save! (assoc req :body {:tts_announce_tracks false}))
+          (is (= {:after-enable  true
+                  :after-invalid true
+                  :after-disable false}
+                 {:after-enable  after-enable
+                  :after-invalid after-invalid
+                  :after-disable (db/announce-tracks? @database)})))))))
 
 (deftest replaces-clears-and-redacts-credentials
   (let [database       (atom (db/migrate-db {:settings {}}))

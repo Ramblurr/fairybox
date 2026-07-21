@@ -63,9 +63,10 @@
                      :speed             1.0}}})
 
 (def default-tts-settings
-  {:engine         :google-cloud
-   :preview-target :fairybox
-   :providers      default-tts-provider-settings})
+  {:announce-tracks? false
+   :engine           :google-cloud
+   :preview-target   :fairybox
+   :providers        default-tts-provider-settings})
 
 (defn- complete-tts-settings [tts-settings]
   (medley/deep-merge default-tts-settings
@@ -233,6 +234,9 @@
 (defn tts-preview-target [db]
   (:preview-target (tts-settings db)))
 
+(defn announce-tracks? [db]
+  (:announce-tracks? (tts-settings db)))
+
 (defn google-cloud-api-key [db]
   (some-> (get-in db [:settings :google-cloud-api-key])
           cloak/mask))
@@ -242,6 +246,9 @@
 
 (defn set-tts-preview-target! [conn preview-target]
   (swap! conn assoc-in [:settings :tts :preview-target] preview-target))
+
+(defn set-announce-tracks! [conn announce?]
+  (swap! conn assoc-in [:settings :tts :announce-tracks?] announce?))
 
 (defn set-tts-provider-values! [conn provider values]
   (swap! conn update-in [:settings :tts :providers provider]

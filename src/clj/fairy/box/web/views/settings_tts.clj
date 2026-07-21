@@ -127,6 +127,12 @@
     (db/set-tts-engine! (component :fairy.box.db/db) engine))
   nil)
 
+(defaction save-track-announcements
+  [{:fairy.box/keys [component] :keys [body]}]
+  (when-let [[announce?] (parsed-boolean (:tts_announce_tracks body))]
+    (db/set-announce-tracks! (component :fairy.box.db/db) announce?))
+  nil)
+
 (defn- current-provider-catalog [request provider]
   (let [tts-system (tts-component request)]
     (when (:catalog-store tts-system)
@@ -737,7 +743,8 @@
         openai     (get-in settings [:providers :openai])
         elevenlabs (get-in settings [:providers :elevenlabs])
         voice      (:voice-settings elevenlabs)]
-    {:tts_engine                  (name (:engine settings))
+    {:tts_announce_tracks         (:announce-tracks? settings)
+     :tts_engine                  (name (:engine settings))
      :google_language_code        (:language-code google)
      :google_family               (or (speech/google-voice-family (:voice google)) "")
      :google_voice                (:voice google)
@@ -802,6 +809,19 @@
        [:p {:class (css :mt-1 :max-w-3xl :text-sm :leading-6 :text-smoky-700
                         [:dark :text-smoky-300])}
         "Settings save immediately. Credentials are never displayed after entry."]]
+      [:div {:class (css :mt-6)}
+       (settings-card
+        {:id          "track-announcement-settings"
+         :title       "Track announcements"
+         :description "Control spoken track titles during normal card playback."}
+        [:div {:class (css :mt-4)}
+         (ui/checkbox-input
+          :name "tts-announce-tracks"
+          :label "Announce tracks before playback"
+          :description "Speak each track title before it plays. Card identification mode is unaffected."
+          :checked? (:announce-tracks? settings)
+          :data-bind "tts_announce_tracks"
+          :change-action (str "@post('" save-track-announcements "')"))])]
       [:div {:class (css :mt-6)}
        (ui/select-input
         :name "tts-engine"

@@ -126,7 +126,7 @@
 
           :else
           (emit-player! emitter {:action              :audio/play-path
-                                 :announce-per-track? nil
+                                 :announce-per-track? (db/announce-tracks? database)
                                  :item-path           item-path
                                  :uid                 uid}))
         (swap! state assoc
