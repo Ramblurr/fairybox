@@ -18,8 +18,12 @@
                             :task (clojure "-M:dev:cider")}
          test              {:doc  "Run all tests or specific test suites"
                             :task (apply clojure "-M:dev:kaocha" *command-line-args*)}
-         uber              {:doc  "builds the uberjar"
+         uber              {:doc  "Build the slim production uberjar"
                             :task (clojure "-T:build all")}
+         uber:diagnostic   {:doc  "Build the production diagnostic uberjar"
+                            :task (clojure "-T:build all :variant :diagnostic")}
+         uber:all          {:doc  "Build slim and diagnostic production uberjars"
+                            :task (clojure "-T:build all-variants")}
          watch             {:requires ([pod.babashka.fswatcher :as fw])
                             :task     (exec 'watch/dev-watch)}
          sync              {:task (exec 'sync/do-sync!)}

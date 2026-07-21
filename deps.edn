@@ -3,36 +3,40 @@
            org.clojure/core.async              {:mvn/version "1.9.865"}
            jarohen/chime                       {:mvn/version "0.3.3"}
            org.clojure/tools.logging           {:mvn/version "1.3.1"}
-           party.donut/system                  {:mvn/version "1.0.259"}
+           party.donut/system                  {:mvn/version "1.0.259"
+                                                :exclusions  [tailrecursion/cljs-priority-map]}
            aero/aero                           {:mvn/version "1.1.6"}
-           ;; Raspberry PI GPIO
+              ;; Raspberry PI GPIO
            com.diozero/diozero-core            {:mvn/version "1.4.1"}
            com.diozero/diozero-provider-pigpio {:mvn/version "1.4.1"}
-           ;; VLC audio player library
+              ;; VLC audio player library
            ol/vinyl                            {:local/root "/home/ramblurr/src/github.com/ramblurr/vinyl"}
-           ;; File system munging
+              ;; File system munging
            babashka/fs                         {:mvn/version "0.5.34"}
-           ;; Homeassistant integration via MQTT
+              ;; Homeassistant integration via MQTT
            clojurewerkz/machine_head           {:mvn/version "1.0.0"}
-           ;; Database
+              ;; Database
            duratom/duratom                     {:mvn/version "0.5.9"}
-           ;; Util
+              ;; Util
            medley/medley                       {:mvn/version "1.4.0"}
            exoscale/cloak                      {:mvn/version "1.0.42"}
-           ;; HTML and CSS
+              ;; HTML and CSS
            com.thheller/shadow-css             {:mvn/version "0.6.4"}
-           hyper/lith                          {:local/root "/home/ramblurr/src/github.com/andersmurphy/hyperlith"}
-           ;; Events
+           hyper/lith                          {:local/root "/home/ramblurr/src/github.com/andersmurphy/hyperlith"
+                                                :exclusions [andersmurphy/sqlite4clj
+                                                             com.github.seancorfield/honeysql]}
+              ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"
                                                 :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
-           ;; http client requests
-           hato/hato                           {:mvn/version "1.0.0"}
-           ;; troubleshoot in prod
-           djblue/portal                       {:mvn/version "0.67.0"}}
+              ;; http client requests
+           hato/hato                           {:mvn/version "1.0.0"}}
  :aliases {:build      {:deps       {fairy/box                     {:local/root "."}
                                      io.github.clojure/tools.build {:mvn/version "0.10.14"}}
                         :ns-default build}
+           :diagnostic {:extra-deps  {djblue/portal {:mvn/version "0.67.0"}}
+                        :extra-paths ["env/prod/clj"]}
            :dev        {:extra-deps  {dev.weavejester/hashp {:mvn/version "0.5.1"}
+                                      djblue/portal         {:mvn/version "0.67.0"}
                                       org.slf4j/slf4j-nop   {:mvn/version "2.0.17"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
                         :jvm-opts    ["-XX:-OmitStackTraceInFastThrow"

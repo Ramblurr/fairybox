@@ -72,10 +72,26 @@ Pre-reqs:
 * Babashka
 * Clojure
 
+Build the slim production artifact:
+
 ```bash
 bb uber
 ```
 
+Build the diagnostic artifact, which includes Portal and the production REPL helpers:
+
+```bash
+bb uber:diagnostic
+```
+
+Build both artifacts together:
+
+```bash
+bb uber:all
+```
+
+The build writes `target/box-standalone.jar` and
+`target/box-diagnostic-standalone.jar`.
 
 # Development
 
@@ -124,7 +140,7 @@ Run this in a different terminal window on your *workstation* (not the raspberry
 
 There is a simple ansible playbook in this repo that can be run against your PI assuming it has Raspberry PI OS installed.
 
-You should side-load the uberjar (`bb uberjar && scp target/box-standalone.jar fairybox:/var/lib/fairybox`) yourself.
+You should side-load the uberjar (`bb uber && scp target/box-standalone.jar fairybox:/var/lib/fairybox`) yourself.
 
 The playbook sets up a simple systemd service to run the uberjar.
 

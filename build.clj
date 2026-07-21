@@ -10,12 +10,24 @@
 (def main-cls (string/join "." (filter some? [(namespace lib) (name lib) "core"])))
 (def version (format "0.0.1-SNAPSHOT"))
 (def target-dir "target")
-(def class-dir (str target-dir "/" "classes"))
-(def uber-file (format "%s/%s-standalone.jar" target-dir (name lib)))
-(def basis (b/create-basis {:project "deps.edn"}))
 (def generated-resource-dir (str target-dir "/resources"))
-(def build-source-dirs
-  ["src/clj" "resources" "env/prod/resources" "env/prod/clj"])
+(def production-source-dirs
+  ["src/clj" "resources" "env/prod/resources"])
+(def unreferenced-image-paths
+  ["public/img/cover.png"
+   "public/img/fairy.png"
+   "public/img/fairy2.png"
+   "public/img/fairy3.png"
+   "public/img/jukebox2.png"])
+(def build-variants
+  {:production {:aliases     []
+                :class-dir   (str target-dir "/classes")
+                :source-dirs production-source-dirs
+                :uber-file   (format "%s/%s-standalone.jar" target-dir (name lib))}
+   :diagnostic {:aliases     [:diagnostic]
+                :class-dir   (str target-dir "/diagnostic-classes")
+                :source-dirs (conj production-source-dirs "env/prod/clj")
+                :uber-file   (format "%s/%s-diagnostic-standalone.jar" target-dir (name lib))}})
 
 (defn clean
   "Delete the build target directory"
@@ -37,29 +49,64 @@
                    (app-css/compile-css! app-css/fairybox-css-source))
   (write-resource! app-css/compiled-css-marker "compiled\n"))
 
-(defn prep [_]
-  (compile-css nil)
+(defn- variant-config [{:keys [variant]
+                        :or   {variant :production}}]
+  (if-let [config (get build-variants variant)]
+    (assoc config
+           :basis (b/create-basis
+                   (cond-> {:project "deps.edn"}
+                     (seq (:aliases config)) (assoc :aliases (:aliases config))))
+           :variant variant)
+    (throw (ex-info "Unknown build variant"
+                    {:variant            variant
+                     :available-variants (keys build-variants)}))))
+
+(defn- remove-unreferenced-images! [class-dir]
+  (doseq [resource-path unreferenced-image-paths
+          :let          [path (io/file class-dir resource-path)]
+          :when         (.exists path)]
+    (b/delete {:path (str path)})))
+
+(defn- prep-variant! [{:keys [basis class-dir source-dirs]}]
   (println "Writing Pom...")
   (b/write-pom {:class-dir class-dir
-                :lib lib
-                :version version
-                :basis basis
-                :src-dirs ["src/clj"]})
-  (b/copy-dir {:src-dirs (conj build-source-dirs generated-resource-dir)
-               :target-dir class-dir}))
+                :lib       lib
+                :version   version
+                :basis     basis
+                :src-dirs  ["src/clj"]})
+  (b/copy-dir {:src-dirs   (conj source-dirs generated-resource-dir)
+               :target-dir class-dir})
+  (remove-unreferenced-images! class-dir))
 
-(defn uber [_]
-  (println "Compiling Clojure...")
-  (b/compile-clj {:basis basis
-                  :src-dirs build-source-dirs
+(defn prep [opts]
+  (compile-css nil)
+  (prep-variant! (variant-config opts)))
+
+(defn- uber-variant! [{:keys [basis class-dir source-dirs uber-file variant]}]
+  (println (str "Compiling Clojure for " (name variant) " build..."))
+  (b/compile-clj {:basis     basis
+                  :src-dirs  source-dirs
                   :class-dir class-dir})
-  (println "Making uberjar...")
+  (println (str "Making " uber-file "..."))
   (b/uber {:class-dir class-dir
            :uber-file uber-file
-           :main main-cls
-           :basis basis}))
+           :main      main-cls
+           :basis     basis}))
 
-(defn all [_]
+(defn uber [opts]
+  (uber-variant! (variant-config opts)))
+
+(defn all [opts]
   (clean nil)
-  (prep nil)
-  (uber nil))
+  (compile-css nil)
+  (let [config (variant-config opts)]
+    (prep-variant! config)
+    (uber-variant! config)))
+
+(defn all-variants [_]
+  (clean nil)
+  (compile-css nil)
+  (doseq [variant (keys build-variants)
+          :let    [config (variant-config {:variant variant})]]
+    (prep-variant! config)
+    (uber-variant! config)))
