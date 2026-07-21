@@ -43,13 +43,55 @@
   #_(start-system!)
   (reload))
 
+(defn reset-and-restart
+  []
+  (stop-system!)
+  (clj-reload/reload)
+  ((requiring-resolve 'fairy.box.css/start))
+  (start-system!)
+  ((requiring-resolve 'hyperlith.core/refresh-all!)))
+
 (defn rfid-comp []
   ((requiring-resolve 'fairy.box.system/component)
    :fairy.box.hardware/rfid))
 
+(defn player-comp []
+  ((requiring-resolve 'fairy.box.system/component)
+   :fairy.box.audio.system2/player))
+
+(defn emitter-comp []
+  (:emitter (player-comp)))
+
+(defn play-pause! []
+  (async/put! (emitter-comp) {:path "/player/commands" :value {:action :audio/play-pause}}))
+
+(defn stop []
+  (async/put! (emitter-comp) {:path "/player/commands" :value {:action :audio/stop}}))
+
+(defn place1 []
+  (rfid/place! (rfid-comp) "dev-card-001"))
+
+(defn remove []
+  (rfid/remove! (rfid-comp)))
+
+(do
+  (reset-and-restart)
+  #_(require '[babashka.fs :as fs])
+  (require '[fairy.box.audio.browse :as browse])
+  (let [component (requiring-resolve 'fairy.box.system/component)
+        audio     (component :fairy.box.audio.system2/player)]
+    (def settings (component :fairy.box/settings))
+    (def player (:player audio))
+    (def emitter (:emitter audio))
+    (def db-conn (component :fairy.box.db/db))
+    (def bus (component :fairy.box.bus/bus))))
+
 (comment
-  (rfid/place! (rfid-comp) "dev-card-001")
-  (rfid/remove! (rfid-comp))
+  (reset-and-restart)
+  (place1)
+  (remove)
+  (play-pause!)
+  (stop)
   ;;
   )
 

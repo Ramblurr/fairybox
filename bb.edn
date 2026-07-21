@@ -25,7 +25,11 @@
          sync              {:task (exec 'sync/do-sync!)}
          credits           {:task (exec 'credits/build-attribution)}
          fmt               {:doc  "Format code with cljfmt"
-                            :task (apply shell "cljfmt --quiet -v fix" (if (seq *command-line-args*) *command-line-args* paths))}
+                            :task (if (seq *command-line-args*)
+                                    (apply shell "cljfmt --quiet -v fix" (if (seq *command-line-args*) *command-line-args* paths))
+                                    (do
+                                      (apply shell "cljfmt --quiet -v fix" paths)
+                                      (shell "cljfmt --config .cljfmt-deps.edn --quiet -v fix deps.edn")))}
          fmt:check         {:doc  "Check code formatting without making changes"
                             :task (apply shell "cljfmt check " paths)}
          lint:copy-configs {:doc  "Copy clj-kondo configs from dependencies"
