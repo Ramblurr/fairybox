@@ -79,6 +79,9 @@
 (defn stop []
   (async/put! (emitter-comp) {:path "/player/commands" :value {:action :audio/stop}}))
 
+(defn clear-playlist []
+  (async/put! (emitter-comp) {:path "/player/commands" :value {:action :audio/clear}}))
+
 (defn place1 []
   (rfid/place! (rfid-comp) "dev-card-001"))
 
@@ -103,6 +106,7 @@
   (remove)
   (play-pause!)
   (stop)
+  (clear-playlist)
   ;;
   )
 
