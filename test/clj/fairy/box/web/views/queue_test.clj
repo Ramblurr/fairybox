@@ -62,6 +62,24 @@
                    :page/settings        "/settings"
                    :page.settings/browse "/settings/browse"}))
 
+(deftest renders-empty-queue-state
+  (let [html (h/html->str
+              (queue/play-queue-list
+               {:tracks  []
+                :url-for {:page/settings "/settings"}}))]
+    (is (= {:queue-target         true
+            :message              true
+            :settings-link        true
+            :populated-ui-hidden? true}
+           {:queue-target  (str/includes? html "id=\"play-queue\"")
+            :message       (str/includes? html "The play queue is empty.")
+            :settings-link (str/includes? html
+                                          "href=\"/settings\"")
+            :populated-ui-hidden?
+            (not (or (str/includes? html ">Folder</p>")
+                     (str/includes? html ">Tracks</p>")
+                     (str/includes? html "role=\"list\"")))}))))
+
 (deftest renders-legacy-layout-active-state-and-datastar-controls
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-queue-render-"}]
     (let [tree           (media/populate-media-tree! temp-dir)

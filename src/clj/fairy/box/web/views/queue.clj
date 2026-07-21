@@ -97,21 +97,29 @@
                 relative-paths)))))))
 
 (defn play-queue-list
-  [{:keys [tracks source-type source-path] :as req}]
+  [{:keys [tracks source-type source-path url-for] :as req}]
   [:div {:id "play-queue" :class "fade-in-out"}
-   [:div
-    {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800
-                 [:dark :text-smoky-300])}
-    [:div
-     [:p {:class (css :text-lg :font-bold)}
-      (if (= source-type :playlist) "Playlist" "Folder")]
-     [:p
-      {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])}
-      (source-path-breadcrumb req source-path)]]
-    [:div
-     [:p {:class (css :text-lg :font-bold)} "Tracks"]]
-    [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
-     (map-indexed play-queue-item-view tracks)]]])
+   (if (seq tracks)
+     [:div
+      {:class (css :flex :flex-col :mx-2 :gap-y-2 :text-smoky-800
+                   [:dark :text-smoky-300])}
+      [:div
+       [:p {:class (css :text-lg :font-bold)}
+        (if (= source-type :playlist) "Playlist" "Folder")]
+       [:p
+        {:class (css :ml-2 :text-smoky-700 [:dark :text-smoky-400])}
+        (source-path-breadcrumb req source-path)]]
+      [:div
+       [:p {:class (css :text-lg :font-bold)} "Tracks"]]
+      [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
+       (map-indexed play-queue-item-view tracks)]]
+     [:div {:class (css :flex :justify-center :items-center :mt-10)}
+      [:div {:class (css :outline-dotted :p-6 :rounded-lg
+                         :outline-smoky-400 :text-smoky-900
+                         [:dark :text-smoky-300])}
+       [:p {:class (css :text-lg)} "The play queue is empty."]
+       [:p {:class (css :text-sm :mt-2 :underline :decoration-inherit)}
+        [:a {:href (url-for :page/settings)} "Go to settings"]]]])])
 
 (defview render-queue {:path "/queue" :shim-headers ui/shim-headers}
   [req]
