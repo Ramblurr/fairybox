@@ -53,13 +53,13 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [dev.onionpancakes.chassis.core :as chassis]
    [donut.system :as ds]
    [exoscale.cloak :as cloak]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.tts.catalog :as catalog]
    [hato.client :as hc]
-   [hiccup2.core :as h2]
    [hyperlith.core :as h]
    [fairy.box.util :refer [->json <-json]]
    [jp.nijohando.event :as ev])
@@ -848,7 +848,7 @@
                   [:s (first titles)])]]
 
     (tap> [:metadata->ssml metadata ssml])
-    (str (h2/html {:mode :xml} ssml))))
+    (chassis/html ssml)))
 
 (defn tts-track-text [{:keys [title] :as metadata} {:keys [with-artist? with-album? index] :or {with-artist? false with-album? false}}]
   (let [ssml [:speak
@@ -859,7 +859,7 @@
               (when with-album?
                 [:s " from the album " (:album metadata)])]]
 
-    (str (h2/html {:mode :xml} ssml))))
+    (chassis/html ssml)))
 
 (defn tts-track [sys metadata opts]
   (try

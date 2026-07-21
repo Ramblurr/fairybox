@@ -32,8 +32,6 @@
            metosin/muuntaja                    {:mvn/version "0.6.11"}
            ;; HTML and CSS
            com.thheller/shadow-css             {:mvn/version "0.6.4"}
-           simpleui/simpleui                   {:git/url "https://github.com/whamtet/simpleui",
-                                                :git/sha "6bdb99e17eb7b0c719440f8dd81f3107f969552f"}
            dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC11"}
            hyper/lith                          {:local/root "/home/ramblurr/src/github.com/andersmurphy/hyperlith"}
            ;; Events
