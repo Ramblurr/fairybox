@@ -128,3 +128,51 @@
       (finally
         (ev/close! bus)
         (reset! state_ previous-state)))))
+
+(deftest immediate-poweroff-skips-shutdown-audio-and-honors-the-safety-switch
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 8)
+        poweroffs_     (atom [])
+        enabled        {:shutdown {:poweroff-enabled? true}}
+        disabled       {:shutdown {:poweroff-enabled? false}}]
+    (try
+      (with-redefs [switchboard/poweroff-host!
+                    #(swap! poweroffs_ conj %)]
+        (reset! state_ (assoc previous-state
+                              :system-state :system-state/ready))
+        (switchboard/system-handler
+         {:emitter emitter :settings enabled}
+         {:value {:event :system/poweroff-now :reason :sleep}})
+        (let [enabled-events (drain-events emitter)
+              enabled-state  (:system-state @state_)]
+          (reset! state_ (assoc previous-state
+                                :system-state :system-state/ready))
+          (switchboard/system-handler
+           {:emitter emitter :settings disabled}
+           {:value {:event :system/poweroff-now :reason :sleep}})
+          (is (= {:enabled-events
+                  [{:path  "/player/commands"
+                    :value {:action :audio/stop}}
+                   {:path  "/hardware/output/leds"
+                    :value {:action :led/set
+                            :groups [:all]
+                            :value  0.0}}]
+                  :enabled-state  :system-state/shutdown
+                  :disabled-events
+                  [{:path  "/player/commands"
+                    :value {:action :audio/stop}}
+                   {:path  "/hardware/output/leds"
+                    :value {:action :led/set
+                            :groups [:all]
+                            :value  0.0}}]
+                  :disabled-state :system-state/ready
+                  :poweroffs      [enabled]}
+                 {:enabled-events  enabled-events
+                  :enabled-state   enabled-state
+                  :disabled-events (drain-events emitter)
+                  :disabled-state  (:system-state @state_)
+                  :poweroffs       @poweroffs_}))))
+      (finally
+        (async/close! emitter)
+        (reset! state_ previous-state)))))

@@ -70,6 +70,34 @@
         (async/close! refreshes)
         (ev/close! bus)))))
 
+(deftest sleep-changes-refresh-once-without-a-progress-broadcast
+  (let [bus             (ev/bus)
+        emitter         (async/chan 1)
+        progress-pushes (async/chan 1)
+        refreshes       (async/chan 2)
+        refresher
+        (player-events/start-player-refresh!
+         {:bus       bus
+          :progress! #(async/>!! progress-pushes :progress)
+          :refresh!  #(async/>!! refreshes :refreshed)})]
+    (try
+      (ev/emitize bus emitter)
+      (async/>!! emitter
+                 {:path  "/sleep/events"
+                  :value {:event :sleep/changed}})
+      (is (= {:progress      nil
+              :refresh       :refreshed
+              :extra-refresh nil}
+             {:progress      (await-value progress-pushes 100)
+              :refresh       (await-value refreshes 1000)
+              :extra-refresh (await-value refreshes 100)}))
+      (finally
+        (player-events/stop-player-refresh! refresher)
+        (async/close! emitter)
+        (async/close! progress-pushes)
+        (async/close! refreshes)
+        (ev/close! bus)))))
+
 (deftest ignores-unrelated-player-events
   (let [bus             (ev/bus)
         emitter         (async/chan 1)

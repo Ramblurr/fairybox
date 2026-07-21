@@ -4,6 +4,7 @@
    [clojure.core.async :as async]
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
+   [fairy.box.sleep :as sleep]
    [fairy.box.media-test-utils :as media]
    [fairy.box.web.views :as views]
    [fairy.box.web.views.settings :as settings-view]
@@ -279,17 +280,22 @@
             time-bindings   ["day_start" "night_start"]
             card-bindings   ["card_removal_behavior"
                              "card_return_behavior"]
+            sleep-bindings  ["sleep_shutdown"
+                             "sleep_shutdown_delay_minutes"]
             labels          ["Device Settings" "Overall volume"
                              "Minimum volume" "Safety maximum"
                              "Day &amp; night profiles" "Day" "Night"
-                             "Starts at" "Maximum volume" "LED brightness"]
+                             "Starts at" "Maximum volume" "LED brightness"
+                             "Sleep timer" "Fade-out time"
+                             "Delay before shutdown"]
             card-labels     ["RFID card behavior" "Keep playing"
                              "Pause playback" "Resume playback"
                              "Restart the playlist"]
             card-ids        ["overall-volume-settings"
                              "card-behavior-settings"
                              "day-night-settings"
-                             "day-profile" "night-profile"]
+                             "day-profile" "night-profile"
+                             "timers-power-settings"]
             radio-inputs    (filter #(str/includes? % "type=\"radio\"")
                                     inputs)]
         (is (= {:device-page         true
@@ -299,6 +305,7 @@
                 :labels              true
                 :signals-initialized true
                 :bindings            true
+                :sleep-chevron-icons true
                 :card-controls
                 {:labels           true
                  :radio-count      4
@@ -306,10 +313,11 @@
                  :checked-defaults true}
                 :sliders
                 {:count          6
-                 :number-inputs  0
+                 :number-inputs  1
                  :limits         true
                  :current-values true
-                 :endpoints      true}
+                 :endpoints      true
+                 :shutdown-delay true}
                 :time-inputs
                 {:count       2
                  :day         true
@@ -341,7 +349,15 @@
                 (str/includes? html "data-signals__ifmissing=")
                 :bindings
                 (every? #(str/includes? html (str "data-bind=\"" % "\""))
-                        (concat slider-bindings time-bindings))
+                        (concat slider-bindings time-bindings
+                                sleep-bindings))
+                :sleep-chevron-icons
+                (and (str/includes? html "aria-label=\"Previous sleep duration\"")
+                     (str/includes? html "aria-label=\"Next sleep duration\"")
+                     (str/includes? html "M439.1 297.4C451.6 309.9")
+                     (str/includes? html "rotate(180 320 320)")
+                     (not (or (str/includes? html "‹")
+                              (str/includes? html "›"))))
                 :card-controls
                 {:labels      (every? #(str/includes? html %) card-labels)
                  :radio-count (count radio-inputs)
@@ -370,7 +386,14 @@
                               slider-bindings))
                  :endpoints
                  (and (= 6 (count (re-seq #">0%</span>" html)))
-                      (= 6 (count (re-seq #">100%</span>" html))))}
+                      (= 6 (count (re-seq #">100%</span>" html))))
+                 :shutdown-delay
+                 (some #(and (str/includes? % "min=\"0\"")
+                             (str/includes? % "step=\"1\"")
+                             (str/includes?
+                              %
+                              "data-bind=\"sleep_shutdown_delay_minutes\""))
+                       number-inputs)}
                 :time-inputs
                 {:count       (count time-inputs)
                  :day         (some #(str/includes? % "name=\"day-profile-start\"")
@@ -456,3 +479,60 @@
                 :writes-after-valid  writes-after-valid
                 :invalid-write-count (- @writes_ writes-after-valid)
                 :invalid-changed?    (not= after-valid @db-conn)}))))))
+
+(deftest saves-zero-delay-sleep-settings-and-rejects-negative-delays
+  (let [db-conn (atom {:settings {:audio {:unknown :preserved}
+                                  :sleep {:unknown :preserved}}})
+        save!   (save-device-action-fn)
+        request (device-request db-conn)
+        body    {:min_volume                   2
+                 :max_volume                   91
+                 :max_volume_day               81
+                 :max_volume_night             51
+                 :max_led_brightness_day       75
+                 :max_led_brightness_night     20
+                 :day_start                    "08:30"
+                 :night_start                  "19:45"
+                 :card_removal_behavior        "pause"
+                 :card_return_behavior         "restart"
+                 :sleep_shutdown               false
+                 :sleep_shutdown_delay_minutes 0}]
+    (save! (assoc request :body body))
+    (let [after-valid @db-conn]
+      (save! (assoc request
+                    :body
+                    (assoc body :sleep_shutdown_delay_minutes -1)))
+      (is (= {:sleep                   {:unknown                :preserved
+                                        :shutdown?              false
+                                        :shutdown-delay-minutes 0}
+              :negative-delay-changed? false}
+             {:sleep                   (get-in @db-conn [:settings :sleep])
+              :negative-delay-changed? (not= after-valid @db-conn)})))))
+
+(deftest sleep-actions-rely-on-the-change-event-for-one-page-refresh
+  (let [toggle!    (ns-resolve 'fairy.box.web.views.settings
+                               'toggle-sleep-timer-fn)
+        cycle!     (ns-resolve 'fairy.box.web.views.settings
+                               'cycle-sleep-duration-fn)
+        enabled_   (atom false)
+        calls_     (atom [])
+        refreshes_ (atom 0)
+        request    {:fairy.box/component
+                    {:fairy.box.sleep/timer ::timer}}]
+    (with-redefs [sleep/enabled? (fn [_] @enabled_)
+                  sleep/enable!  (fn [_]
+                                   (reset! enabled_ true)
+                                   (swap! calls_ conj :enable))
+                  sleep/disable! (fn [_]
+                                   (reset! enabled_ false)
+                                   (swap! calls_ conj :disable))
+                  sleep/cycle!   (fn [_ direction]
+                                   (swap! calls_ conj [:cycle direction]))
+                  h/refresh-all! (fn [& _]
+                                   (swap! refreshes_ inc))]
+      (toggle! request)
+      (toggle! request)
+      (cycle! (assoc request :query-params {"direction" "next"})))
+    (is (= {:calls            [:enable :disable [:cycle :next]]
+            :direct-refreshes 0}
+           {:calls @calls_ :direct-refreshes @refreshes_}))))

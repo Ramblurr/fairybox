@@ -23,6 +23,15 @@
    :card-removal-behavior    :pause
    :card-return-behavior     :restart})
 
+(def default-sleep-settings
+  {:shutdown?              true
+   :shutdown-delay-minutes 1})
+
+(defn- complete-sleep-settings [sleep-settings]
+  (merge default-sleep-settings
+         (when (map? sleep-settings)
+           sleep-settings)))
+
 (def default-tts-provider-settings
   {:google-cloud
    {:language-code "en-US"
@@ -94,10 +103,13 @@
                                                             :hour-night-start))
                                     (dissoc :hour-day-start :hour-night-start))
         migrated-tts-settings   (complete-tts-settings
-                                 (get-in database [:settings :tts]))]
+                                 (get-in database [:settings :tts]))
+        migrated-sleep-settings (complete-sleep-settings
+                                 (get-in database [:settings :sleep]))]
     (-> database
         (assoc-in [:settings :audio] migrated-audio)
-        (assoc-in [:settings :tts] migrated-tts-settings))))
+        (assoc-in [:settings :tts] migrated-tts-settings)
+        (assoc-in [:settings :sleep] migrated-sleep-settings))))
 
 (def DbComponent
   {::ds/start  (fn [{config ::ds/config}]
@@ -116,6 +128,7 @@
                                    :init {:_version       1
                                           :linked-tags    {}
                                           :settings       {:audio default-audio-settings
+                                                           :sleep default-sleep-settings
                                                            :tts   default-tts-settings}
                                           :media-metadata {}})
                          current  @conn
@@ -179,6 +192,9 @@
 (defn ha-bearer-token [db]
   (some-> (get-in db [:settings :homeassistant :ha-bearer-token])
           cloak/mask))
+
+(defn sleep-settings [db]
+  (complete-sleep-settings (get-in db [:settings :sleep])))
 
 (defn tts-settings [db]
   (-> (get-in db [:settings :tts])

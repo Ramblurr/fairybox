@@ -56,6 +56,15 @@
             :groups          (get-in test-components
                                      [:fairy.box.hardware/leds :groups])}))))
 
+(deftest enables-host-poweroff-only-in-production-by-default
+  (is (= {:test false :dev-no-rpi false :prod true}
+         (update-vals {:test       (components :test)
+                       :dev-no-rpi (components :dev-no-rpi)
+                       :prod       (components :prod)}
+                      #(get-in % [:fairy.box/settings
+                                  :shutdown
+                                  :poweroff-enabled?])))))
+
 (deftest defines-complete-donut-graph
   (let [component-defs
         (get-in (system/system {:profile :test})
@@ -76,6 +85,7 @@
                                      :fairy.box.hardware/rfid
                                      :fairy.box.mqtt/client
                                      :fairy.box.playback-limits/policy
+                                     :fairy.box.sleep/timer
                                      :fairy.box.switchboard/switchboard
                                      :fairy.box.tts/tts
                                      :fairy.box.web/front-panel-refresh

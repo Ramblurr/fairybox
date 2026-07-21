@@ -54,6 +54,7 @@
                                    :card-removal-behavior    :pause
                                    :card-return-behavior     :restart
                                    :unknown                  :kept}
+                           :sleep db/default-sleep-settings
                            :tts   db/default-tts-settings}
                           :media-metadata {}}
           _              (ds/stop first-running)
@@ -120,6 +121,21 @@
             :idempotent?   (every? (fn [[_ database]]
                                      (= database (db/migrate-db database)))
                                    migrated)}))))
+
+(deftest migrates-partial-sleep-settings-and-preserves-unknown-data
+  (let [original {:settings  {:sleep {:shutdown-delay-minutes 0
+                                      :unknown                :kept}}
+                  :unrelated :kept}
+        migrated (db/migrate-db original)]
+    (is (= {:sleep       {:shutdown?              true
+                          :shutdown-delay-minutes 0
+                          :unknown                :kept}
+            :unrelated   :kept
+            :idempotent? true}
+           {:sleep       (db/sleep-settings migrated)
+            :unrelated   (:unrelated migrated)
+            :idempotent? (= migrated (db/migrate-db migrated))}))))
+
 (deftest migrates-partial-tts-settings-deeply-and-idempotently
   (let [original {:settings
                   {:tts {:engine :openai

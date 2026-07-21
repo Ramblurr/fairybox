@@ -262,3 +262,24 @@
         @enforcement
         @command
         (is (= [50 40] @dispatches_))))))
+
+(deftest sleep-fade-bypasses-the-minimum-volume-and-stops-at-zero
+  (let [dispatches_ (atom [])
+        sys         {:player      :player
+                     :volume-lock (Object.)}]
+    (with-redefs [mp/dispatch (fn [& args]
+                                (swap! dispatches_ conj args))]
+      (audio/command-handler
+       sys
+       {:value {:action :audio/sleep-fade-step
+                :volume 0
+                :stop?  true}})
+      (audio/command-handler
+       sys
+       {:value {:action :audio/sleep-fade-step
+                :volume 110
+                :stop?  false}}))
+    (is (= [[:player :mixer/set-volume :level 0]
+            [:player :playback/stop]
+            [:player :mixer/set-volume :level 100]]
+           @dispatches_))))

@@ -179,32 +179,50 @@
   ([emitter poweroff?]
    (emit-system! emitter {:event :system/cooling-down :poweroff? poweroff?})))
 
+(defn poweroff-enabled? [settings]
+  (true? (get-in settings [:shutdown :poweroff-enabled?])))
+
+(defn poweroff-host! [settings]
+  (if (poweroff-enabled? settings)
+    (shell/sh "systemctl" "poweroff")
+    (do
+      (log/warn "Skipping host poweroff because it is disabled for this profile")
+      nil)))
+
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as _ev}]
   ;; (tap> {:system ev})
-  (let [{:keys [event poweroff?]} value]
+  (let [{:keys [event poweroff? reason]} value]
     (condp = event
-      :system/initialized (do
-                            (swap! state assoc :system-state :system-state/initialized)
-                            (emit-system! emitter {:event :system/warming-up}))
-      :system/warming-up (do
-                           (swap! state assoc :system-state :system-state/warming-up)
-                           (emit-led! emitter {:action :led/set :groups [:all] :value 1.0})
-                           (when-let [sfx (browse/sfx-path settings :startup)]
-                             (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
-      :system/warmed-up (when (= :system-state/warming-up (system-state!))
-                          (swap! state assoc :system-state :system-state/ready)
-                          (emit-system! emitter {:event :system/ready}))
+      :system/initialized  (do
+                             (swap! state assoc :system-state :system-state/initialized)
+                             (emit-system! emitter {:event :system/warming-up}))
+      :system/warming-up   (do
+                             (swap! state assoc :system-state :system-state/warming-up)
+                             (emit-led! emitter {:action :led/set :groups [:all] :value 1.0})
+                             (when-let [sfx (browse/sfx-path settings :startup)]
+                               (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
+      :system/warmed-up    (when (= :system-state/warming-up (system-state!))
+                             (swap! state assoc :system-state :system-state/ready)
+                             (emit-system! emitter {:event :system/ready}))
       :system/cooling-down (when  (= :system-state/ready (system-state!))
                              (swap! state assoc :system-state :system-state/cooling-down)
                              (emit-player! emitter {:action :audio/stop})
                              (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
                              (when-let [sfx (browse/sfx-path settings :shutdown)]
                                (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff) :item-path sfx})))
-      :system/shutdown (when (= :system-state/cooling-down (system-state!))
-                         (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
-                         (swap! state assoc :system-state :system-state/shutdown)
-                         (when poweroff?
-                           (shell/sh "systemctl" "poweroff")))
+      :system/shutdown     (when (= :system-state/cooling-down (system-state!))
+                             (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
+                             (swap! state assoc :system-state :system-state/shutdown)
+                             (when poweroff?
+                               (poweroff-host! settings)))
+      :system/poweroff-now (do
+                             (emit-player! emitter {:action :audio/stop})
+                             (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
+                             (if (poweroff-enabled? settings)
+                               (do
+                                 (swap! state assoc :system-state :system-state/shutdown)
+                                 (poweroff-host! settings))
+                               (log/warn "Ignoring immediate host poweroff" {:reason reason})))
       nil)))
 
 (defn player-handler [{:keys [emitter]} {:keys [value] :as _ev}]

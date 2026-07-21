@@ -13,6 +13,7 @@
    [fairy.box.mqtt :as mqtt]
    [fairy.box.playback-limits :as playback-limits]
    [fairy.box.settings :as settings]
+   [fairy.box.sleep :as sleep]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.tts :as tts]
    [fairy.box.web.front-panel :as front-panel]
@@ -76,6 +77,7 @@
                              :fairy.box.bus/bus                  (component-ref :fairy.box.bus/bus)
                              :fairy.box.switchboard/switchboard  (component-ref :fairy.box.switchboard/switchboard)
                              :fairy.box.audio.system2/player     (component-ref :fairy.box.audio.system2/player)
+                             :fairy.box.sleep/timer              (component-ref :fairy.box.sleep/timer)
                              :fairy.box.tts/tts                  (component-ref :fairy.box.tts/tts)
                              :fairy.box.web/front-panel-refresh  (component-ref :fairy.box.web/front-panel-refresh)
                              :fairy.box.web/rfid-presence        (component-ref :fairy.box.web/rfid-presence)
@@ -98,6 +100,7 @@
                                       :fairy.box.bus/bus                  bus/BusComponent
                                       :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
                                       :fairy.box.audio.system2/player     audio/AudioSystemComponent
+                                      :fairy.box.sleep/timer              sleep/SleepTimerComponent
                                       :fairy.box.tts/tts                  tts/TTSComponent
                                       :fairy.box.web/front-panel-refresh  front-panel/FrontPanelRefreshComponent
                                       :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent

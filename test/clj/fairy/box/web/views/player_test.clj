@@ -8,6 +8,7 @@
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
+   [fairy.box.sleep :as sleep]
    [fairy.box.web.controllers.artwork :as artwork]
    [fairy.box.web.views.player :as player]
    [jp.nijohando.event :as ev]
@@ -133,6 +134,40 @@
                                 "data-text=\"$_server_time_left\""))
             :legacy-command-removed (not (str/includes? html "/player-cmd"))
             :htmx-removed           (not (str/includes? html "hx-"))}))))
+
+(deftest renders-a-local-countdown-to-the-silent-deadline
+  (let [countdown-state {:active?     true
+                         :deadline-ms 1784630400000
+                         :countdown   "05:00"}
+        html
+        (with-redefs [sleep/countdown-state (constantly countdown-state)]
+          (h/html->str
+           (player/player
+            (assoc (player-request)
+                   :current (sample-state)
+                   :sleep-timer ::timer))))]
+    (is (= {:label              true
+            :initial-countdown  true
+            :quoted-signal      true
+            :silent-deadline    true
+            :local-interval     true
+            :uses-browser-clock true
+            :old-labels-absent  true}
+           {:label              (str/includes? html "Sleeping in")
+            :initial-countdown  (str/includes? html ">05:00</strong>")
+            :quoted-signal
+            (str/includes? html
+                           (str "data-signals:_sleep_countdown="
+                                "\"&quot;05:00&quot;\""))
+            :silent-deadline
+            (str/includes? html
+                           "data-signals:_sleep_deadline_ms=\"1784630400000\"")
+            :local-interval
+            (str/includes? html "data-on-interval__duration.1s=")
+            :uses-browser-clock (str/includes? html "Date.now()")
+            :old-labels-absent
+            (not (or (str/includes? html "Fade-out in")
+                     (str/includes? html "Power off in")))}))))
 
 (deftest renders-wired-hardware-buttons-from-applied-led-values
   (reset! audio-system/audio-state (sample-state))

@@ -43,6 +43,26 @@
 
 (def tts (deficon  [:svg {:xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 20 20" :fill "none"} [:path {:stroke "currentColor" :stroke-linecap "round" :stroke-width "1.5" :d "M16.244 3.125a5 5 0 0 1 0 7.071m-2.357-4.714c.65.65.65 1.706 0 2.357"}] [:path {:fill "currentColor" :d "M6.63 14.352c.764 0 1.527-.383 1.87-1.034h.034v.314c.034.492.347.743.798.743.473 0 .809-.286.809-.84v-3.49C10.141 8.811 9.121 8 7.553 8c-1.265 0-2.246.451-2.53 1.182a.9.9 0 0 0-.086.377c0 .377.29.64.695.64a.84.84 0 0 0 .661-.308c.37-.48.679-.646 1.186-.646.627 0 1.026.332 1.026.903v.405l-1.539.092c-1.528.091-2.383.737-2.383 1.85 0 1.103.884 1.857 2.047 1.857m.547-1.205c-.559 0-.935-.286-.935-.743 0-.434.354-.714.975-.76l1.288-.08v.446c0 .663-.598 1.137-1.328 1.137"}] [:path {:stroke "currentColor" :stroke-linecap "round" :stroke-width "1.5" :d "M10 3.333H5a2.5 2.5 0 0 0-2.5 2.5v8.334a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5v-.834"}]]))
 
+(def ^:private chevron-path
+  "M439.1 297.4C451.6 309.9 451.6 330.2 439.1 342.7L279.1 502.7C266.6 515.2 246.3 515.2 233.8 502.7C221.3 490.2 221.3 469.9 233.8 457.4L371.2 320L233.9 182.6C221.4 170.1 221.4 149.8 233.9 137.3C246.4 124.8 266.7 124.8 279.2 137.3L439.2 297.3z")
+
+(def chevron-right
+  (deficon
+    [:svg {:xmlns   "http://www.w3.org/2000/svg"
+           :viewBox "0 0 640 640"
+           :fill    "currentColor"}
+    ;; Font Awesome Free 7.3.1, https://fontawesome.com/license/free
+     [:path {:d chevron-path}]]))
+
+(def chevron-left
+  (deficon
+    [:svg {:xmlns   "http://www.w3.org/2000/svg"
+           :viewBox "0 0 640 640"
+           :fill    "currentColor"}
+    ;; Font Awesome Free 7.3.1, https://fontawesome.com/license/free
+     [:path {:d         chevron-path
+             :transform "rotate(180 320 320)"}]]))
+
 (def prev [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M18.5 5.63a1 1 0 0 0-1 0L8 11.11V6.5a1 1 0 0 0-2 0v12a1 1 0 0 0 2 0v-4.62l9.5 5.49a1 1 0 0 0 1.5-.87v-12a1 1 0 0 0-.5-.87Z", :data-name "Layer 25"}]])
 (def skip-back [:svg  {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 5.635a1 1 0 0 0-1 0l-8.89 5.14v-4.27a1 1 0 0 0-1.5-.87l-10.39 6a1 1 0 0 0 0 1.73l10.39 6a1 1 0 0 0 1.5-.86v-4.27l8.89 5.13a1 1 0 0 0 1.5-.87V6.505a1 1 0 0 0-.5-.87z", :data-name "Layer 22"}]])
 (def skip-forward [:svg {:width "25" :height "25" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg", :viewBox "0 0 25 25"} [:path {:d "M23.39 11.63 13 5.63a1 1 0 0 0-1.5.87v4.27L2.61 5.63a1 1 0 0 0-1.5.87v12a1 1 0 0 0 1.5.87l8.89-5.14v4.27a1 1 0 0 0 1.5.87l10.39-6a1 1 0 0 0 0-1.73z", :data-name "Layer 23"}]])

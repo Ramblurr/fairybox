@@ -3,6 +3,7 @@
    [fairy.box.audio.current :as player]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
+   [fairy.box.sleep :as sleep]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.web.views.ui :as ui]
    [fairy.box.web.controllers.artwork :as artwork]
@@ -359,18 +360,49 @@
           :loud  [:svg {:width "35" :height "35" :fill "currentColor" :xmlns "http://www.w3.org/2000/svg" :viewBox "0 0 30 30"} [:path {:d "M16.019 4.989v20a1 1 0 0 1-1.53.85l-8-5a3 3 0 0 0-1.47-.38h-4a1 1 0 0 1-1-1v-8.94a1 1 0 0 1 1-1h4a3 3 0 0 0 1.49-.4l8-5a1 1 0 0 1 1.51.87Zm10.21 21a18 18 0 0 0 0-22 1 1 0 1 0-1.58 1.2 16 16 0 0 1 0 19.61 1 1 0 1 0 1.58 1.19zm-2.83-2.88a14 14 0 0 0 0-16.31 1.005 1.005 0 0 0-1.62 1.19 12 12 0 0 1 0 14 1.003 1.003 0 0 0 1.63 1.17zm-2.85-3a10 10 0 0 0 0-10.4 1 1 0 0 0-1.71 1 8 8 0 0 1 0 8.31 1 1 0 1 0 1.71 1z" :data-name "Layer 16"}]]})
         [:p (volume-human volume)]]))))
 
-(defn player [{:keys [url-for current]}]
-  (let [ready?        (= (switchboard/system-state!) :system-state/ready)
-        track-loaded? (and (player/mrl current) (player/state current))
-        $button-base  (css :transition-all :duration-500
-                           :text-smoky-800
-                           [:hover-mouse [:hover :scale-110]]
-                           [:pointer-fine
-                            [:active :text-smoky-950 :scale-105]]
-                           [:pointer-coarse
-                            [:active :text-smoky-950 :scale-125 :duration-500]]
-                           [:dark :text-smoky-100
-                            [:active :text-smoky-500]])]
+(def ^:private sleep-countdown-expression
+  (str "$_sleep_countdown = (() => {"
+       "const total = Math.max(0, Math.ceil(("
+       "$_sleep_deadline_ms - Date.now()) / 1000));"
+       "const seconds = total % 60;"
+       "const minutes = Math.floor(total / 60) % 60;"
+       "const hours = Math.floor(total / 3600);"
+       "const pad = value => String(value).padStart(2, '0');"
+       "return (hours > 0 ? hours + ':' : '') + "
+       "pad(minutes) + ':' + pad(seconds);"
+       "})()"))
+
+(defn- sleep-countdown [{:keys [active? countdown]}]
+  (when active?
+    [:aside {:id "sleep-countdown"
+             :data-on-interval__duration.1s sleep-countdown-expression
+             :class (css :mx-auto :mt-5 :flex :w-fit :items-center :gap-3
+                         :rounded-full :border :border-cloud-burst-300
+                         :bg-cloud-burst-50 :px-4 :py-2 :shadow-sm
+                         :text-cloud-burst-950
+                         [:dark :border-cloud-burst-700
+                          :bg-cloud-burst-950 :text-cloud-burst-100])}
+     [:span {:class (css :text-xs :font-semibold :uppercase
+                         :tracking-wide)}
+      "Sleeping in"]
+     [:strong {:data-text "$_sleep_countdown"
+               :class     (css :text-sm :tabular-nums)}
+      countdown]]))
+
+(defn player [{:keys [url-for current sleep-timer]}]
+  (let [ready?                (= (switchboard/system-state!) :system-state/ready)
+        track-loaded?         (and (player/mrl current) (player/state current))
+        sleep-countdown-state (when sleep-timer
+                                (sleep/countdown-state sleep-timer))
+        $button-base          (css :transition-all :duration-500
+                                   :text-smoky-800
+                                   [:hover-mouse [:hover :scale-110]]
+                                   [:pointer-fine
+                                    [:active :text-smoky-950 :scale-105]]
+                                   [:pointer-coarse
+                                    [:active :text-smoky-950 :scale-125 :duration-500]]
+                                   [:dark :text-smoky-100
+                                    [:active :text-smoky-500]])]
     [:div (cond->
            {:id "player-controls"
             :data-init
@@ -378,7 +410,13 @@
                  "', {retry: 'error', retryMaxCount: Infinity, "
                  "openWhenHidden: false, "
                  "requestCancellation: 'cleanup'})")}
-            track-loaded? (merge (player-signals current)))
+            track-loaded? (merge (player-signals current))
+            sleep-timer
+            (merge {:data-signals:_sleep_deadline_ms
+                    (:deadline-ms sleep-countdown-state)
+                    :data-signals:_sleep_countdown
+                    (h/edn->json (:countdown sleep-countdown-state))}))
+     (sleep-countdown sleep-countdown-state)
      (if track-loaded?
        [:div {:class (css :mt-6 :mb-10 :flex :flex-col
                           [:lg :flex-row :py-6 :max-w-5xl]
@@ -504,7 +542,12 @@
 
 (defview render-home {:path "/" :shim-headers ui/shim-headers}
   [req]
-  (let [req (assoc req :current (player/current!))]
+  (let [component (:fairy.box/component req)
+        req       (assoc req
+                         :current (player/current!)
+                         :sleep-timer
+                         (when (ifn? component)
+                           (component :fairy.box.sleep/timer)))]
     (h/html
      (ui/css-reload)
      [:main#morph.main

@@ -167,6 +167,15 @@
                  :mixer/set-volume
                  :level (wrap-volume db-conn playback-limits volume))))
 
+(defn sleep-fade-step!
+  [{:keys [player volume-lock]} volume stop?]
+  (locking volume-lock
+    (mp/dispatch player
+                 :mixer/set-volume
+                 :level (int (max 0 (min 100 volume))))
+    (when stop?
+      (mp/dispatch player :playback/stop))))
+
 (defn adjust-volume!
   [{:keys [player db-conn playback-limits volume-lock]} delta]
   (locking volume-lock
@@ -291,6 +300,9 @@
         :audio/volume-down      (adjust-volume! sys (get-in config [:volume-down-step]))
         :audio/adjust-volume    (adjust-volume! sys (get-in value [:delta]))
         :audio/set-volume       (set-volume! sys (get-in value [:volume]))
+        :audio/sleep-fade-step  (sleep-fade-step! sys
+                                                  (:volume value)
+                                                  (:stop? value))
         :audio/skip-time        (d! :playback/skip-time :delta-ms (get-in value [:milliseconds]))
         :audio/set-time         (d! :playback/set-time :time-ms (get-in value [:milliseconds]))
         :audio/set-position     (d! :playback/set-position :position (get-in value [:position]))
