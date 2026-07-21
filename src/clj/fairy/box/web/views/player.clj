@@ -4,7 +4,7 @@
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
    [fairy.box.switchboard :as switchboard]
-   [fairy.box.ui3 :as ui3]
+   [fairy.box.web.views.ui :as ui]
    [fairy.box.web.controllers.artwork :as artwork]
    [fairy.box.web.player-progress :as progress]
    [fairy.box.web.views.common :as uic :refer [cs]]
@@ -502,11 +502,11 @@
 
 (defn render [_req])
 
-(defview render-home {:path "/" :shim-headers ui3/shim-headers}
+(defview render-home {:path "/" :shim-headers ui/shim-headers}
   [req]
   (let [req (assoc req :current (player/current!))]
     (h/html
-     (ui3/css-reload)
+     (ui/css-reload)
      [:main#morph.main
       [:div {}
        (uic/player-tabs req :page/controls)

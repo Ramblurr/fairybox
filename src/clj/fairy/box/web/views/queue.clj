@@ -5,7 +5,7 @@
    [fairy.box.audio.current :as player]
    [fairy.box.settings :as app-settings]
    [fairy.box.switchboard :as switchboard]
-   [fairy.box.ui3 :as ui3]
+   [fairy.box.web.views.ui :as ui]
    [fairy.box.web.views.common :as uic :refer [cs]]
    [hyperlith.core :as h :refer [defaction defview]]
    [shadow.css :refer [css]]))
@@ -113,7 +113,7 @@
     [:ul {:role "list" :class (css :flex :flex-col :gap-y-2)}
      (map-indexed play-queue-item-view tracks)]]])
 
-(defview render-queue {:path "/queue" :shim-headers ui3/shim-headers}
+(defview render-queue {:path "/queue" :shim-headers ui/shim-headers}
   [req]
   (let [current (player/current!)
         req     (assoc req
@@ -121,7 +121,7 @@
                        :source-type (player/queue-source-type current)
                        :source-path (player/queue-source-path current))]
     (h/html
-     (ui3/css-reload)
+     (ui/css-reload)
      [:main#morph.main
       [:div {}
        (uic/player-tabs req :page/queue)

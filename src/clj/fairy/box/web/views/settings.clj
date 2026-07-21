@@ -5,7 +5,6 @@
    [fairy.box.settings :as app-settings]
    [fairy.box.util :as util]
    [fairy.box.switchboard :as switchboard]
-   [fairy.box.ui3 :as ui3]
    [fairy.box.web.rfid :as rfid]
    [fairy.box.web.views.common :as uic]
    [fairy.box.web.views.icon :as icon]
@@ -246,27 +245,27 @@
     (db/audio-settings @(component :fairy.box.db/db)))])
 
 (defview render-playback {:path         "/settings/playback"
-                          :shim-headers ui3/shim-headers}
+                          :shim-headers ui/shim-headers}
   [req]
   (h/html
-   (ui3/css-reload)
+   (ui/css-reload)
    [:main#morph.main
     [:div {}
      (uic/player-tabs req :page/settings)
      (playback-settings req)]]))
 
-(defview render-browse {:path "/settings/browse" :shim-headers ui3/shim-headers} [req]
+(defview render-browse {:path "/settings/browse" :shim-headers ui/shim-headers} [req]
   (h/html
-   (ui3/css-reload)
+   (ui/css-reload)
    [:main#morph.main
     [:div {}
      (uic/player-tabs req :page/settings)
      (browse-audio req)]]))
 
-(defview render-rfid {:path "/settings/rfid" :shim-headers ui3/shim-headers}
+(defview render-rfid {:path "/settings/rfid" :shim-headers ui/shim-headers}
   [req]
   (h/html
-   (ui3/css-reload)
+   (ui/css-reload)
    [:main#morph.main
     [:div {}
      (uic/player-tabs req :page/settings)
@@ -274,10 +273,10 @@
       [:div {:class "fade-in-out"}
        (rfid-link req)]]]]))
 
-(defview render-settings {:path "/settings" :shim-headers ui3/shim-headers}
+(defview render-settings {:path "/settings" :shim-headers ui/shim-headers}
   [req]
   (h/html
-   (ui3/css-reload)
+   (ui/css-reload)
    [:main#morph.main
     [:div {}
      (uic/player-tabs req :page/settings)
