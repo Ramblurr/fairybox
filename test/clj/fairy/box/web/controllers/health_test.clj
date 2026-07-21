@@ -3,7 +3,7 @@
    [clojure.core.async :as async]
    [clojure.test :refer [deftest is]]
    [fairy.box.switchboard :as switchboard]
-   [fairy.box.web.controllers.health :as health]
+   [fairy.box.web.api :as api]
    [hyperlith.impl.router :as router]))
 
 (deftest reports-switchboard-readiness
@@ -18,15 +18,15 @@
          {:ready
           (with-redefs [switchboard/system-state!
                         (constantly :system-state/ready)]
-            (health/ready? {}))
+            (api/ready? {}))
           :starting
           (with-redefs [switchboard/system-state!
                         (constantly :system-state/warming-up)]
-            (health/ready? {}))})))
+            (api/ready? {}))})))
 
 (deftest hands-led-control-to-application
   (let [emitter  (async/chan 1)
-        response (health/leds-on!
+        response (api/leds-on!
                   {:fairy.box/component
                    {:fairy.box.switchboard/switchboard
                     {:emitter emitter}}})]
@@ -43,8 +43,8 @@
   (is (= {:ready?   true
           :leds-on! true}
          {:ready?
-          (identical? #'health/ready?
+          (identical? #'api/ready?
                       (get-in @router/routes_ [:get "/api/ready"]))
           :leds-on!
-          (identical? #'health/leds-on!
+          (identical? #'api/leds-on!
                       (get-in @router/routes_ [:get "/api/leds-on"]))})))

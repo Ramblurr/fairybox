@@ -9,7 +9,7 @@
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
    [fairy.box.timers :as timers]
-   [fairy.box.web.controllers.artwork :as artwork]
+   [fairy.box.web.api :as api]
    [fairy.box.web.views.player :as player]
    [jp.nijohando.event :as ev]
    [hyperlith.core :as h]
@@ -544,7 +544,7 @@
               :logical-artwork-version
               (get-in (player/current-artwork state) [1 :src])
               :logical-artwork-path
-              (some-> (artwork/actual-artwork) first str)})))))
+              (some-> (api/actual-artwork) first str)})))))
 
 (deftest renders-simple-fallback-for-orphaned-tts-test
   (let [tts   {:id   "orphaned-announcement"
@@ -583,7 +583,7 @@
                         [:playback :current-track :meta :meta/artwork-url]
                         (str (.toUri image-path))))
       (is (= (str image-path)
-             (some-> (artwork/actual-artwork) first str))))))
+             (some-> (api/actual-artwork) first str))))))
 
 (deftest registers-current-artwork-with-hyperlith-router
   (reset! audio-system/audio-state (sample-state))

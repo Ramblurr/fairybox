@@ -6,12 +6,10 @@
    [fairy.box.switchboard :as switchboard]
    [fairy.box.timers :as timers]
    [fairy.box.web.views.ui :as ui]
-   [fairy.box.web.controllers.artwork :as artwork]
    [fairy.box.web.player-progress :as progress]
    [fairy.box.web.views.common :as uic :refer [cs]]
    [fairy.box.web.views.icon :as icon]
    [hyperlith.core :as h :refer [defaction defview]]
-   [hyperlith.impl.router :as router]
    [shadow.css :refer [css]]))
 
 (def button-commands
@@ -144,8 +142,6 @@
        req
        {:action   :audio/set-shuffle
         :shuffle? (shuffle-values shuffle)}))))
-
-(router/add-route! [:get "/api/current-artwork"] #'artwork/current-artwork)
 
 (defn- command-expression [command]
   (str "@post('" control-player

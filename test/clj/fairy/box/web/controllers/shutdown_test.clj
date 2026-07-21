@@ -2,7 +2,7 @@
   (:require
    [clojure.core.async :as async]
    [clojure.test :refer [deftest is]]
-   [fairy.box.web.controllers.shutdown :as shutdown]
+   [fairy.box.web.api :as api]
    [hyperlith.impl.blocker :as blocker]
    [hyperlith.impl.router :as router]
    [hyperlith.impl.session :as session]))
@@ -49,13 +49,13 @@
                        "application/json; charset=utf-8"}
              :body    "{\"error\":\"Switchboard unavailable\"}"}}
            {:missing-component
-            (shutdown/shutdown! {:fairy.box/component {}})
+            (api/shutdown! {:fairy.box/component {}})
             :closed-emitter
-            (shutdown/shutdown!
+            (api/shutdown!
              {:fairy.box/component
               {:fairy.box.switchboard/switchboard
                {:emitter closed-emitter}}})}))))
 
 (deftest registers-shutdown-route
-  (is (identical? #'shutdown/shutdown!
+  (is (identical? #'api/shutdown!
                   (get-in @router/routes_ [:post "/api/shutdown"]))))
