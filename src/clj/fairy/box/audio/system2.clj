@@ -61,11 +61,42 @@
 
 (defn- expand-path [{:keys [player] :as _sys} path]
   (let [result @(mp/parse-meta player [path])]
-    (if (isa? (type result) Exception)
-      (throw result)
-      (if (every? #(= :media-parsed-status/done (:parse-status %)) result)
-        result
-        (throw (ex-info "Failed to parse media tracks" {:parse-result result}))))))
+    (when (instance? Throwable result)
+      (throw (ex-info "Failed to parse media tracks"
+                      {:item-path path}
+                      result)))
+    (let [tracks (vec result)]
+      (if (every? #(= :media-parsed-status/done (:parse-status %)) tracks)
+        tracks
+        (throw (ex-info "Failed to parse media tracks"
+                        {:item-path    path
+                         :parse-result tracks}))))))
+
+(defn- non-blank-string [value]
+  (some-> value str str/trim not-empty))
+
+(defn- track->metadata [{:keys [meta mrl]}]
+  {:title  (or (non-blank-string (:meta/title meta))
+               (str (mrl->title mrl)))
+   :album  (non-blank-string (:meta/album meta))
+   :artist (non-blank-string (:meta/artist meta))})
+
+(defn metadata-for [{:keys [settings] :as sys} item-path]
+  (let [path (when item-path
+               (browse/canonicalize-path settings item-path))]
+    (when-not path
+      (throw (ex-info "Media path is outside the configured media directory"
+                      {:error     :audio/invalid-media-path
+                       :item-path item-path
+                       :media-dir (browse/media-dir settings)})))
+    (let [playable-type (browse/playable-type settings path)]
+      (when-not (#{:dir :file :playlist} playable-type)
+        (throw (ex-info "Media path is not a supported metadata source"
+                        {:error          :audio/not-playable-type
+                         :item-path      item-path
+                         :canonical-path path
+                         :playable-type  playable-type})))
+      (mapv track->metadata (expand-path sys path)))))
 
 (defn- announce-then-play [sys path]
   (util/thread
