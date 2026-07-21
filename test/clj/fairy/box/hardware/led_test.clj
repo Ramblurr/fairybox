@@ -32,6 +32,38 @@
                 [:status 0.3]]
                @writes_))))))
 
+(deftest publishes-applied-values-outside-controller-lock
+  (let [controller  (led/output-controller
+                     (led/virtual-handles
+                      [{:name :status :led-type :pwm}]))
+        deliveries_ (atom [])
+        mutation_   (promise)
+        first-set?  (atom true)]
+    (try
+      (led/subscribe!
+       controller
+       ::observer
+       (fn [values]
+         (swap! deliveries_ conj values)
+         (when (and (= 1.0 (:status values))
+                    (compare-and-set! first-set? true false))
+           (deliver mutation_
+                    (deref (future
+                             (led/set-led! controller :status 0.5))
+                           500
+                           ::timeout)))))
+      (led/set-led! controller :status 1.0)
+      (is (= {:mutation-result 0.5
+              :current-values  {:status 0.5}
+              :deliveries      [{:status 0.0}
+                                {:status 1.0}
+                                {:status 0.5}]}
+             {:mutation-result (deref mutation_ 1000 ::timeout)
+              :current-values  (led/current-values controller)
+              :deliveries      @deliveries_}))
+      (finally
+        (led/stop-controller! controller)))))
+
 (defn- test-policy [db-conn]
   (limits/start-policy!
    {:db-conn   db-conn
@@ -140,23 +172,58 @@
         (stop-policy! policy)
         (ev/close! bus)))))
 
-(deftest disabled-component-is-side-effect-free
+(deftest virtual-component-tracks-limited-values-without-opening-gpio
   (let [db-conn (atom {:settings
-                       {:audio {:max-volume       95
-                                :max-volume-day   80
-                                :max-volume-night 50
-                                :day-start        "08:00"
-                                :night-start      "19:00"}}})
-        policy  (test-policy db-conn)]
+                       {:audio {:max-volume               95
+                                :max-volume-day           80
+                                :max-volume-night         50
+                                :max-led-brightness-day   75
+                                :max-led-brightness-night 20
+                                :day-start                "08:00"
+                                :night-start              "19:00"}}})
+        policy  (test-policy db-conn)
+        bus     (ev/bus)]
     (try
       (with-redefs [led/open-handles!
                     (fn [_]
-                      (throw (ex-info "disabled LEDs opened handles" {})))]
-        (let [instance (led/start-component!
-                        {:hardware-enablement {:leds false}
-                         :playback-limits     policy})]
-          (led/stop-component! instance)
-          (is (= {:enabled? false :groups {} :leds {}}
-                 instance))))
+                      (throw (ex-info "Virtual LEDs opened GPIO" {})))]
+        (let [instance    (led/start-component!
+                           {:hardware-enablement {:leds false}
+                            :bus                 bus
+                            :leds                [{:name     :status
+                                                   :led-type :pwm}]
+                            :groups              {}
+                            :playback-limits     policy})
+              controller  (:controller instance)
+              deliveries_ (atom [])]
+          (try
+            (led/subscribe! controller ::observer
+                            #(swap! deliveries_ conj %))
+            (led/set-led! controller :status 1.0)
+            (swap! db-conn assoc-in
+                   [:settings :audio :max-led-brightness-night]
+                   50)
+            (led/unsubscribe! controller ::observer)
+            (let [after-unsubscribe @deliveries_]
+              (led/set-led! controller :status 0.1)
+              (is (= {:enabled?              false
+                      :gpio-handles          {}
+                      :configured-leds       #{:status}
+                      :current-values        {:status 0.1}
+                      :deliveries            [{:status 0.0}
+                                              {:status 0.2}
+                                              {:status 0.5}]
+                      :post-unsubscribe-push false}
+                     {:enabled?              (:enabled? instance)
+                      :gpio-handles          (:leds instance)
+                      :configured-leds       (set (get-in instance
+                                                          [:groups :all]))
+                      :current-values        (led/current-values controller)
+                      :deliveries            after-unsubscribe
+                      :post-unsubscribe-push (not= after-unsubscribe
+                                                   @deliveries_)})))
+            (finally
+              (led/stop-component! instance)))))
       (finally
-        (stop-policy! policy)))))
+        (stop-policy! policy)
+        (ev/close! bus)))))

@@ -91,5 +91,12 @@
                                ;; "audiobooks/From Nonna/"
                                :announce-per-track? true}})
 
+  (my-portal/open-portals)
 
-  (my-portal/open-portals))
+  (require '[fairy.box.hardware.led :as led])
+  (def led-controller
+    (:controller ((requiring-resolve 'fairy.box.system/component)
+                  :fairy.box.hardware/leds)))
+  (led/set-led! led-controller :audio/play-pause 0.0)
+  (led/set-led! led-controller :audio/play-pause 1.0)
+  (led/pulse led-controller [:audio/play-pause] 10 :dev-pulse))

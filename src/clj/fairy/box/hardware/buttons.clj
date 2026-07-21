@@ -20,8 +20,8 @@
   "Time in milliseconds to wait before a button press is considered a hold."
   1000)
 
-;; This is here just for debugging
-(defonce ^:private button-states (atom {}))
+(def minimum-simulated-press-ms
+  60)
 
 (defn set-interval [callback ms]
   (future
@@ -63,25 +63,21 @@
       [button-states nil])))
 
 (defn init-button-event-handler!
-  "Initializes the go loop that handles the button events from the event channel.
-    * emitter is the external channel to which we will emit actual button events to the rest of the application
-    * button-event-chan is the channel from which we will receive raw, but debounced, button events - this is an internal channel
-    * exit-ch is a channel that when a message is receieved upon will cause the listener to exit"
-  [emitter button-event-chan exit-chan]
+  "Starts the loop that turns debounced raw events into bus events."
+  [emitter button-event-chan exit-chan button-states_]
   (async/go-loop []
     (async/alt!
       exit-chan ([_]
                  nil)
       button-event-chan ([{:keys [event button-id at orig-at]}]
-                         ;; (tap> [event button-id at])
-                         (let [states                 @button-states
+                         (let [states                 @button-states_
                                [after external-event] (case event
                                                         :press (press-handler button-event-chan states button-id at)
                                                         :release (release-handler states button-id at)
                                                         :check-hold (long-press-handler states button-id at orig-at))]
-                           ;; (tap> [:BUT external-event after])
-                           (assert (some? after) (format  "NIL STATE  e=%s " event))
-                           (reset! button-states after)
+                           (assert (some? after)
+                                   (format "NIL STATE  e=%s " event))
+                           (reset! button-states_ after)
                            (when external-event
                              (async/>! emitter external-event))
                            (recur))))))
@@ -114,27 +110,87 @@
   (let [button (Button. gpio (case (or pull-up-down :up)
                                :up GpioPullUpDown/PULL_UP
                                :down GpioPullUpDown/PULL_DOWN))]
-    (swap! button-states assoc action {:state :released :at 0})
     (Diozero/registerForShutdown (into-array Button [button]))
     (raw-button-listener! button-event-chan button action)
     {:button button :gpio gpio :action action}))
 
-(defn init-buttons! [{:keys [buttons bus]}]
+(defn init-buttons!
+  [{:keys [buttons bus]} hardware-enabled?]
   (let [exit-chan            (async/chan)
         button-event-chan    (async/chan (async/sliding-buffer 100))
-        debounced-event-chan (debounce button-event-chan (/ debounce-delay 1000000.0))
-        emitter              (async/chan)]
+        debounced-event-chan (debounce button-event-chan
+                                       (/ debounce-delay 1000000.0))
+        emitter              (async/chan)
+        button-ids           (set (map :action buttons))
+        button-states_       (atom (zipmap button-ids
+                                           (repeat {:state :released :at 0})))
+        press-times_         (atom {})]
     (ev/emitize bus emitter)
-    (reset! button-states {})
-    (init-button-event-handler! emitter debounced-event-chan exit-chan)
-    {:event-handler-exit-chan exit-chan
-     :button-event-chan       button-event-chan
-     :debounced-event-chan    debounced-event-chan
-     :emitter                 emitter
-     :buttons                 (doall
-                               (map (partial init-button! button-event-chan) buttons))}))
+    (let [event-handler (init-button-event-handler!
+                         emitter
+                         debounced-event-chan
+                         exit-chan
+                         button-states_)]
+      {:event-handler-exit-chan exit-chan
+       :event-handler           event-handler
+       :button-event-chan       button-event-chan
+       :debounced-event-chan    debounced-event-chan
+       :emitter                 emitter
+       :button-ids              button-ids
+       :button-states_          button-states_
+       :press-times_            press-times_
+       :buttons                 (if hardware-enabled?
+                                  (doall
+                                   (map (partial init-button!
+                                                 button-event-chan)
+                                        buttons))
+                                  [])})))
 
-(defn release-buttons! [{:keys [buttons emitter button-event-chan event-handler-exit-chan debounced-event-chan]}]
+(defn- valid-button? [{:keys [button-event-chan button-ids]} button-id]
+  (and button-event-chan
+       (contains? button-ids button-id)))
+
+(defn- submit-button-event!
+  [{:keys [button-event-chan] :as buttons} button-id event at]
+  (when (valid-button? buttons button-id)
+    (async/put! button-event-chan
+                {:event     event
+                 :button-id button-id
+                 :at        at})))
+
+(defn press! [{:keys [press-times_] :as buttons} button-id]
+  (when (valid-button? buttons button-id)
+    (let [at (System/nanoTime)]
+      (swap! press-times_ assoc button-id at)
+      (submit-button-event! buttons button-id :press at))))
+
+(defn release! [{:keys [press-times_] :as buttons} button-id]
+  (when (valid-button? buttons button-id)
+    (let [at         (System/nanoTime)
+          pressed-at (get @press-times_ button-id)
+          elapsed-ms (when pressed-at
+                       (/ (- at pressed-at) 1000000.0))
+          delay-ms   (if elapsed-ms
+                       (max 0
+                            (long (Math/ceil
+                                   (- minimum-simulated-press-ms
+                                      elapsed-ms))))
+                       0)]
+      (swap! press-times_ dissoc button-id)
+      (if (pos? delay-ms)
+        (do
+          (set-interval #(submit-button-event!
+                          buttons
+                          button-id
+                          :release
+                          (System/nanoTime))
+                        delay-ms)
+          true)
+        (submit-button-event! buttons button-id :release at)))))
+
+(defn release-buttons!
+  [{:keys [buttons emitter button-event-chan event-handler-exit-chan
+           debounced-event-chan event-handler button-states_ press-times_]}]
   (async/put! event-handler-exit-chan true)
   (async/close! button-event-chan)
   (async/close! emitter)
@@ -143,16 +199,21 @@
   (doseq [{:keys [^Button button] _action :action} buttons]
     (when button
       (release-raw-button-listener! button)
-      (.close button))))
+      (.close button)))
+  (when event-handler
+    (async/alts!! [event-handler (async/timeout 1000)]))
+  (when button-states_
+    (reset! button-states_ {}))
+  (when press-times_
+    (reset! press-times_ {}))
+  nil)
 
 (defn start-component! [{:keys [hardware-enablement] :as config}]
-  (if (:buttons hardware-enablement)
-    (assoc (init-buttons! config) :enabled? true)
-    {:enabled? false
-     :buttons  []}))
+  (assoc (init-buttons! config (:buttons hardware-enablement))
+         :enabled? (boolean (:buttons hardware-enablement))))
 
-(defn stop-component! [{:keys [enabled?] :as instance}]
-  (when enabled?
+(defn stop-component! [instance]
+  (when (:event-handler-exit-chan instance)
     (release-buttons! instance)))
 
 (def ButtonsComponent

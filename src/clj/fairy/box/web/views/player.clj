@@ -1,6 +1,8 @@
 (ns fairy.box.web.views.player
   (:require
    [fairy.box.audio.current :as player]
+   [fairy.box.hardware.buttons :as buttons]
+   [fairy.box.hardware.led :as led]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.ui3 :as ui3]
    [fairy.box.web.controllers.artwork :as artwork]
@@ -20,6 +22,41 @@
    "toggle-mute"      {:action :audio/toggle-mute}
    "volume-down-step" {:action :audio/adjust-volume :delta -5}
    "volume-up-step"   {:action :audio/adjust-volume :delta 5}})
+
+(def front-panel-buttons
+  [{:button-id :audio/volume-down
+    :color     "green"
+    :icon      icon/volume-down
+    :id        "volume-down"
+    :label     "Volume down"
+    :signal    "front_panel_volume_down_pressed"}
+   {:button-id :audio/prev
+    :color     "red"
+    :icon      icon/prev
+    :id        "previous"
+    :label     "Previous"
+    :signal    "front_panel_previous_pressed"}
+   {:button-id :audio/play-pause
+    :color     "orange"
+    :icon      (icon/play {})
+    :id        "play-pause"
+    :label     "Play or pause"
+    :signal    "front_panel_play_pause_pressed"}
+   {:button-id :audio/next
+    :color     "red"
+    :icon      icon/skip
+    :id        "next"
+    :label     "Next"
+    :signal    "front_panel_next_pressed"}
+   {:button-id :audio/volume-up
+    :color     "green"
+    :icon      icon/volume-up
+    :id        "volume-up"
+    :label     "Volume up"
+    :signal    "front_panel_volume_up_pressed"}])
+
+(def front-panel-button-ids
+  (into {} (map (juxt :id :button-id)) front-panel-buttons))
 
 (def repeat-modes
   {"list"  :list
@@ -53,6 +90,23 @@
   [{:keys [query-params] :as req}]
   (when-let [command (button-commands (get query-params "command"))]
     (emit-player-command! req command)))
+
+(defn- submit-hardware-button!
+  [{:keys [query-params] :fairy.box/keys [component]} operation]
+  (when-let [button-id (front-panel-button-ids
+                        (get query-params "button"))]
+    (when-let [button-component
+               (when (ifn? component)
+                 (component :fairy.box.hardware/buttons))]
+      (operation button-component button-id))))
+
+(defaction press-hardware-button
+  [req]
+  (submit-hardware-button! req buttons/press!))
+
+(defaction release-hardware-button
+  [req]
+  (submit-hardware-button! req buttons/release!))
 
 (defaction seek-player
   [{:keys [query-params] :as req}]
@@ -99,6 +153,40 @@
   (str "@post('" control-player
        (h/url-query-string {:command command})
        "')"))
+
+(defn- front-panel-action-expression [action button-id]
+  (str "@post('" action
+       (h/url-query-string {:button button-id})
+       "')"))
+
+(defn- press-expression [{:keys [id signal]}]
+  (let [pressed (str "$" signal)]
+    (str pressed " ? null : ("
+         pressed " = true, "
+         (front-panel-action-expression press-hardware-button id)
+         ")")))
+
+(defn- release-expression [{:keys [id signal]}]
+  (let [pressed (str "$" signal)]
+    (str pressed " ? ("
+         pressed " = false, "
+         (front-panel-action-expression release-hardware-button id)
+         ") : null")))
+
+(def front-panel-key-test
+  "evt.key == ' ' || evt.key == 'Enter'")
+
+(defn- key-press-expression [button]
+  (str "((" front-panel-key-test ") && !evt.repeat) ? "
+       "(evt.preventDefault(), "
+       (press-expression button)
+       ") : null"))
+
+(defn- key-release-expression [button]
+  (str "(" front-panel-key-test ") ? "
+       "(evt.preventDefault(), "
+       (release-expression button)
+       ") : null"))
 
 (defn- player-signals [current]
   (let [progress (progress/progress-percentage (player/position current))
@@ -369,30 +457,48 @@
    [:div {:class "fade-in-out"}
     (player s)]])
 
-(defn hardware-buttons []
-  [:section.arcade-button-panel
-   {:id "hardware-buttons" :aria-label "Fairybox hardware buttons"}
-   [:div.arcade-button-row
-    [:button.arcade-button.arcade-button--green
-     {:type       "button"      :data-led-state "on"
-      :aria-label "Volume down" :title          "Volume down"}
-     icon/volume-down]
-    [:button.arcade-button.arcade-button--red
-     {:type       "button"   :data-led-state "on"
-      :aria-label "Previous" :title          "Previous"}
-     icon/prev]
-    [:button.arcade-button.arcade-button--orange
-     {:type       "button"        :data-led-state "on"
-      :aria-label "Play or pause" :title          "Play or pause"}
-     (icon/play {})]
-    [:button.arcade-button.arcade-button--red
-     {:type       "button" :data-led-state "on"
-      :aria-label "Next"   :title          "Next"}
-     icon/skip]
-    [:button.arcade-button.arcade-button--green
-     {:type       "button"    :data-led-state "on"
-      :aria-label "Volume up" :title          "Volume up"}
-     icon/volume-up]]])
+(defn- current-front-panel-values
+  [{:fairy.box/keys [component]}]
+  (or (when (ifn? component)
+        (some-> (component :fairy.box.hardware/leds)
+                :controller
+                led/current-values))
+      {}))
+
+(defn- hardware-button [values {:keys [button-id color icon label signal]
+                                :as   button}]
+  (let [value              (double (get values button-id 0.0))
+        release            (release-expression button)
+        pressed-signal-key (keyword
+                            (str "data-signals:"
+                                 signal
+                                 "__ifmissing"))]
+    [:button
+     {pressed-signal-key             "false"
+      :type "button"
+      :class (str "arcade-button "
+                  "arcade-button--" color)
+      :style (str "--arcade-led-level: " value)
+      :data-led-state                (if (pos? value) "on" "off")
+      :data-on:pointerdown           (press-expression button)
+      :data-on:pointerup__window     release
+      :data-on:pointercancel__window release
+      :data-on:keydown               (key-press-expression button)
+      :data-on:keyup                 (key-release-expression button)
+      :data-on:blur                  release
+      :aria-label                    label
+      :title label}
+     icon]))
+
+(defn hardware-buttons
+  ([]
+   (hardware-buttons {}))
+  ([req]
+   (let [values (current-front-panel-values req)]
+     [:section.arcade-button-panel
+      {:id "hardware-buttons" :aria-label "Fairybox hardware buttons"}
+      (into [:div.arcade-button-row]
+            (map (partial hardware-button values) front-panel-buttons))])))
 
 (defn render [_req])
 
@@ -405,6 +511,6 @@
       [:div {}
        (uic/player-tabs req :page/controls)
        (player-controls-tab req)]
-      (hardware-buttons)])))
+      (hardware-buttons req)])))
 
 (h/refresh-all!)

@@ -73,81 +73,157 @@
 (defn stop-controller! [controller]
   ((::stop! controller)))
 
+(defn current-values [controller]
+  ((::current-values controller)))
+
+(defn subscribe! [controller subscriber-id callback]
+  ((::subscribe! controller) subscriber-id callback))
+
+(defn unsubscribe! [controller subscriber-id]
+  ((::unsubscribe! controller) subscriber-id))
+
+(defn- notify-subscriber! [subscriber-id callback values]
+  (try
+    (callback values)
+    (catch Throwable error
+      (log/error error
+                 "LED output subscriber failed"
+                 {:subscriber-id subscriber-id}))))
+
 (defn output-controller [led-handles]
-  (let [state_ (atom {:desired-values (zipmap (keys led-handles)
-                                              (repeat 0.0))
-                      :applied-limit  1.0
-                      :closed?        false
-                      :animations     {}
-                      :animation-runs {}})
-        lock   (Object.)]
-    {::set-led!
-     (fn [led-name value]
-       (locking lock
-         (when-not (:closed? @state_)
-           (if-let [led (get led-handles led-name)]
-             (let [desired-value (clamp value)
-                   state         (swap! state_ assoc-in
-                                        [:desired-values led-name]
-                                        desired-value)
-                   applied-value (min desired-value (:applied-limit state))]
-               (led-value! led applied-value)
-               applied-value)
-             (do
-               (log/debug "Ignoring unknown LED" {:led-name led-name})
-               nil)))))
-     ::refresh-limit!
-     (fn [limit]
-       (locking lock
-         (when-not (:closed? @state_)
-           (let [limit (clamp limit)
-                 state (swap! state_ assoc :applied-limit limit)]
-             (doseq [[led-name desired-value] (:desired-values state)]
-               (led-value! (get led-handles led-name)
-                           (min desired-value limit)))
-             limit))))
-     ::register-animation!
-     (fn [animation-id run-id run]
-       (locking lock
-         (when-not (:closed? @state_)
-           (when-let [old-run-id (get-in @state_
-                                         [:animation-runs animation-id])]
-             (when-let [cancel-ch (get-in @state_
-                                          [:animations old-run-id :cancel-ch])]
-               (async/put! cancel-ch :cancel)))
+  (let [initial-values (zipmap (keys led-handles) (repeat 0.0))
+        state_         (atom {:desired-values initial-values
+                              :applied-values initial-values
+                              :applied-limit  1.0
+                              :closed?        false
+                              :animations     {}
+                              :animation-runs {}})
+        subscribers_   (atom {})
+        lock           (Object.)]
+    (letfn [(notify! [values]
+              (doseq [[subscriber-id callback] @subscribers_]
+                (notify-subscriber! subscriber-id callback values)))]
+      {::set-led!
+       (fn [led-name value]
+         (let [{:keys [changed? result values]}
+               (locking lock
+                 (when-not (:closed? @state_)
+                   (if-let [led (get led-handles led-name)]
+                     (let [desired-value (clamp value)
+                           old-applied   (get-in @state_
+                                                 [:applied-values led-name])
+                           applied-value (min desired-value
+                                              (:applied-limit @state_))
+                           state         (swap! state_
+                                                (fn [state]
+                                                  (-> state
+                                                      (assoc-in
+                                                       [:desired-values led-name]
+                                                       desired-value)
+                                                      (assoc-in
+                                                       [:applied-values led-name]
+                                                       applied-value))))]
+                       (led-value! led applied-value)
+                       {:changed? (not= old-applied applied-value)
+                        :result   applied-value
+                        :values   (:applied-values state)})
+                     (do
+                       (log/debug "Ignoring unknown LED"
+                                  {:led-name led-name})
+                       nil))))]
+           (when changed?
+             (notify! values))
+           result))
+       ::refresh-limit!
+       (fn [limit]
+         (let [{:keys [changed? result values]}
+               (locking lock
+                 (when-not (:closed? @state_)
+                   (let [limit          (clamp limit)
+                         old-values     (:applied-values @state_)
+                         applied-values (reduce-kv
+                                         (fn [values led-name desired-value]
+                                           (assoc values
+                                                  led-name
+                                                  (min desired-value limit)))
+                                         {}
+                                         (:desired-values @state_))
+                         state          (swap! state_
+                                               assoc
+                                               :applied-limit limit
+                                               :applied-values applied-values)]
+                     (doseq [[led-name applied-value] applied-values]
+                       (led-value! (get led-handles led-name) applied-value))
+                     {:changed? (not= old-values applied-values)
+                      :result   limit
+                      :values   (:applied-values state)})))]
+           (when changed?
+             (notify! values))
+           result))
+       ::current-values
+       (fn []
+         (locking lock
+           (:applied-values @state_)))
+       ::subscribe!
+       (fn [subscriber-id callback]
+         (let [values (locking lock
+                        (when (:closed? @state_)
+                          (throw (ex-info "LED output controller is stopped"
+                                          {:subscriber-id subscriber-id})))
+                        (swap! subscribers_ assoc subscriber-id callback)
+                        (:applied-values @state_))]
+           (notify-subscriber! subscriber-id callback values)
+           subscriber-id))
+       ::unsubscribe!
+       (fn [subscriber-id]
+         (swap! subscribers_ dissoc subscriber-id)
+         nil)
+       ::register-animation!
+       (fn [animation-id run-id run]
+         (locking lock
+           (when-not (:closed? @state_)
+             (when-let [old-run-id (get-in @state_
+                                           [:animation-runs animation-id])]
+               (when-let [cancel-ch (get-in
+                                     @state_
+                                     [:animations old-run-id :cancel-ch])]
+                 (async/put! cancel-ch :cancel)))
+             (swap! state_
+                    (fn [state]
+                      (-> state
+                          (assoc-in [:animations run-id] run)
+                          (assoc-in [:animation-runs animation-id] run-id))))
+             true)))
+       ::finish-animation!
+       (fn [animation-id run-id]
+         (locking lock
            (swap! state_
                   (fn [state]
-                    (-> state
-                        (assoc-in [:animations run-id] run)
-                        (assoc-in [:animation-runs animation-id] run-id))))
-           true)))
-     ::finish-animation!
-     (fn [animation-id run-id]
-       (locking lock
-         (swap! state_
-                (fn [state]
-                  (cond-> (update state :animations dissoc run-id)
-                    (= run-id (get-in state
-                                      [:animation-runs animation-id]))
-                    (update :animation-runs dissoc animation-id))))))
-     ::cancel-animation!
-     (fn [animation-id]
-       (locking lock
-         (when-let [run-id (get-in @state_ [:animation-runs animation-id])]
-           (when-let [cancel-ch (get-in @state_
-                                        [:animations run-id :cancel-ch])]
-             (async/put! cancel-ch :cancel)))))
-     ::stop!
-     (fn []
-       (let [runs (locking lock
-                    (let [runs (vals (:animations @state_))]
-                      (swap! state_ assoc :closed? true)
-                      runs))]
-         (doseq [{:keys [cancel-ch]} runs]
-           (async/put! cancel-ch :cancel))
-         (doseq [{:keys [finished-ch]} runs]
-           (async/<!! finished-ch))
-         nil))}))
+                    (cond-> (update state :animations dissoc run-id)
+                      (= run-id (get-in state
+                                        [:animation-runs animation-id]))
+                      (update :animation-runs dissoc animation-id))))))
+       ::cancel-animation!
+       (fn [animation-id]
+         (locking lock
+           (when-let [run-id (get-in @state_
+                                     [:animation-runs animation-id])]
+             (when-let [cancel-ch (get-in
+                                   @state_
+                                   [:animations run-id :cancel-ch])]
+               (async/put! cancel-ch :cancel)))))
+       ::stop!
+       (fn []
+         (let [runs (locking lock
+                      (let [runs (vals (:animations @state_))]
+                        (reset! subscribers_ {})
+                        (swap! state_ assoc :closed? true)
+                        runs))]
+           (doseq [{:keys [cancel-ch]} runs]
+             (async/put! cancel-ch :cancel))
+           (doseq [{:keys [finished-ch]} runs]
+             (async/<!! finished-ch))
+           nil))})))
 
 (defn apply-tween! [controller {:keys [value data]}]
   (when value
@@ -319,6 +395,10 @@
   (m/index-by :name
               (map init-led! defs)))
 
+(defn virtual-handles [defs]
+  (m/index-by :name
+              (map #(assoc % :handle nil) defs)))
+
 (defn dupes [seq]
   (for [[id freq] (frequencies seq)
         :when     (> freq 1)]
@@ -333,17 +413,20 @@
 (def led-subscriber-id
   ::output-controller)
 
-(defn init-leds! [{:keys [groups leds bus playback-limits]}]
-  (let [listener   (async/chan)
-        leds       (open-handles! leds)
-        groups     (merge groups {:all (keys leds)})
-        controller (output-controller leds)
-        sys        {:listener        listener
-                    :groups          groups
-                    :leds            leds
-                    :controller      controller
-                    :playback-limits playback-limits
-                    :subscriber-id   led-subscriber-id}]
+(defn init-leds!
+  [{:keys [groups leds bus playback-limits]} hardware-enabled?]
+  (let [listener    (async/chan)
+        led-handles (if hardware-enabled?
+                      (open-handles! leds)
+                      (virtual-handles leds))
+        groups      (merge groups {:all (keys led-handles)})
+        controller  (output-controller led-handles)
+        sys         {:listener        listener
+                     :groups          groups
+                     :leds            (if hardware-enabled? led-handles {})
+                     :controller      controller
+                     :playback-limits playback-limits
+                     :subscriber-id   led-subscriber-id}]
     (playback-limits/subscribe!
      playback-limits
      led-subscriber-id
@@ -373,14 +456,11 @@
     (release-led! led)))
 
 (defn start-component! [{:keys [hardware-enablement] :as config}]
-  (if (:leds hardware-enablement)
-    (assoc (init-leds! config) :enabled? true)
-    {:enabled? false
-     :groups   {}
-     :leds     {}}))
+  (assoc (init-leds! config (:leds hardware-enablement))
+         :enabled? (boolean (:leds hardware-enablement))))
 
-(defn stop-component! [{:keys [enabled?] :as instance}]
-  (when enabled?
+(defn stop-component! [instance]
+  (when (:listener instance)
     (release-leds! instance)))
 
 (def LedsComponent

@@ -15,6 +15,7 @@
    [fairy.box.settings :as settings]
    [fairy.box.switchboard :as switchboard]
    [fairy.box.tts :as tts]
+   [fairy.box.web.front-panel :as front-panel]
    [fairy.box.web.player-events :as player-events]
    [fairy.box.web.player-progress :as player-progress]
    [fairy.box.web.rfid :as web-rfid]
@@ -76,6 +77,7 @@
                              :fairy.box.switchboard/switchboard  (component-ref :fairy.box.switchboard/switchboard)
                              :fairy.box.audio.system2/player     (component-ref :fairy.box.audio.system2/player)
                              :fairy.box.tts/tts                  (component-ref :fairy.box.tts/tts)
+                             :fairy.box.web/front-panel-refresh  (component-ref :fairy.box.web/front-panel-refresh)
                              :fairy.box.web/rfid-presence        (component-ref :fairy.box.web/rfid-presence)
                              :fairy.box.web/player-progress      (component-ref :fairy.box.web/player-progress)
                              :fairy.box.web/player-event-refresh (component-ref :fairy.box.web/player-event-refresh)
@@ -97,6 +99,7 @@
                                       :fairy.box.switchboard/switchboard  switchboard/SwitchboardComponent
                                       :fairy.box.audio.system2/player     audio/AudioSystemComponent
                                       :fairy.box.tts/tts                  tts/TTSComponent
+                                      :fairy.box.web/front-panel-refresh  front-panel/FrontPanelRefreshComponent
                                       :fairy.box.web/rfid-presence        web-rfid/RfidPresenceComponent
                                       :fairy.box.web/player-progress      player-progress/ProgressStreamComponent
                                       :fairy.box.web/player-event-refresh player-events/PlayerEventRefreshComponent

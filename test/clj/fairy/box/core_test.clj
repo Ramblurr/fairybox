@@ -7,6 +7,8 @@
    [donut.system :as ds]
    [fairy.box.core]
    [fairy.box.db :as db]
+   [fairy.box.hardware.buttons :as buttons]
+   [fairy.box.hardware.led :as led]
    [fairy.box.hardware.rfid :as rfid]
    [fairy.box.mqtt :as mqtt]
    [fairy.box.settings :as settings]
@@ -55,8 +57,15 @@
                                      [:fairy.box.hardware/leds :groups])}))))
 
 (deftest defines-complete-donut-graph
-  (let [component-defs (get-in (system/system {:profile :test})
-                               [::ds/defs :fairy.box/components])]
+  (let [component-defs
+        (get-in (system/system {:profile :test})
+                [::ds/defs :fairy.box/components])
+        front-panel-config
+        (get-in component-defs
+                [:fairy.box.web/front-panel-refresh ::ds/config])
+        web-components
+        (get-in component-defs
+                [:fairy.box.web/server ::ds/config :components])]
     (is (= {:component-keys        #{:fairy.box/settings
                                      :fairy.box/startup
                                      :fairy.box.audio.system2/player
@@ -69,13 +78,23 @@
                                      :fairy.box.playback-limits/policy
                                      :fairy.box.switchboard/switchboard
                                      :fairy.box.tts/tts
+                                     :fairy.box.web/front-panel-refresh
                                      :fairy.box.web/player-event-refresh
                                      :fairy.box.web/player-progress
                                      :fairy.box.web/rfid-presence
                                      :fairy.box.web/server}
+            :front-panel-led-ref   (ds/ref
+                                    (component-id
+                                     :fairy.box.hardware/leds))
+            :server-front-panel-ref
+            (ds/ref (component-id
+                     :fairy.box.web/front-panel-refresh))
             :missing-start         #{}
             :missing-required-stop #{}}
            {:component-keys        (set (keys component-defs))
+            :front-panel-led-ref   (get front-panel-config :leds)
+            :server-front-panel-ref
+            (get web-components :fairy.box.web/front-panel-refresh)
             :missing-start         (->> component-defs
                                         (keep (fn [[key component]]
                                                 (when-not (fn? (::ds/start component))
@@ -90,28 +109,61 @@
                                         set)}))))
 
 (deftest starts-and-stops-safe-hardware-subsystem
-  (let [selected      #{(component-id :fairy.box.hardware/buttons)
-                        (component-id :fairy.box.hardware/leds)
-                        (component-id :fairy.box.hardware/rfid)
-                        (component-id :fairy.box.mqtt/client)}
-        database      (atom {:settings {:audio db/default-audio-settings}})
-        test-system   (assoc-in (system/system {:profile :test})
-                                [::ds/defs
-                                 :fairy.box/components
-                                 :fairy.box.db/db]
-                                database)
-        running       (ds/start test-system {} selected)
-        instance      #(ds/instance running (component-id %))
-        rfid-instance (instance :fairy.box.hardware/rfid)]
+  (let [selected         #{(component-id :fairy.box.hardware/buttons)
+                           (component-id :fairy.box.hardware/leds)
+                           (component-id :fairy.box.hardware/rfid)
+                           (component-id :fairy.box.mqtt/client)}
+        database         (atom {:settings {:audio db/default-audio-settings}})
+        test-system      (assoc-in (system/system {:profile :test})
+                                   [::ds/defs
+                                    :fairy.box/components
+                                    :fairy.box.db/db]
+                                   database)
+        running          (ds/start test-system {} selected)
+        instance         #(ds/instance running (component-id %))
+        buttons-instance (instance :fairy.box.hardware/buttons)
+        leds-instance    (instance :fairy.box.hardware/leds)
+        rfid-instance    (instance :fairy.box.hardware/rfid)]
     (try
-      (is (= {:buttons {:enabled? false :buttons []}
-              :leds    {:enabled? false :groups {} :leds {}}
-              :rfid    {:enabled? true :type :simulated}
-              :mqtt    {:enabled? false}}
-             {:buttons (instance :fairy.box.hardware/buttons)
-              :leds    (instance :fairy.box.hardware/leds)
-              :rfid    (select-keys rfid-instance [:enabled? :type])
-              :mqtt    (instance :fairy.box.mqtt/client)}))
+      (let [led-values (led/current-values (:controller leds-instance))]
+        (is (= {:buttons {:enabled?       false
+                          :gpio-handles   []
+                          :configured-button-ids
+                          #{:audio/prev
+                            :audio/next
+                            :audio/play-pause
+                            :audio/volume-up
+                            :audio/volume-down
+                            :system/shutdown}
+                          :logical-input? true}
+                :leds    {:enabled?        false
+                          :gpio-handles    {}
+                          :configured-leds #{:audio/prev
+                                             :audio/next
+                                             :audio/play-pause
+                                             :audio/volume-up
+                                             :audio/volume-down}
+                          :current-values  {:audio/prev        0.0
+                                            :audio/next        0.0
+                                            :audio/play-pause  0.0
+                                            :audio/volume-up   0.0
+                                            :audio/volume-down 0.0}}
+                :rfid    {:enabled? true :type :simulated}
+                :mqtt    {:enabled? false}}
+               {:buttons {:enabled?              (:enabled? buttons-instance)
+                          :gpio-handles          (:buttons buttons-instance)
+                          :configured-button-ids (:button-ids buttons-instance)
+                          :logical-input?
+                          (and (buttons/press! buttons-instance
+                                               :audio/volume-up)
+                               (buttons/release! buttons-instance
+                                                 :audio/volume-up))}
+                :leds    {:enabled?        (:enabled? leds-instance)
+                          :gpio-handles    (:leds leds-instance)
+                          :configured-leds (set (keys led-values))
+                          :current-values  led-values}
+                :rfid    (select-keys rfid-instance [:enabled? :type])
+                :mqtt    (instance :fairy.box.mqtt/client)})))
       (finally
         (ds/stop running)))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo

@@ -14,7 +14,12 @@
 }
 
 .arcade-button {
-  --arcade-color: var(--arcade-on-color);
+  --arcade-led-level: 1;
+  --arcade-color: color-mix(
+    in srgb,
+    var(--arcade-off-color),
+    var(--arcade-on-color) calc(var(--arcade-led-level) * 100%)
+  );
   --arcade-bezel-shadow:
     color-mix(in srgb, var(--arcade-color) 60%, black) 0 4px 5px inset,
     rgb(255 255 255 / 50%) 0 12px 5px inset,
