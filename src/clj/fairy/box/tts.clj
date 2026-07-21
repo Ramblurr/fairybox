@@ -938,9 +938,9 @@
             (speech/text "and 2, In which Tigger comes to the forest")])})
 
   (async/put! (:emitter sys)
-              {:path "/tts/commands"
+              {:path  "/tts/commands"
                :value {:action :tts/speak
-                       :text "Hello"}})
+                       :text   "Hello"}})
 
   :rcf)
 

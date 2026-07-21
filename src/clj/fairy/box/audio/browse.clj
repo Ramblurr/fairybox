@@ -3,7 +3,6 @@
 (ns fairy.box.audio.browse
   (:require
    [babashka.fs :as fs]
-   [clojure.java.io :as io]
    [clojure.string :as str]
    [fairy.box.util.natural-sorting :as natsort])
   (:import
@@ -37,10 +36,10 @@
 (defn list-contents
   "List contents of a directory, sorted by filename. If root is provided, :rel-path will be relative to root"
   ([root path]
-   (let [path-f (io/file path)]
+   (let [path-f (fs/file path)]
      (->>
       (seq (.listFiles path-f))
-      (map (partial dir-item (.toPath (io/file root))))
+      (map (partial dir-item (fs/path root)))
        ;; (natsort/sort-by (juxt :file? :name))
       (natsort/sort-by :name))))
   ([path]
@@ -99,7 +98,7 @@
 (defn valid-dir? [settings folder-path]
   (and
    (validate-base-path (media-dir settings) folder-path)
-   (.isDirectory (io/file folder-path))))
+   (fs/directory? folder-path)))
 
 (defn normalize-path
   "Normalizes a file path on Unix systems by eliminating '.' and '..' from it."
@@ -115,12 +114,12 @@
 (defn basename
   "Given a path /foo/bar/baz returns baz"
   ^String [^String path]
-  (.getName (io/file path)))
+  (fs/file-name path))
 
 (defn dirname
   "Given a path /foo/bar/baz returns /foo"
   ^String [^String path]
-  (.getParent (io/file path)))
+  (some-> path fs/parent str))
 
 (defn component-paths
   "Given a string /Foo/Bar/Baz, returns a vector of strings: [/Foo /Foo/Bar /Foo/Bar/Baz]"
