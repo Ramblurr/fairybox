@@ -4,6 +4,7 @@
    [clojure.string :as str]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
+   [fairy.box.tts.speech :as speech]
    [fairy.box.web.refresh :as web-refresh]
    [fairy.box.web.views.common :as uic]
    [fairy.box.web.views.ui :as ui]
@@ -26,6 +27,8 @@
   (set (mapcat val tts/openai-voices-by-model)))
 
 (defonce ^:private preview-sequence_ (atom 0))
+(def ^:private default-preview-text
+  "This one is Frog and Toad Are Friends\n\n• 1, Spring\n• 2, The Story\n• 3, A Lost Button")
 
 (defn- parsed-string [value maximum-length allow-empty?]
   (when (and (string? value)
@@ -52,6 +55,9 @@
    {:signal :google_language_code
     :path   [:language-code]
     :parse  #(parsed-string % 35 false)}
+   [:google-cloud "family"]
+   {:signal :google_family
+    :parse  #(parsed-string % 128 false)}
    [:google-cloud "voice"]
    {:signal :google_voice
     :path   [:voice]
@@ -127,28 +133,59 @@
       (get-in (tts/provider-catalog-snapshot tts-system)
               [:providers provider :catalog]))))
 
+(defn- google-voices [catalog language-code family]
+  (cond->> (:voices catalog)
+    language-code
+    (filter #(some #{language-code} (:language-codes %)))
+    family
+    (filter #(= family (speech/google-voice-family (:id %))))))
+
+(defn- google-families [voices]
+  (->> voices
+       (keep (comp speech/google-voice-family :id))
+       distinct
+       sort
+       vec))
+
+(defn- selected-voice [voices current-voice]
+  (if (some #(= current-voice (:id %)) voices)
+    current-voice
+    (:id (first voices))))
+
 (defn- provider-values [database catalog provider field spec value]
-  (let [values (assoc-in {} (:path spec) value)]
+  (let [settings       (db/tts-provider-settings database provider)
+        current-voice  (:voice settings)
+        current-family (speech/google-voice-family current-voice)
+        values         (when-let [path (:path spec)]
+                         (assoc-in {} path value))]
     (cond
       (and (= :openai provider) (= "model" field))
-      (let [voices        (get tts/openai-voices-by-model value)
-            current-voice (:voice (db/tts-provider-settings database :openai))]
+      (let [voices (get tts/openai-voices-by-model value)]
         (assoc values :voice (if (some #{current-voice} voices)
                                current-voice
                                (first voices))))
 
       (and (= :google-cloud provider) (= "language-code" field))
-      (let [current-voice (:voice (db/tts-provider-settings
-                                   database :google-cloud))
-            voices        (filter #(some #{value} (:language-codes %))
-                                  (:voices catalog))
-            selected      (if (some #(= current-voice (:id %)) voices)
-                            current-voice
-                            (:id (first voices)))]
-        (cond-> values selected (assoc :voice selected)))
+      (let [language-voices (google-voices catalog value nil)
+            family-voices   (google-voices catalog value current-family)
+            voices          (if (seq family-voices)
+                              family-voices
+                              language-voices)
+            voice           (selected-voice voices current-voice)]
+        (cond-> values voice (assoc :voice voice)))
+
+      (and (= :google-cloud provider) (= "family" field))
+      (let [voices (google-voices catalog (:language-code settings) value)
+            voice  (selected-voice voices current-voice)]
+        (cond-> {} voice (assoc :voice voice)))
 
       :else
       values)))
+
+(defn- google-selection-signals [database]
+  (let [{:keys [voice]} (db/tts-provider-settings database :google-cloud)]
+    (cond-> {:google_family (or (speech/google-voice-family voice) "")}
+      voice (assoc :google_voice voice))))
 
 (defaction save-tts-provider-setting
   [{:fairy.box/keys [component] :as request}]
@@ -157,15 +194,16 @@
         spec     (get tts-setting-specs [provider field])
         db-conn  (component :fairy.box.db/db)
         catalog  (when (and (= :google-cloud provider)
-                            (= "language-code" field))
+                            (contains? #{"language-code" "family"} field))
                    (current-provider-catalog request provider))]
     (when spec
       (when-let [[value] ((:parse spec) (get-in request [:body (:signal spec)]))]
-        (db/set-tts-provider-values!
-         db-conn
-         provider
-         (provider-values @db-conn catalog provider field spec value)))))
-  nil)
+        (let [values (provider-values @db-conn catalog provider field spec value)]
+          (when (seq values)
+            (db/set-tts-provider-values! db-conn provider values))
+          (when (and (= :google-cloud provider)
+                     (contains? #{"language-code" "family"} field))
+            (h/patch-signals (google-selection-signals @db-conn))))))))
 
 (defn- invalidate-catalog! [request provider]
   (when (remote-tts-providers provider)
@@ -419,33 +457,51 @@
          controls)))
 
 (defn- google-provider-card [settings status]
-  (let [catalog       (:catalog status)
-        language-code (:language-code settings)
-        voices        (->> (:voices catalog)
-                           (filter #(some #{language-code} (:language-codes %)))
-                           (mapv (fn [{:keys [id]}] {:value id :label id})))
-        languages     (mapv (fn [language] {:value language :label language})
-                            (:languages catalog))]
+  (let [catalog         (:catalog status)
+        language-code   (:language-code settings)
+        current-voice   (:voice settings)
+        language-voices (google-voices catalog language-code nil)
+        families        (google-families language-voices)
+        saved-family    (speech/google-voice-family current-voice)
+        family          (if (some #{saved-family} families)
+                          saved-family
+                          (first families))
+        voices          (google-voices catalog language-code family)
+        voice-options   (mapv (fn [{:keys [id]}] {:value id :label id}) voices)
+        family-options  (mapv #(hash-map :value % :label %) families)
+        languages       (mapv (fn [language] {:value language :label language})
+                              (:languages catalog))]
     (provider-card
      :google-cloud
      "Google Cloud"
-     "Choose the Google Cloud language and voice used for speech."
+     "Choose the Google Cloud language, voice family, and voice used for speech."
      status
      (ui/select-input
       :name "google-language-code"
       :label "Language"
-      :description "Sets pronunciation conventions and filters the available voices."
+      :description "Sets pronunciation conventions and filters the available families."
       :selected-value language-code
       :options (select-options languages language-code)
       :data-bind "google_language_code"
       :change-action (action-url save-tts-provider-setting
                                  :google-cloud "language-code"))
      (ui/select-input
+      :name "google-family"
+      :label "Family"
+      :description "Filters voices available for the selected language."
+      :selected-value family
+      :options (if family
+                 (select-options family-options family)
+                 family-options)
+      :data-bind "google_family"
+      :change-action (action-url save-tts-provider-setting
+                                 :google-cloud "family"))
+     (ui/select-input
       :name "google-voice"
       :label "Voice"
       :description "The Google Cloud voice used for synthesis."
-      :selected-value (:voice settings)
-      :options (select-options voices (:voice settings))
+      :selected-value current-voice
+      :options (select-options voice-options current-voice)
       :data-bind "google_voice"
       :change-action (action-url save-tts-provider-setting
                                  :google-cloud "voice")))))
@@ -651,7 +707,7 @@
      :label "Text"
      :description "Sent to the selected provider only when you choose Preview."
      :rows 4
-     :value "Hello from Fairybox."
+     :value default-preview-text
      :data-bind "tts_preview_text")
     (ui/select-input
      :name "tts-preview-target"
@@ -683,6 +739,7 @@
         voice      (:voice-settings elevenlabs)]
     {:tts_engine                  (name (:engine settings))
      :google_language_code        (:language-code google)
+     :google_family               (or (speech/google-voice-family (:voice google)) "")
      :google_voice                (:voice google)
      :google_api_key              ""
      :openai_model                (:model openai)
@@ -699,7 +756,7 @@
      :elevenlabs_speaker_boost    (:use-speaker-boost voice)
      :elevenlabs_speed            (:speed voice)
      :elevenlabs_api_key          ""
-     :tts_preview_text            "Hello from Fairybox."
+     :tts_preview_text            default-preview-text
      :tts_preview_target          (name (:preview-target settings))
      :tts_preview_url             ""
      :tts_preview_seq             0

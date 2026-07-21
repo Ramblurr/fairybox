@@ -11,10 +11,7 @@
    [clojure.edn :as edn]
    [clojure.string :as str]
    [exoscale.cloak :as cloak]
-   [hato.client :as hc])
-  (:import
-   [java.nio.file CopyOption Files StandardCopyOption]
-   [java.util UUID]))
+   [hato.client :as hc]))
 
 (def cache-version 1)
 (def catalog-ttl-ms (* 24 60 60 1000))
@@ -266,20 +263,19 @@
                      [provider safe-state]))))
          (:providers runtime-state))})
 
-(defn- atomic-write! [^java.io.File cache-file value]
-  (let [^java.io.File parent    (.getParentFile cache-file)
-        ^java.io.File temp-file (fs/file parent
-                                         (str "." (.getName cache-file) "."
-                                              (UUID/randomUUID) ".tmp"))]
+(defn- atomic-write! [cache-file value]
+  (let [temp-file (fs/create-temp-file
+                   {:dir    (or (fs/parent cache-file) (fs/path "."))
+                    :prefix (str "." (fs/file-name cache-file) ".")
+                    :suffix ".tmp"})]
     (try
-      (spit temp-file (pr-str value))
-      (Files/move (.toPath temp-file)
-                  (.toPath cache-file)
-                  (into-array CopyOption
-                              [StandardCopyOption/ATOMIC_MOVE
-                               StandardCopyOption/REPLACE_EXISTING]))
+      (spit (fs/file temp-file) (pr-str value))
+      (fs/move temp-file
+               cache-file
+               {:atomic-move      true
+                :replace-existing true})
       (finally
-        (Files/deleteIfExists (.toPath temp-file))))))
+        (fs/delete-if-exists temp-file)))))
 
 (defn- persist! [{:keys [state_ cache-file]}]
   (atomic-write! cache-file (disk-state @state_)))

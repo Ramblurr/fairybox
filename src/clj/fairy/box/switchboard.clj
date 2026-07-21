@@ -91,9 +91,9 @@
 
 (defn speak-card-contents [{:keys [emitter] :as sys} item-path]
   (let [metadata (audio/metadata-for sys item-path)
-        text     (tts/metadata->ssml metadata)]
-    #_(tap> [:card-contents metadata text])
-    (emit-tts! emitter {:action :tts/speak :text text})))
+        speech   (tts/metadata->speech metadata)]
+    (tap> [:speak metadata :speech speech])
+    (emit-tts! emitter {:action :tts/speak :text speech})))
 
 (defn rfid-placed-card-id-mode [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (emit-led! emitter {:action :led/pulse :names [:audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 2})

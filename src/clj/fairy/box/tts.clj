@@ -39,9 +39,9 @@
   `gpt-4o-mini-tts`; speed applies to every listed OpenAI model and is bounded
   from `0.25` to `4.0`.
 
-  Fairybox strips its SSML wrappers as required by each provider. Streamed audio
-  is cached below the media directory with bounded provider and cache-write
-  timeouts; failed writes are never published as cache hits.
+  Fairybox renders semantic speech plans for each selected provider and model.
+  Streamed audio is cached below the media directory with bounded provider and
+  cache-write timeouts; failed writes are never published as cache hits.
 
   ## REPL
 
@@ -53,12 +53,12 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [dev.onionpancakes.chassis.core :as chassis]
    [donut.system :as ds]
    [exoscale.cloak :as cloak]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.tts.catalog :as catalog]
+   [fairy.box.tts.speech :as speech]
    [hato.client :as hc]
    [fairy.box.util :refer [->json <-json]]
    [jp.nijohando.event :as ev])
@@ -203,26 +203,6 @@
   (let [{:keys [credential source]} (effective-credential sys provider)]
     {:configured? (boolean credential)
      :source      source}))
-
-(defn- openai-input [text]
-  (-> (str text)
-      (str/replace #"(?i)<break\b[^>]*>" "\n")
-      (str/replace #"(?s)</?[A-Za-z][^>]*>" " ")
-      (str/replace "&quot;" "\"")
-      (str/replace "&apos;" "'")
-      (str/replace "&gt;" ">")
-      (str/replace "&lt;" "<")
-      (str/replace "&amp;" "&")
-      (str/replace #"[ \t]+" " ")
-      (str/replace #" *\n *" "\n")
-      str/trim))
-
-(defn- elevenlabs-input [text]
-  (-> (str text)
-      (str/replace #"(?i)</?(?:speak|s)\b[^>]*>" " ")
-      (str/replace #"[ \t]+" " ")
-      (str/replace #" *\n *" "\n")
-      str/trim))
 
 (defn- bounded-number [value default minimum maximum]
   (if (and (number? value)
@@ -409,15 +389,16 @@
      (when (and (.exists maybe-file) (.canRead maybe-file))
        (.getAbsolutePath maybe-file)))))
 
-(defn home-assistant-tts [{:keys [db]} text]
+(defn home-assistant-tts [{:keys [db prepared-input]}]
   (let [api-url      (str (db/ha-url db) "/api/tts_get_url")
-        bearer-token (db/ha-bearer-token db)]
+        bearer-token (db/ha-bearer-token db)
+        message      (:speech-input/value prepared-input)]
     (assert api-url "home assistant api url must be set in settings")
     (assert bearer-token "home assistant bearer token must be set in settings")
     (try
       (->
        (hc/post api-url
-                {:body         (->json {"message" text "engine_id" "tts.piper"})
+                {:body         (->json {"message" message "engine_id" "tts.piper"})
                  :content-type :json
                  :headers      {"authorization"
                                 (str "Bearer " (cloak/unmask bearer-token))}})
@@ -503,17 +484,19 @@
         (throw error)
         (:value result)))))
 
-(defn caching-home-assistant-tts [{:keys [tts-cache-dir] :as sys} text]
-  (if-let [local-url (cache-get tts-cache-dir text)]
-    local-url
-    (let [remote-url (home-assistant-tts sys text)]
-      (future (cache-file tts-cache-dir text remote-url))
-      remote-url)))
+(defn caching-home-assistant-tts
+  [{:keys [prepared-input tts-cache-dir] :as sys}]
+  (let [cache-key (:speech-input/value prepared-input)]
+    (if-let [local-url (cache-get tts-cache-dir cache-key)]
+      local-url
+      (let [remote-url (home-assistant-tts sys)]
+        (future (cache-file tts-cache-dir cache-key remote-url))
+        remote-url))))
 
-(defn mimic3-tts [_sys text]
+(defn mimic3-tts [{:keys [prepared-input]}]
   (->
    (hc/get "http://10.9.4.3:59125/api/tts"
-           {:query-params {"text"        text
+           {:query-params {"text"        (:speech-input/value prepared-input)
                            "voice"       "en_US/cmu-arctic_low#clb"
                            "noiseScale"  "0.677"
                            "noiseW"      "0.8"
@@ -523,23 +506,22 @@
             :as           :stream})
    :body))
 
-;; http://localhost:59125/api/tts?text=. <break time="500ms" /> In which Tigger comes to the forest and has breakfast&voice=en_US/cmu-arctic_low#clb&noiseScale=0.667&
-(defn caching-mimic3-tts [{:keys [tts-cache-dir] :as sys} text]
-  (if-let [local-url (cache-get tts-cache-dir text)]
-    local-url
-    (let [in (mimic3-tts sys text)]
-      (cache-input-stream tts-cache-dir text in))))
+(defn caching-mimic3-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
+  (let [cache-key (:speech-input/value prepared-input)]
+    (if-let [local-url (cache-get tts-cache-dir cache-key)]
+      local-url
+      (let [in (mimic3-tts sys)]
+        (cache-input-stream tts-cache-dir cache-key in)))))
 
-(defn google-cloud-tts [sys text]
+(defn google-cloud-tts [{:keys [prepared-input] :as sys}]
   (let [{:keys [language-code voice audio-encoding]} (google-cloud-request-options sys)
         api-key (or (:credential sys)
-                    (db/google-cloud-api-key (:db sys)))]
+                    (db/google-cloud-api-key (:db sys)))
+        input-field (:speech-input/field prepared-input)
+        input-value (:speech-input/value prepared-input)]
     (assert api-key "Google Cloud TTS credential is not configured")
     (-> (hc/post "https://texttospeech.googleapis.com/v1/text:synthesize"
-                 {:body         (->json {"input"       {"ssml"
-                                                        (if-not (str/starts-with? text "<")
-                                                          (str "<speak>" text "</speak>")
-                                                          text)}
+                 {:body         (->json {"input"       {(name input-field) input-value}
                                          "voice"       {"languageCode" language-code
                                                         "name"         voice}
                                          "audioConfig" {"audioEncoding" audio-encoding}})
@@ -552,9 +534,10 @@
         :audioContent
         b64->input-stream)))
 
-(defn caching-google-cloud-tts [{:keys [tts-cache-dir] :as sys} text]
+(defn caching-google-cloud-tts
+  [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (google-cloud-request-options sys)
-        cache-key [::google-cloud options text]
+        cache-key [::google-cloud options (:speech-input/value prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -562,16 +545,16 @@
        tts-cache-dir
        cache-key
        suffix
-       (google-cloud-tts sys text)
+       (google-cloud-tts sys)
        tts-cache-timeout-ms))))
 
-(defn openai-tts [sys text]
+(defn openai-tts [{:keys [prepared-input] :as sys}]
   (let [{:keys [model voice instructions speed response-format]}
         (openai-request-options sys)
         api-key (or (:credential sys)
                     (some-> (openai-api-key) cloak/mask))
         body (cond-> {"model"           model
-                      "input"           (openai-input text)
+                      "input"           (:speech-input/value prepared-input)
                       "voice"           voice
                       "speed"           speed
                       "response_format" response-format}
@@ -588,9 +571,9 @@
                   :timeout      tts-request-timeout-ms})
         :body)))
 
-(defn caching-openai-tts [{:keys [tts-cache-dir] :as sys} text]
+(defn caching-openai-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (openai-request-options sys)
-        cache-key [::openai options text]
+        cache-key [::openai options (:speech-input/value prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -598,7 +581,7 @@
        tts-cache-dir
        cache-key
        suffix
-       (openai-tts sys text)
+       (openai-tts sys)
        tts-cache-timeout-ms))))
 
 (defn- elevenlabs-voice-settings-body [voice-settings]
@@ -611,11 +594,11 @@
                 value]))
         voice-settings))
 
-(defn elevenlabs-tts [sys text]
+(defn elevenlabs-tts [{:keys [prepared-input] :as sys}]
   (let [{:keys [model output-format voice-id voice-settings]} (elevenlabs-options sys)
         api-key (or (:credential sys)
                     (some-> (elevenlabs-api-key) cloak/mask))
-        body (cond-> {"text"     (elevenlabs-input text)
+        body (cond-> {"text"     (:speech-input/value prepared-input)
                       "model_id" model}
                (seq voice-settings)
                (assoc "voice_settings"
@@ -631,9 +614,10 @@
                   :timeout      tts-request-timeout-ms})
         :body)))
 
-(defn caching-elevenlabs-tts [{:keys [tts-cache-dir] :as sys} text]
+(defn caching-elevenlabs-tts
+  [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (elevenlabs-options sys)
-        cache-key [::elevenlabs options text]
+        cache-key [::elevenlabs options (:speech-input/value prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -641,7 +625,7 @@
        tts-cache-dir
        cache-key
        suffix
-       (elevenlabs-tts sys text)
+       (elevenlabs-tts sys)
        tts-cache-timeout-ms))))
 
 (defn with-db [sys]
@@ -682,7 +666,7 @@
                                   [:can-use-style?
                                    :can-use-speaker-boost?]))))))))
 
-(defn- synthesize-configurable [sys provider synthesis-mode text]
+(defn- synthesize-configurable [sys provider synthesis-mode input]
   (let [model-capabilities (or (:model-capabilities sys)
                                (when (= :elevenlabs provider)
                                  (elevenlabs-model-capabilities sys)))
@@ -691,30 +675,38 @@
                                    provider
                                    synthesis-mode
                                    model-capabilities)
+        prepared-input     (speech/prepared-input input provider options)
         request-system     (merge sys
                                   options
                                   {:credential         credential
                                    :credential-status  credential-status
                                    :model-capabilities model-capabilities
+                                   :prepared-input     prepared-input
                                    :synthesis-mode     synthesis-mode
                                    :tts-warnings       warnings})]
     ((case provider
        :google-cloud caching-google-cloud-tts
        :openai caching-openai-tts
        :elevenlabs caching-elevenlabs-tts)
-     request-system
-     text)))
+     request-system)))
 
 (defn tts
-  "Returns the local path to synthesized `text` using normal output settings."
-  [sys text]
+  "Returns the local path to synthesized `input` using normal output settings."
+  [sys input]
   (let [sys      (with-db sys)
         provider (db/tts-engine (:db sys))]
     (case provider
-      :mimic3 (caching-mimic3-tts sys text)
-      :ha (caching-home-assistant-tts sys text)
+      :mimic3
+      (caching-mimic3-tts
+       (assoc sys :prepared-input (speech/prepared-input input provider {})))
+
+      :ha
+      (caching-home-assistant-tts
+       (assoc sys :prepared-input (speech/prepared-input input provider {})))
+
       (:google-cloud :openai :elevenlabs)
-      (synthesize-configurable sys provider :normal text)
+      (synthesize-configurable sys provider :normal input)
+
       nil)))
 
 (def preview-cache-basename-pattern
@@ -820,51 +812,51 @@
       (log/error "TTS speech request failed")
       (speak-problem! sys))))
 
-(defn choose-album [mm]
-  (let [albums (->> mm
+(defn choose-album [metadata]
+  (let [albums (->> metadata
                     (map :album)
-                    (map (fn [a] (when a (str/trim a))))
-                    (set))]
+                    (map #(some-> % str str/trim not-empty))
+                    set)]
     (when (= 1 (count albums))
       (first albums))))
 
-(defn metadata->ssml [metadata]
+(defn metadata->speech [metadata]
   (let [album  (choose-album metadata)
-        titles (map :title metadata)
-        ssml   [:speak
-                [:s (if album
-                      (str "This one is " album "")
-                      "This one has ")]
-                [:break {:time "1s"}]
-                (if (> (count titles) 1)
-                  (concat
-                   (map-indexed (fn [i title]
-                                  [:s (inc i) ", "
-                                   [:break {:time "500ms"}]
-                                   title
-                                   [:break {:time "500ms"}]]) (butlast titles))
-                   [[:s " and " (count titles) ", " [:break {:time "500ms"}] (last titles)]])
-                  [:s (first titles)])]]
+        titles (mapv #(str (or (:title %) "")) metadata)
+        segments
+        (into [(speech/text (if album
+                              (str "This one is " album)
+                              "This one has "))
+               (speech/pause 1000)]
+              (if (> (count titles) 1)
+                (concat
+                 (mapcat (fn [[index title]]
+                           [(speech/text (str (inc index) ", "))
+                            (speech/pause 500)
+                            (speech/text title)
+                            (speech/pause 500)])
+                         (map-indexed vector (butlast titles)))
+                 [(speech/text (str " and " (count titles) ", "))
+                  (speech/pause 500)
+                  (speech/text (last titles))])
+                [(speech/text (or (first titles) ""))]))]
+    (speech/plan segments)))
 
-    (tap> [:metadata->ssml metadata ssml])
-    (chassis/html ssml)))
-
-(defn tts-track-text [{:keys [title] :as metadata} {:keys [with-artist? with-album? index] :or {with-artist? false with-album? false}}]
-  (let [ssml [:speak
-              [:s "Number " (inc index) " "
-               title " "]
-              (when with-artist?
-                [:s " by " (:artist metadata)])
-              (when with-album?
-                [:s " from the album " (:album metadata)])]]
-
-    (chassis/html ssml)))
+(defn tts-track-speech
+  [{:keys [title artist album]}
+   {:keys [with-artist? with-album? index]
+    :or   {with-artist? false
+           with-album?  false}}]
+  (speech/plan
+   (cond-> [(speech/text (str "Number " (inc index) " " (or title "")))]
+     (and with-artist? (some-> artist str str/trim not-empty))
+     (conj (speech/text (str " by " artist)))
+     (and with-album? (some-> album str str/trim not-empty))
+     (conj (speech/text (str " from the album " album))))))
 
 (defn tts-track [sys metadata opts]
   (try
-    (let [text          (tts-track-text metadata opts)
-          tts-file-path (tts sys text)]
-      tts-file-path)
+    (tts sys (tts-track-speech metadata opts))
     (catch Exception _
       (log/error "TTS track synthesis failed")
       nil)))
@@ -930,33 +922,27 @@
                                    :fairy.box.db/db])}})
 
 (comment
-
   (do
     (require '[fairy.box.system :as system])
     (def sys (system/component :fairy.box.tts/tts)))
-  (def url1 (tts sys "hello"))
-  (db/tts-engine (:db (with-db sys)))
 
-  (tts (with-db sys) "This is a test of the tts system")
-  ;; rcf
+  (tts sys "This is literal text, including <speak> and <break>.")
 
-  (tts-speak (with-db sys) {:text "<speak>I can speak in cardinals. Your number is <say-as interpret-as=\"cardinal\">10</say-as>.</speak>"}) ;; rcf
-  (tts-speak (with-db sys) {:text "
-<speak>
-  <s>
-This one is Piglet has a Bath
-  </s>
-  <break time=\"1s\" />
-<s>1,<break time=\"500ms\" /> In which Kanga and Baby Roo come to the forest and Piglet has a bath <break time=\"500ms\" /></s>
-<s>2,<break time=\"500ms\" /> In which Christopher Robin leads an expotition to the north pole <break time=\"500ms\" /></s>
-<s>and 3,<break time=\"500ms\" /> In which Tigger comes to the forest and has breakfast</s>
-</speak> "})
+  (tts-speak
+   (with-db sys)
+   {:text (speech/plan
+           [(speech/text "This one is Piglet has a Bath")
+            (speech/pause 1000)
+            (speech/text "1, In which Kanga and Baby Roo come to the forest")
+            (speech/pause 500)
+            (speech/text "and 2, In which Tigger comes to the forest")])})
 
-  (async/put! (:emitter sys) {:path "/tts/commands" :value {:action :tts/speak :text "Hello"}})
+  (async/put! (:emitter sys)
+              {:path "/tts/commands"
+               :value {:action :tts/speak
+                       :text "Hello"}})
 
-  (caching-mimic3-tts sys "hello there!23")
-  ;;
-  )
+  :rcf)
 
 (comment
   (require '[ol.vinyl :as vinyl])
