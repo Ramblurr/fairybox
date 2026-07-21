@@ -56,10 +56,10 @@
                    :page/settings "/settings"}))
 
 (defn- action-request [tree selected-folder rfid]
-  (let [req      (media/request tree "audiobooks/Author One")
-        presence ((:fairy.box/component req)
-                  :fairy.box.web/rfid-presence)]
-    (reset! (:state presence) rfid)
+  (let [req               (media/request tree "audiobooks/Author One")
+        refresh-component ((:fairy.box/component req)
+                           :fairy.box.web/refresh)]
+    (reset! (:rfid-presence refresh-component) rfid)
     (assoc req
            :body {:selected_folder selected-folder
                   :rfid_uid        "stale-browser-tag"})))

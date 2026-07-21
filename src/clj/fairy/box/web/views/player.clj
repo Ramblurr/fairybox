@@ -187,13 +187,16 @@
        ") : null"))
 
 (defn- player-signals [current]
-  (let [progress (progress/progress-percentage (player/position current))
-        volume   (or (player/volume current) 0)]
-    {:data-signals:progress__ifmissing         progress
+  (let [{:keys [_server_progress _server_time _server_time_left]}
+        (progress/progress-signals current)
+        volume (or (player/volume current) 0)]
+    {:data-signals:progress__ifmissing         _server_progress
      :data-signals:volume__ifmissing           volume
      :data-signals:seeking__ifmissing          "false"
      :data-signals:adjusting_volume__ifmissing "false"
-     :data-signals:_server_progress            progress
+     :data-signals:_server_progress            _server_progress
+     :data-signals:_server_time                (h/edn->json _server_time)
+     :data-signals:_server_time_left           (h/edn->json _server_time_left)
      :data-signals:_server_volume              volume
      :data-effect
      (str "$progress = $seeking ? $progress : $_server_progress; "
@@ -400,13 +403,7 @@
                                     [:active :text-smoky-950 :scale-125 :duration-500]]
                                    [:dark :text-smoky-100
                                     [:active :text-smoky-500]])]
-    [:div (cond->
-           {:id "player-controls"
-            :data-init
-            (str "@get('" progress/stream-path
-                 "', {retry: 'error', retryMaxCount: Infinity, "
-                 "openWhenHidden: false, "
-                 "requestCancellation: 'cleanup'})")}
+    [:div (cond-> {:id "player-controls"}
             track-loaded? (merge (player-signals current))
             sleep-timer
             (merge {:data-signals:_sleep_deadline_ms

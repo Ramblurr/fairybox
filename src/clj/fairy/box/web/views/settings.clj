@@ -6,7 +6,7 @@
    [fairy.box.switchboard :as switchboard]
    [fairy.box.timers :as timers]
    [fairy.box.util :as util]
-   [fairy.box.web.rfid :as rfid]
+   [fairy.box.web.refresh :as refresh]
    [fairy.box.web.views.common :as uic]
    [fairy.box.web.views.icon :as icon]
    [fairy.box.web.views.ui :as ui]
@@ -31,8 +31,8 @@
                    ((:url-for req) :page/home))))))))
 
 (defaction link-rfid-folder [{:fairy.box/keys [component] :as req}]
-  (let [presence        (component :fairy.box.web/rfid-presence)
-        uid             (rfid/current-uid presence)
+  (let [presence        (component :fairy.box.web/refresh)
+        uid             (refresh/current-uid presence)
         selected-folder (get-in req [:body :selected_folder])
         settings        (app-settings/settings req)
         db-conn         (component :fairy.box.db/db)]
@@ -43,8 +43,7 @@
           (db/link-rfid-tag! db-conn
                              uid
                              (browse/media-relative-path settings
-                                                         canonical-path))
-          (rfid/refresh! presence))))))
+                                                         canonical-path)))))))
 
 (def ^:private device-number-fields
   {:min_volume               :min-volume
@@ -207,8 +206,8 @@
                 :label "Link To Folder")]]])
 
 (defn rfid-link [{:fairy.box/keys [component] :as req}]
-  (let [presence      (component :fairy.box.web/rfid-presence)
-        uid           (rfid/current-uid presence)
+  (let [presence      (component :fairy.box.web/refresh)
+        uid           (refresh/current-uid presence)
         db-conn       (component :fairy.box.db/db)
         linked-folder (db/linked-folder @db-conn uid)]
     [:div {:id "active-tab"}
@@ -798,3 +797,5 @@
      [:div {:id "active-tab"}
       [:div {:class "fade-in-out"}
        (settings-view req)]]]]))
+
+(h/refresh-all!)

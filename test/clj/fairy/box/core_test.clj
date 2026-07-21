@@ -72,40 +72,63 @@
         front-panel-config
         (get-in component-defs
                 [:fairy.box.web/front-panel-refresh ::ds/config])
+        refresh-config
+        (get-in component-defs
+                [:fairy.box.web/refresh ::ds/config])
         web-components
         (get-in component-defs
-                [:fairy.box.web/server ::ds/config :components])]
-    (is (= {:component-keys        #{:fairy.box/settings
-                                     :fairy.box/startup
-                                     :fairy.box.auto-shutdown/timer
-                                     :fairy.box.audio.system2/player
-                                     :fairy.box.bus/bus
-                                     :fairy.box.db/db
-                                     :fairy.box.hardware/buttons
-                                     :fairy.box.hardware/leds
-                                     :fairy.box.hardware/rfid
-                                     :fairy.box.mqtt/client
-                                     :fairy.box.playback-limits/policy
-                                     :fairy.box.sleep/timer
-                                     :fairy.box.switchboard/switchboard
-                                     :fairy.box.tts/tts
-                                     :fairy.box.web/front-panel-refresh
-                                     :fairy.box.web/player-event-refresh
-                                     :fairy.box.web/player-progress
-                                     :fairy.box.web/rfid-presence
-                                     :fairy.box.web/server}
-            :front-panel-led-ref   (ds/ref
-                                    (component-id
-                                     :fairy.box.hardware/leds))
+                [:fairy.box.web/server ::ds/config :components])
+        removed-component-keys
+        [:fairy.box.web/player-event-refresh
+         :fairy.box.web/player-progress
+         :fairy.box.web/rfid-presence]]
+    (is (= {:component-keys           #{:fairy.box/settings
+                                        :fairy.box/startup
+                                        :fairy.box.auto-shutdown/timer
+                                        :fairy.box.audio.system2/player
+                                        :fairy.box.bus/bus
+                                        :fairy.box.db/db
+                                        :fairy.box.hardware/buttons
+                                        :fairy.box.hardware/leds
+                                        :fairy.box.hardware/rfid
+                                        :fairy.box.mqtt/client
+                                        :fairy.box.playback-limits/policy
+                                        :fairy.box.sleep/timer
+                                        :fairy.box.switchboard/switchboard
+                                        :fairy.box.tts/tts
+                                        :fairy.box.web/front-panel-refresh
+                                        :fairy.box.web/refresh
+                                        :fairy.box.web/server}
+            :front-panel-led-ref      (ds/ref
+                                       (component-id
+                                        :fairy.box.hardware/leds))
+            :front-panel-central-ref? false
+            :refresh-bus-ref          (ds/ref
+                                       (component-id :fairy.box.bus/bus))
+            :refresh-db-ref           (ds/ref (component-id :fairy.box.db/db))
             :server-front-panel-ref
             (ds/ref (component-id
                      :fairy.box.web/front-panel-refresh))
-            :missing-start         #{}
-            :missing-required-stop #{}}
+            :server-refresh-ref       (ds/ref
+                                       (component-id :fairy.box.web/refresh))
+            :removed-components       {}
+            :removed-server-refs      {}
+            :missing-start            #{}
+            :missing-required-stop    #{}}
            {:component-keys        (set (keys component-defs))
             :front-panel-led-ref   (get front-panel-config :leds)
+            :front-panel-central-ref?
+            (contains? front-panel-config :refresh)
+            :refresh-bus-ref       (get refresh-config :bus)
+            :refresh-db-ref        (get refresh-config :db-conn)
             :server-front-panel-ref
             (get web-components :fairy.box.web/front-panel-refresh)
+            :server-refresh-ref    (get web-components
+                                        :fairy.box.web/refresh)
+            :removed-components    (select-keys component-defs
+                                                removed-component-keys)
+            :removed-server-refs   (select-keys web-components
+                                                removed-component-keys)
             :missing-start         (->> component-defs
                                         (keep (fn [[key component]]
                                                 (when-not (fn? (::ds/start component))

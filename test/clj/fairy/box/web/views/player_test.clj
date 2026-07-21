@@ -83,7 +83,8 @@
             :actions-present            true
             :datastar-actions           true
             :ephemeral-slider-signals   true
-            :server-pushed-progress     true
+            :ordinary-rendered-progress true
+            :progress-stream-removed    true
             :server-driven-time-updates true
             :legacy-command-removed     true
             :htmx-removed               true}
@@ -114,16 +115,17 @@
             (every? #(str/includes? html %)
                     ["data-signals:progress__ifmissing="
                      "data-signals:volume__ifmissing="
-                     "data-signals:_server_progress="
                      "data-bind=\"progress\""
                      "data-bind=\"volume\""])
-            :server-pushed-progress
+            :ordinary-rendered-progress
             (every? #(str/includes? html %)
-                    ["data-init=\"@get("
-                     "/api/player/progress-stream"
-                     "retryMaxCount: Infinity"
-                     "openWhenHidden: false"
-                     "requestCancellation: &apos;cleanup&apos;"])
+                    ["data-signals:_server_progress=\"25.0\""
+                     (str "data-signals:_server_time="
+                          "\"&quot;01:01&quot;\"")
+                     (str "data-signals:_server_time_left="
+                          "\"&quot;-03:03&quot;\"")])
+            :progress-stream-removed
+            (not (str/includes? html "/api/player/progress-stream"))
             :server-driven-time-updates
             (and (str/includes? html ">01:01</div>")
                  (not (str/includes? html
@@ -200,7 +202,7 @@
                 :color-counts          {:red 2 :green 2 :orange 1}
                 :pointer-and-key-input true
                 :action-paths          true
-                :progress-stream-count 1
+                :progress-stream-count 0
                 :main-sibling          true}
                {:button-count (count rendered)
                 :labels       labels

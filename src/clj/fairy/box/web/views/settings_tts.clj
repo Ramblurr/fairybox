@@ -114,16 +114,11 @@
 
 (defn- tts-component [{:fairy.box/keys [component]}]
   (component :fairy.box.tts/tts))
-
-(defn- refresh-page! []
-  (h/refresh-all!)
-  nil)
-
 (defaction save-tts-engine
   [{:fairy.box/keys [component] :as request}]
   (when-let [engine (get tts-engine-by-name (get-in request [:body :tts_engine]))]
-    (db/set-tts-engine! (component :fairy.box.db/db) engine)
-    (refresh-page!)))
+    (db/set-tts-engine! (component :fairy.box.db/db) engine))
+  nil)
 
 (defn- current-provider-catalog [request provider]
   (let [tts-system (tts-component request)]
@@ -168,8 +163,8 @@
         (db/set-tts-provider-values!
          db-conn
          provider
-         (provider-values @db-conn catalog provider field spec value))
-        (refresh-page!)))))
+         (provider-values @db-conn catalog provider field spec value)))))
+  nil)
 
 (defn- invalidate-catalog! [request provider]
   (when (remote-tts-providers provider)
@@ -187,8 +182,7 @@
                                               false))]
         (db/replace-tts-provider-secret!
          (component :fairy.box.db/db) provider secret)
-        (invalidate-catalog! request provider)
-        (refresh-page!))
+        (invalidate-catalog! request provider))
       (catch Throwable _
         nil))
     (h/patch-signals (cond-> {} signal (assoc signal "")))))
@@ -198,14 +192,14 @@
   (when-let [provider (query-provider request)]
     (db/clear-tts-provider-secret!
      (component :fairy.box.db/db) provider)
-    (invalidate-catalog! request provider)
-    (refresh-page!)))
+    (invalidate-catalog! request provider))
+  nil)
 
 (defaction refresh-tts-catalog [request]
   (when-let [provider (query-provider request)]
     (when (remote-tts-providers provider)
-      (invalidate-catalog! request provider)
-      (refresh-page!))))
+      (invalidate-catalog! request provider)))
+  nil)
 
 (defn- preview-target [value]
   (get {"browser" :browser "fairybox" :fairybox "both" :both} value))
@@ -213,8 +207,8 @@
 (defaction save-tts-preview-target
   [{:fairy.box/keys [component] :keys [body]}]
   (when-let [target (preview-target (:tts_preview_target body))]
-    (db/set-tts-preview-target! (component :fairy.box.db/db) target)
-    (refresh-page!)))
+    (db/set-tts-preview-target! (component :fairy.box.db/db) target))
+  nil)
 
 (defn- emit-fairybox-preview! [tts-system path]
   (when-not path

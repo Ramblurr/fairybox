@@ -1,15 +1,6 @@
 (ns fairy.box.web.player-progress
   (:require
-   [clojure.tools.logging :as log]
-   [donut.system :as ds]
-   [fairy.box.audio.current :as player]
-   [hyperlith.core :as h]
-   [hyperlith.impl.router :as router]
-   [starfederation.datastar.clojure.adapter.http-kit :as d*http-kit]
-   [starfederation.datastar.clojure.api :as d*]))
-
-(def stream-path "/api/player/progress-stream")
-(def component-key :fairy.box.web/player-progress)
+   [fairy.box.audio.current :as player]))
 
 (defn- milliseconds->parts
   [^long duration-in-millis]
@@ -59,66 +50,3 @@
      (progress-percentage (player/position current))
      :_server_time      (time-label current-time)
      :_server_time_left (time-left-label current-time duration)}))
-
-(defn start-progress-stream! []
-  {:connections (atom #{})})
-
-(defn register! [{:keys [connections]} sse]
-  (swap! connections conj sse)
-  sse)
-
-(defn unregister! [{:keys [connections]} sse]
-  (swap! connections disj sse)
-  nil)
-
-(defn- send-signals! [stream sse signals]
-  (try
-    (if (d*/patch-signals! sse signals)
-      true
-      (do
-        (unregister! stream sse)
-        false))
-    (catch Exception error
-      (unregister! stream sse)
-      (log/warn error "Failed to push player progress")
-      false)))
-
-(defn- progress-json []
-  (h/edn->json (progress-signals (player/current!))))
-
-(defn broadcast! [{:keys [connections] :as stream}]
-  (let [signals (progress-json)]
-    (doseq [sse @connections]
-      (send-signals! stream sse signals)))
-  nil)
-
-(defn stop-progress-stream! [{:keys [connections] :as stream}]
-  (doseq [sse @connections]
-    (try
-      (d*/close-sse! sse)
-      (catch Exception error
-        (log/warn error "Failed to close player progress stream")))
-    (unregister! stream sse))
-  nil)
-
-(defn stream-handler
-  [{:fairy.box/keys [component] :as req}]
-  (let [stream (component component-key)]
-    (d*http-kit/->sse-response
-     req
-     {d*http-kit/on-open
-      (fn [sse]
-        (register! stream sse)
-        (send-signals! stream sse (progress-json)))
-
-      d*http-kit/on-close
-      (fn [sse _status]
-        (unregister! stream sse))})))
-
-(router/add-route! [:get stream-path] #'stream-handler)
-
-(def ProgressStreamComponent
-  {::ds/start (fn [_]
-                (start-progress-stream!))
-   ::ds/stop  (fn [{instance ::ds/instance}]
-                (stop-progress-stream! instance))})

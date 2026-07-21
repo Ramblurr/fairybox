@@ -21,7 +21,6 @@
            exoscale/cloak                      {:mvn/version "1.0.42"}
            ;; HTML and CSS
            com.thheller/shadow-css             {:mvn/version "0.6.4"}
-           dev.data-star.clojure/http-kit      {:mvn/version "1.0.0-RC11"}
            hyper/lith                          {:local/root "/home/ramblurr/src/github.com/andersmurphy/hyperlith"}
            ;; Events
            jp.nijohando/event                  {:git/url "https://github.com/Ramblurr/event"

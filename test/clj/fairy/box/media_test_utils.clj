@@ -22,9 +22,8 @@
   (let [components
         {:fairy.box/settings settings
          :fairy.box.db/db    (atom {:linked-tags {}})
-         :fairy.box.web/rfid-presence
-         {:state    (atom {:action :removed :uid nil})
-          :refresh! (constantly nil)}}]
+         :fairy.box.web/refresh
+         {:rfid-presence (atom {:action :removed :uid nil})}}]
     {:uri                 "/settings/rfid"
      :query-params        (cond-> {} dir (assoc "dir" dir))
      :fairy.box/component components}))
