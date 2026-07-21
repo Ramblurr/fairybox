@@ -1,6 +1,86 @@
 ;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.tts
+  "Text-to-speech synthesis, caching, and playback integration.
+
+  ## Engine selection
+
+  [[tts]] selects the provider from `[:settings :tts :engine]`. Supported engine
+  keywords are `:ha`, `:mimic3`, `:google-cloud`, `:openai`, and `:elevenlabs`;
+  the database default is `:google-cloud`. Stream-returning providers are cached
+  below the configured media directory in `tts-cache/`.
+
+  ## Home Assistant (`:ha`)
+
+  [[home-assistant-tts]] calls Home Assistant's `/api/tts_get_url` endpoint with
+  the fixed engine ID `tts.piper`. Database settings are
+  `[:settings :homeassistant :ha-url]` and
+  `[:settings :homeassistant :ha-bearer-token]`. Home Assistant chooses the
+  Piper model and voice; this namespace exposes no additional model settings.
+
+  ## Mimic 3 (`:mimic3`)
+
+  [[mimic3-tts]] uses the fixed endpoint `http://10.9.4.3:59125/api/tts` and
+  voice `en_US/cmu-arctic_low#clb`. Its current fixed query settings are
+  `noiseScale=0.677`, `noiseW=0.8`, `ssml=true`, and `audioTarget=client`.
+  The endpoint, voice, and synthesis settings are not runtime-configurable.
+
+  ## Google Cloud (`:google-cloud`)
+
+  [[google-cloud-tts]] reads `[:settings :google-cloud-api-key]`, sends SSML,
+  and requests MP3 audio with the fixed `en-US-Polyglot-1` voice and `en-US`
+  language code. This provider does not expose a model, voice, speaking-rate,
+  pitch, or audio-encoding option through the Fairybox system map.
+
+  ## OpenAI (`:openai`)
+
+  [[openai-tts]] reads `OPENAI_API_KEY` from the environment or `~/.llm-keys`.
+  It accepts these keys in the system map:
+
+  | key             | description
+  | ----------------|------------
+  | `:model`        | Speech model; default `gpt-4o-mini-tts`
+  | `:voice`        | Built-in voice; default `marin`
+  | `:instructions` | Delivery prompt; default `Speak naturally.`
+
+  Current speech models are `gpt-4o-mini-tts`, `tts-1`, and `tts-1-hd`. Current
+  built-in voices are `alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`,
+  `nova`, `onyx`, `sage`, `shimmer`, `verse`, `marin`, and `cedar`; voice
+  availability varies by model. `:instructions` can direct accent, emotion,
+  intonation, speed, tone, or whispering. Output is currently fixed to MP3.
+  Fairybox SSML wrappers are converted to plain text before synthesis.
+
+  ## ElevenLabs (`:elevenlabs`)
+
+  [[elevenlabs-tts]] reads `ELEVENLABS_API_KEY` from the environment or
+  `~/.llm-keys`. It accepts these keys in the system map:
+
+  | key               | description
+  | ------------------|------------
+  | `:model`          | Speech model; default `eleven_multilingual_v2`
+  | `:voice-id`       | ElevenLabs voice ID; default `JBFqnCBsd6RMkjVDRZzb`
+  | `:output-format`  | Codec, sample rate, and bitrate; default `mp3_44100_128`
+  | `:voice-settings` | Per-request voice overrides; default uses stored settings
+
+  Current TTS models are `eleven_v3`, `eleven_multilingual_v2`,
+  `eleven_flash_v2_5`, and `eleven_flash_v2`. Output formats follow the
+  `codec_sample_rate_bitrate` convention and include MP3, Opus, PCM, WAV,
+  μ-law, and A-law variants.
+
+  `:voice-settings` accepts `:stability` (API default `0.5`),
+  `:similarity_boost` (`0.75`), `:style` (`0`), `:use_speaker_boost` (`true`),
+  and `:speed` (`1.0`; lower is slower and higher is faster). Fairybox removes
+  its `<speak>` and `<s>` wrappers but preserves `<break>` markup; Eleven v3
+  does not support SSML break tags, while the default v2 model does.
+
+  Effective ElevenLabs options are part of the cache key. Requests use bounded
+  connect, response, and cache-write timeouts, and streamed audio is published
+  atomically so failed or timed-out downloads do not become cache hits.
+
+  ## REPL
+
+  The rich comment form at the bottom of this namespace contains cached OpenAI
+  and ElevenLabs synthesis examples that play the result through Vinyl."
   (:require
    [cheshire.core :as cheshire]
    [clojure.core.async :as async]
@@ -14,8 +94,8 @@
    [hiccup2.core :as h2]
    [jp.nijohando.event :as ev])
   (:import
-   (java.nio.file Paths)
-   (java.util Base64)))
+   [java.nio.file CopyOption Files Paths StandardCopyOption]
+   [java.util Base64]))
 
 (def ->json cheshire/generate-string)
 (def <-json #(cheshire/parse-string % true))
@@ -23,6 +103,17 @@
 (def ^:private openai-api-key-pattern
   #"^\s*(?:export\s+)?OPENAI_API_KEY\s*=\s*['\"]?([^'\"\s#]+)['\"]?\s*(?:#.*)?$")
 (def ^:private openai-tts-url "https://api.openai.com/v1/audio/speech")
+(def ^:private elevenlabs-api-key-pattern
+  #"^\s*(?:export\s+)?ELEVENLABS_API_KEY\s*=\s*['\"]?([^'\"\s#]+)['\"]?\s*(?:#.*)?$")
+(def ^:private elevenlabs-tts-url "https://api.elevenlabs.io/v1/text-to-speech")
+(def ^:private elevenlabs-cache-timeout-ms 60000)
+(def ^:private elevenlabs-default-options
+  {:model         "eleven_multilingual_v2"
+   :output-format "mp3_44100_128"
+   :voice-id      "JBFqnCBsd6RMkjVDRZzb"})
+(def ^:private elevenlabs-http-client
+  (hc/build-http-client {:connect-timeout 10000}))
+(def ^:private elevenlabs-request-timeout-ms 30000)
 
 (defn- openai-api-key-from-file []
   (let [key-file (io/file (System/getProperty "user.home") ".llm-keys")]
@@ -36,6 +127,18 @@
   (or (some-> (System/getenv "OPENAI_API_KEY") str/trim not-empty)
       (openai-api-key-from-file)))
 
+(defn- elevenlabs-api-key-from-file []
+  (let [key-file (io/file (System/getProperty "user.home") ".llm-keys")]
+    (when (.isFile key-file)
+      (with-open [reader (io/reader key-file)]
+        (some (fn [line]
+                (second (re-matches elevenlabs-api-key-pattern line)))
+              (line-seq reader))))))
+
+(defn- elevenlabs-api-key []
+  (or (some-> (System/getenv "ELEVENLABS_API_KEY") str/trim not-empty)
+      (elevenlabs-api-key-from-file)))
+
 (defn- openai-input [text]
   (-> (str text)
       (str/replace #"(?i)<break\b[^>]*>" "\n")
@@ -48,6 +151,18 @@
       (str/replace #"[ \t]+" " ")
       (str/replace #" *\n *" "\n")
       str/trim))
+
+(defn- elevenlabs-input [text]
+  (-> (str text)
+      (str/replace #"(?i)</?(?:speak|s)\b[^>]*>" " ")
+      (str/replace #"[ \t]+" " ")
+      (str/replace #" *\n *" "\n")
+      str/trim))
+
+(defn- elevenlabs-options [sys]
+  (into elevenlabs-default-options
+        (remove (comp nil? val))
+        (select-keys sys [:model :output-format :voice-id :voice-settings])))
 
 (defn tts-cache-dir [settings]
   (str (browse/media-dir settings) "/tts-cache"))
@@ -94,12 +209,67 @@
               out (io/output-stream (.toFile (Paths/get cache-dir (into-array [(hash-text text)]))))]
     (io/copy in out)))
 
-(defn cache-input-stream [cache-dir text in]
+(defn- move-cache-file! [^java.io.File temp-file ^java.io.File dest-file]
+  (Files/move (.toPath temp-file)
+              (.toPath dest-file)
+              (into-array CopyOption
+                          [StandardCopyOption/ATOMIC_MOVE
+                           StandardCopyOption/REPLACE_EXISTING]))
+  (.getAbsolutePath dest-file))
+
+(defn- write-cache-input-stream! [cache-dir text in publish!]
   (assert cache-dir)
-  (let [dest-file (.toFile (Paths/get cache-dir (into-array [(hash-text text)])))]
-    (with-open [out (io/output-stream dest-file)]
-      (io/copy in out))
-    (.getAbsolutePath dest-file)))
+  (let [dest-file (.toFile (Paths/get cache-dir (into-array [(hash-text text)])))
+        temp-file (java.io.File/createTempFile ".fairybox-tts-" ".tmp" (io/file cache-dir))]
+    (try
+      (with-open [^java.io.InputStream input   in
+                  ^java.io.OutputStream output (io/output-stream temp-file)]
+        (io/copy input output))
+      (publish! temp-file dest-file)
+      (finally
+        (Files/deleteIfExists (.toPath temp-file))))))
+
+(defn cache-input-stream [cache-dir text in]
+  (write-cache-input-stream! cache-dir text in move-cache-file!))
+
+(defn- cache-input-stream-with-timeout [cache-dir text in timeout-ms]
+  (let [state       (Object.)
+        cancelled?_ (atom false)
+        result_     (promise)
+        worker_     (future
+                      (try
+                        (write-cache-input-stream!
+                         cache-dir
+                         text
+                         in
+                         (fn [temp-file dest-file]
+                           (locking state
+                             (when @cancelled?_
+                               (throw (ex-info "TTS cache write cancelled" {})))
+                             (let [path (move-cache-file! temp-file dest-file)]
+                               (deliver result_ {:value path})
+                               path))))
+                        (catch Throwable e
+                          (deliver result_ {:error e}))))
+        result      (deref result_ timeout-ms ::cache-write-timeout)
+        result      (if (= ::cache-write-timeout result)
+                      (locking state
+                        (if (realized? result_)
+                          @result_
+                          (do
+                            (reset! cancelled?_ true)
+                            ::cancel-cache-write)))
+                      result)]
+    (if (= ::cancel-cache-write result)
+      (do
+        (try
+          (.close ^java.io.InputStream in)
+          (finally
+            (future-cancel worker_)))
+        (throw (ex-info "TTS cache write timed out" {:timeout-ms timeout-ms})))
+      (if-let [error (:error result)]
+        (throw error)
+        (:value result)))))
 
 (defn caching-home-assistant-tts [{:keys [tts-cache-dir] :as sys} text]
   (if-let [local-url (cache-get tts-cache-dir text)]
@@ -184,6 +354,35 @@
       (let [in (openai-tts sys text)]
         (cache-input-stream tts-cache-dir cache-key in)))))
 
+(defn elevenlabs-tts [sys text]
+  (let [{:keys [model output-format voice-id voice-settings]} (elevenlabs-options sys)
+        api-key (elevenlabs-api-key)
+        body (cond-> {"text"     (elevenlabs-input text)
+                      "model_id" model}
+               voice-settings
+               (assoc "voice_settings" voice-settings))]
+    (assert api-key "ELEVENLABS_API_KEY must be set in the environment or ~/.llm-keys")
+    (-> (hc/post (str elevenlabs-tts-url "/" voice-id)
+                 {:as           :stream
+                  :body         (->json body)
+                  :content-type :json
+                  :headers      {"xi-api-key" api-key}
+                  :http-client  elevenlabs-http-client
+                  :query-params {"output_format" output-format}
+                  :timeout      elevenlabs-request-timeout-ms})
+        :body)))
+
+(defn caching-elevenlabs-tts [{:keys [tts-cache-dir] :as sys} text]
+  (let [cache-key [::elevenlabs (elevenlabs-options sys) text]]
+    (if-let [local-url (cache-get tts-cache-dir cache-key)]
+      local-url
+      (let [in (elevenlabs-tts sys text)]
+        (cache-input-stream-with-timeout
+         tts-cache-dir
+         cache-key
+         in
+         elevenlabs-cache-timeout-ms)))))
+
 (defn with-db [sys]
   (assoc sys :db @(:db-conn sys)))
 
@@ -195,7 +394,8 @@
       :mimic3 (caching-mimic3-tts sys text)
       :ha (caching-home-assistant-tts sys text)
       :google-cloud (caching-google-cloud-tts sys text)
-      :openai (caching-openai-tts sys text))))
+      :openai (caching-openai-tts sys text)
+      :elevenlabs (caching-elevenlabs-tts sys text))))
 
 (defn emit-player! [{:keys [emitter]} event]
   (async/put! emitter {:path "/player/commands" :value event}))
@@ -350,8 +550,8 @@ This one is Piglet has a Bath
 (comment
   (require '[ol.vinyl :as vinyl])
 
-  (defn openai-test [args prompt]
-    (let [audio-path      (caching-openai-tts
+  (defn play-tts-test [tts-fn args prompt]
+    (let [audio-path      (tts-fn
                            (assoc args
                                   :tts-cache-dir
                                   (System/getProperty "java.io.tmpdir"))
@@ -375,10 +575,21 @@ This one is Piglet has a Bath
         (finally
           (vinyl/release-player! player)))))
 
-  (openai-test
+  (play-tts-test
+   caching-openai-tts
    {:model        "gpt-4o-mini-tts"
     :voice        "marin"
     :instructions "Speak cheerfully."}
    "Hello world")
+
+  (play-tts-test
+   caching-elevenlabs-tts
+   {:model          "eleven_multilingual_v2"
+    :voice-id       "JBFqnCBsd6RMkjVDRZzb"
+    :output-format  "mp3_44100_128"
+    :voice-settings {:stability        0.5
+                     :similarity_boost 0.75
+                     :speed            1.0}}
+   "Hello from ElevenLabs")
 
   :rcf)
