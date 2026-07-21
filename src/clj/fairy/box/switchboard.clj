@@ -12,11 +12,12 @@
    [jp.nijohando.event :as ev]
    [medley.core :as m]))
 
-(def ^:private init-state {:system-state    :system-state/booting
-                           :system-mode     :system-mode/normal
-                           :rfid            nil
-                           :active-card-uid nil
-                           :removed-card    nil})
+(def ^:private init-state {:system-state             :system-state/booting
+                           :system-mode              :system-mode/normal
+                           :rfid nil
+                           :active-card-uid          nil
+                           :removed-card             nil
+                           :pending-system-operation nil})
 (defonce ^:private state (atom init-state))
 
 (defn system-state! []
@@ -173,56 +174,93 @@
                (log/error "RFID error" (:error value))
                (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))
 
-(defn initiate-shutdown!
-  ([emitter]
-   (initiate-shutdown! emitter true))
-  ([emitter poweroff?]
-   (emit-system! emitter {:event :system/cooling-down :poweroff? poweroff?})))
+(def ^:private system-control-commands
+  {:system/poweroff         ["systemctl" "poweroff"]
+   :system/reboot           ["systemctl" "reboot"]
+   :system/restart-fairybox ["systemctl" "--user" "restart"
+                             "fairybox.service"]})
 
 (defn poweroff-enabled? [settings]
   (true? (get-in settings [:shutdown :poweroff-enabled?])))
 
-(defn poweroff-host! [settings]
-  (if (poweroff-enabled? settings)
-    (shell/sh "systemctl" "poweroff")
+(defn- execute-system-control! [settings operation]
+  (if-let [command (get system-control-commands operation)]
+    (if (poweroff-enabled? settings)
+      (try
+        (let [{:keys [exit err] :as result} (apply shell/sh command)]
+          (if (zero? exit)
+            (log/info "System control command completed"
+                      {:operation operation})
+            (log/error "System control command failed"
+                       {:operation operation :exit exit :stderr err}))
+          result)
+        (catch Exception error
+          (log/error error
+                     "Unable to execute system control command"
+                     {:operation operation})
+          nil))
+      (do
+        (log/warn "Skipping system control because it is disabled for this profile"
+                  {:operation operation})
+        nil))
     (do
-      (log/warn "Skipping host poweroff because it is disabled for this profile")
+      (log/warn "Ignoring unknown system control operation"
+                {:operation operation})
       nil)))
+
+(defn- request-system-control! [emitter settings operation]
+  (if (poweroff-enabled? settings)
+    (when (= :system-state/ready (system-state!))
+      (swap! state assoc :pending-system-operation operation)
+      (emit-system! emitter {:event :system/cooling-down}))
+    (log/warn "Ignoring system control request"
+              {:operation operation :reason :disabled-for-profile})))
 
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as _ev}]
   ;; (tap> {:system ev})
-  (let [{:keys [event poweroff? reason]} value]
-    (condp = event
-      :system/initialized  (do
-                             (swap! state assoc :system-state :system-state/initialized)
-                             (emit-system! emitter {:event :system/warming-up}))
-      :system/warming-up   (do
-                             (swap! state assoc :system-state :system-state/warming-up)
-                             (emit-led! emitter {:action :led/set :groups [:all] :value 1.0})
-                             (when-let [sfx (browse/sfx-path settings :startup)]
-                               (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
-      :system/warmed-up    (when (= :system-state/warming-up (system-state!))
-                             (swap! state assoc :system-state :system-state/ready)
-                             (emit-system! emitter {:event :system/ready}))
-      :system/cooling-down (when  (= :system-state/ready (system-state!))
-                             (swap! state assoc :system-state :system-state/cooling-down)
-                             (emit-player! emitter {:action :audio/stop})
-                             (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
-                             (when-let [sfx (browse/sfx-path settings :shutdown)]
-                               (emit-player! emitter {:action :audio/play-one-shot :id (if poweroff? :shutdown-sound :shutdown-sound-no-poweroff) :item-path sfx})))
-      :system/shutdown     (when (= :system-state/cooling-down (system-state!))
-                             (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
-                             (swap! state assoc :system-state :system-state/shutdown)
-                             (when poweroff?
-                               (poweroff-host! settings)))
-      :system/poweroff-now (do
-                             (emit-player! emitter {:action :audio/stop})
-                             (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
-                             (if (poweroff-enabled? settings)
-                               (do
-                                 (swap! state assoc :system-state :system-state/shutdown)
-                                 (poweroff-host! settings))
-                               (log/warn "Ignoring immediate host poweroff" {:reason reason})))
+  (let [{:keys [event reason]} value]
+    (condp contains? event
+      #{:system/initialized}      (do
+                                    (swap! state assoc :system-state :system-state/initialized)
+                                    (emit-system! emitter {:event :system/warming-up}))
+      #{:system/warming-up}       (do
+                                    (swap! state assoc :system-state :system-state/warming-up)
+                                    (emit-led! emitter {:action :led/set :groups [:all] :value 1.0})
+                                    (when-let [sfx (browse/sfx-path settings :startup)]
+                                      (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
+      #{:system/warmed-up}        (when (= :system-state/warming-up (system-state!))
+                                    (swap! state assoc :system-state :system-state/ready)
+                                    (emit-system! emitter {:event :system/ready}))
+      #{:system/poweroff :system/reboot :system/restart-fairybox}
+      (request-system-control! emitter settings event)
+      #{:system/cooling-down}     (when (and (= :system-state/ready (system-state!))
+                                             (:pending-system-operation @state))
+                                    (swap! state assoc :system-state :system-state/cooling-down)
+                                    (emit-player! emitter {:action :audio/stop})
+                                    (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
+                                    (if-let [sfx (browse/sfx-path settings :shutdown)]
+                                      (emit-player! emitter {:action    :audio/play-one-shot
+                                                             :id        :shutdown-sound
+                                                             :item-path sfx})
+                                      (emit-system! emitter {:event :system/shutdown})))
+      #{:system/shutdown}         (when (= :system-state/cooling-down (system-state!))
+                                    (let [operation (:pending-system-operation @state)]
+                                      (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
+                                      (swap! state assoc
+                                             :system-state :system-state/shutdown
+                                             :pending-system-operation nil)
+                                      (when operation
+                                        (execute-system-control! settings operation))))
+      #{:system/poweroff-now}     (do
+                                    (emit-player! emitter {:action :audio/stop})
+                                    (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
+                                    (if (poweroff-enabled? settings)
+                                      (do
+                                        (swap! state assoc
+                                               :system-state :system-state/shutdown
+                                               :pending-system-operation nil)
+                                        (execute-system-control! settings :system/poweroff))
+                                      (log/warn "Ignoring immediate host poweroff" {:reason reason})))
       nil)))
 
 (defn player-handler [{:keys [emitter]} {:keys [value] :as _ev}]
@@ -231,8 +269,7 @@
     (when (= :player/one-shot-finished (:event value))
       (condp = (:id value)
         :startup-sound  (emit-system! emitter {:event :system/warmed-up})
-        :shutdown-sound-no-poweroff (emit-system! emitter {:event :system/shutdown :poweroff? false})
-        :shutdown-sound (emit-system! emitter {:event :system/shutdown :poweroff? true})))))
+        :shutdown-sound (emit-system! emitter {:event :system/shutdown})))))
 
 (def ^:private patch-ports {:rfid    {:handler #'rfid-handler
                                       :name    :rfid

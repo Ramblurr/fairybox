@@ -20,6 +20,19 @@
   (ns-resolve 'fairy.box.web.views.settings
               'save-device-settings-fn))
 
+(defn- control-system-action-fn []
+  (ns-resolve 'fairy.box.web.views.settings 'control-system-fn))
+
+(defn- settings-request [controls-enabled?]
+  {:url-for
+   {:page.settings/rfid-link "/settings/rfid"
+    :page.settings/browse    "/settings/browse"
+    :page.settings/device    "/settings/device"
+    :page.settings/tts       "/settings/tts"}
+   :fairy.box/component
+   {:fairy.box/settings
+    {:shutdown {:poweroff-enabled? controls-enabled?}}}})
+
 (defn- device-request [db-conn]
   {:url-for
    {:page/home            "/"
@@ -247,6 +260,96 @@
                             :command   nil
                             :emitted?  false})
                  results)))))))
+
+(deftest settings-power-controls-use-out-of-way-native-dialog
+  (let [enabled-html  (h/html->str
+                       (settings-view/settings-view
+                        (settings-request true)))
+        disabled-html (h/html->str
+                       (settings-view/settings-view
+                        (settings-request false)))
+        list-end      (str/index-of enabled-html "</ul>")
+        launcher      (str/index-of enabled-html
+                                    "power-controls-launcher")]
+    (is (= {:native-dialog                true
+            :grouped-options              true
+            :outside-settings-list        true
+            :operation-actions            true
+            :production-actions-enabled   true
+            :development-actions-disabled true
+            :development-notice           true
+            :development-actions-removed  true}
+           {:native-dialog
+            (and (str/includes? enabled-html
+                                "<dialog id=\"power-dialog\"")
+                 (str/includes? enabled-html "method=\"dialog\"")
+                 (str/includes? enabled-html ".showModal()"))
+            :grouped-options
+            (every? #(str/includes? enabled-html %)
+                    [">Device</h3>" ">Fairybox</h3>"
+                     ">Power off</span>" ">Reboot</span>"
+                     ">Restart</span>"])
+            :outside-settings-list
+            (and (some? list-end)
+                 (some? launcher)
+                 (< list-end launcher))
+            :operation-actions
+            (every? #(str/includes? enabled-html %)
+                    ["operation=poweroff"
+                     "operation=reboot"
+                     "operation=restart-fairybox"])
+            :production-actions-enabled
+            (not (str/includes? enabled-html
+                                "power-dialog-action\" disabled"))
+            :development-actions-disabled
+            (= 3 (count (re-seq
+                         #"power-dialog-action[^>]* disabled"
+                         disabled-html)))
+            :development-notice
+            (str/includes? disabled-html
+                           "disabled outside the Raspberry Pi production profile")
+            :development-actions-removed
+            (not (str/includes? disabled-html "operation="))}))))
+
+(deftest system-control-action-emits-allowlisted-system-events
+  (let [control! (control-system-action-fn)
+        emitter  (async/chan 8)
+        request  (fn [controls-enabled? operation]
+                   (-> (settings-request controls-enabled?)
+                       (assoc :query-params {"operation" operation})
+                       (assoc-in [:fairy.box/component
+                                  :fairy.box.switchboard/switchboard]
+                                 {:emitter emitter})))
+        results  {:poweroff (control! (request true "poweroff"))
+                  :reboot   (control! (request true "reboot"))
+                  :restart  (control! (request true "restart-fairybox"))
+                  :unknown  (control! (request true "unknown"))
+                  :development-poweroff
+                  (control! (request false "poweroff"))
+                  :development-reboot
+                  (control! (request false "reboot"))}
+        events   (loop [events []]
+                   (if-let [event (async/poll! emitter)]
+                     (recur (conj events event))
+                     events))]
+    (async/close! emitter)
+    (is (= {:results {:poweroff             nil
+                      :reboot               nil
+                      :restart              nil
+                      :unknown              nil
+                      :development-poweroff nil
+                      :development-reboot   nil}
+            :events  [{:path  "/system"
+                       :value {:event :system/poweroff}}
+                      {:path  "/system"
+                       :value {:event :system/reboot}}
+                      {:path  "/system"
+                       :value {:event :system/restart-fairybox}}
+                      {:path  "/system"
+                       :value {:event :system/poweroff}}
+                      {:path  "/system"
+                       :value {:event :system/reboot}}]}
+           {:results results :events events}))))
 
 (deftest device-settings-use-responsive-cards-and-sliders
   (let [db-conn

@@ -2,6 +2,7 @@
   (:require
    [babashka.fs :as fs]
    [clojure.core.async :as async]
+   [clojure.java.shell :as shell]
    [clojure.test :refer [deftest is]]
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.media-test-utils :as media]
@@ -19,6 +20,52 @@
        (filter #(= "/player/commands" (:path %)))
        (mapv #(get-in % [:value :action]))))
 
+(defn- graceful-system-control-result [state_ settings operation]
+  (let [emitter   (async/chan 12)
+        commands_ (atom [])]
+    (try
+      (with-redefs [shell/sh
+                    (fn [& command]
+                      (swap! commands_ conj (vec command))
+                      {:exit 0 :out "" :err ""})]
+        (reset! state_ {:system-state             :system-state/ready
+                        :system-mode              :system-mode/normal
+                        :rfid nil
+                        :active-card-uid          nil
+                        :removed-card             nil
+                        :pending-system-operation nil})
+        (switchboard/system-handler
+         {:emitter emitter :settings settings}
+         {:value {:event operation}})
+        (let [request-events    (drain-events emitter)
+              pending-operation (:pending-system-operation @state_)]
+          (switchboard/system-handler
+           {:emitter emitter :settings settings}
+           {:value {:event :system/cooling-down}})
+          (let [cooling-events (drain-events emitter)]
+            (switchboard/player-handler
+             {:emitter emitter}
+             {:value {:event :player/one-shot-finished
+                      :id    :shutdown-sound}})
+            (let [sound-finished-events (drain-events emitter)
+                  early-commands        @commands_]
+              (switchboard/system-handler
+               {:emitter emitter :settings settings}
+               {:value {:event :system/shutdown}})
+              {:request-events        request-events
+               :pending-operation     pending-operation
+               :cooling-events        cooling-events
+               :sound-finished-events sound-finished-events
+               :early-commands        early-commands
+               :shutdown-events       (drain-events emitter)
+               :final-state           (select-keys
+                                       @state_
+                                       [:system-state
+                                        :pending-system-operation])
+               :commands              @commands_}))))
+      (finally
+        (async/close! emitter)))))
+
 (defn- behavior-result [state_ settings removal-behavior return-behavior]
   (let [emitter (async/chan 10)
         db-conn (atom {:linked-tags {"card-a" {:folder "audiobooks/Author One/Book One"}}
@@ -27,11 +74,12 @@
         system  {:emitter  emitter
                  :db-conn  db-conn
                  :settings settings}]
-    (reset! state_ {:system-state    :system-state/ready
-                    :system-mode     :system-mode/normal
-                    :rfid            {:action :placed :uid "card-a"}
-                    :active-card-uid "card-a"
-                    :removed-card    nil})
+    (reset! state_ {:system-state             :system-state/ready
+                    :system-mode              :system-mode/normal
+                    :rfid {:action :placed :uid "card-a"}
+                    :active-card-uid          "card-a"
+                    :removed-card             nil
+                    :pending-system-operation nil})
     (swap! audio-system/audio-state assoc-in [:playback :state] :playing)
     (switchboard/rfid-removed-play-mode system {:uid "card-a"})
     (let [removed-actions (player-actions (drain-events emitter))]
@@ -81,11 +129,12 @@
                                                        :card-return-behavior  :resume}}})
         system               {:emitter emitter :db-conn db-conn}]
     (try
-      (reset! state_ {:system-state    :system-state/ready
-                      :system-mode     :system-mode/normal
-                      :rfid            {:action :placed :uid "card-a"}
-                      :active-card-uid "card-a"
-                      :removed-card    nil})
+      (reset! state_ {:system-state             :system-state/ready
+                      :system-mode              :system-mode/normal
+                      :rfid {:action :placed :uid "card-a"}
+                      :active-card-uid          "card-a"
+                      :removed-card             nil
+                      :pending-system-operation nil})
       (swap! audio-system/audio-state assoc-in [:playback :state] :paused)
 
       (switchboard/rfid-handler system
@@ -109,19 +158,21 @@
         previous-state @state_
         bus            (ev/bus)]
     (try
-      (reset! state_ {:system-state    :system-state/ready
-                      :system-mode     :system-mode/normal
-                      :rfid            {:action :removed :uid "card-a"}
-                      :active-card-uid "card-a"
-                      :removed-card    {:uid              "card-a"
-                                        :removal-behavior :pause}})
+      (reset! state_ {:system-state             :system-state/ready
+                      :system-mode              :system-mode/normal
+                      :rfid {:action :removed :uid "card-a"}
+                      :active-card-uid          "card-a"
+                      :removed-card             {:uid              "card-a"
+                                                 :removal-behavior :pause}
+                      :pending-system-operation :system/reboot})
       (let [instance (switchboard/init-switchboard! {:bus bus})]
         (try
-          (is (= {:system-state    :system-state/booting
-                  :system-mode     :system-mode/normal
-                  :rfid            nil
-                  :active-card-uid nil
-                  :removed-card    nil}
+          (is (= {:system-state             :system-state/booting
+                  :system-mode              :system-mode/normal
+                  :rfid nil
+                  :active-card-uid          nil
+                  :removed-card             nil
+                  :pending-system-operation nil}
                  @state_))
           (finally
             (switchboard/halt-switchboard! instance))))
@@ -133,21 +184,25 @@
   (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
         previous-state @state_
         emitter        (async/chan 8)
-        poweroffs_     (atom [])
+        commands_      (atom [])
         enabled        {:shutdown {:poweroff-enabled? true}}
         disabled       {:shutdown {:poweroff-enabled? false}}]
     (try
-      (with-redefs [switchboard/poweroff-host!
-                    #(swap! poweroffs_ conj %)]
+      (with-redefs [shell/sh
+                    (fn [& command]
+                      (swap! commands_ conj (vec command))
+                      {:exit 0 :out "" :err ""})]
         (reset! state_ (assoc previous-state
-                              :system-state :system-state/ready))
+                              :system-state :system-state/ready
+                              :pending-system-operation nil))
         (switchboard/system-handler
          {:emitter emitter :settings enabled}
          {:value {:event :system/poweroff-now :reason :sleep}})
         (let [enabled-events (drain-events emitter)
               enabled-state  (:system-state @state_)]
           (reset! state_ (assoc previous-state
-                                :system-state :system-state/ready))
+                                :system-state :system-state/ready
+                                :pending-system-operation nil))
           (switchboard/system-handler
            {:emitter emitter :settings disabled}
            {:value {:event :system/poweroff-now :reason :sleep}})
@@ -167,12 +222,164 @@
                             :groups [:all]
                             :value  0.0}}]
                   :disabled-state :system-state/ready
-                  :poweroffs      [enabled]}
+                  :commands       [["systemctl" "poweroff"]]}
                  {:enabled-events  enabled-events
                   :enabled-state   enabled-state
                   :disabled-events (drain-events emitter)
                   :disabled-state  (:system-state @state_)
-                  :poweroffs       @poweroffs_}))))
+                  :commands        @commands_}))))
       (finally
         (async/close! emitter)
         (reset! state_ previous-state)))))
+
+(deftest manual-system-controls-play-the-shutdown-sound-before-the-command
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        settings       {:media    {:media-dir "/tmp"}
+                        :sfx      {:shutdown "shutdown.mp3"}
+                        :shutdown {:poweroff-enabled? true}}
+        operations     [:system/poweroff
+                        :system/reboot
+                        :system/restart-fairybox]
+        flow-keys      [:request-events
+                        :cooling-events
+                        :sound-finished-events
+                        :early-commands
+                        :shutdown-events
+                        :final-state]
+        expected-flow  {:request-events
+                        [{:path  "/system"
+                          :value {:event :system/cooling-down}}]
+                        :cooling-events
+                        [{:path  "/player/commands"
+                          :value {:action :audio/stop}}
+                         {:path  "/hardware/output/leds"
+                          :value {:action      :led/fade
+                                  :groups      [:all]
+                                  :duration    3000
+                                  :from        1.0
+                                  :to          0.0
+                                  :after-set   0.0
+                                  :start-delay 14000}}
+                         {:path  "/player/commands"
+                          :value {:action    :audio/play-one-shot
+                                  :id        :shutdown-sound
+                                  :item-path "/tmp/shutdown.mp3"}}]
+                        :sound-finished-events
+                        [{:path  "/system"
+                          :value {:event :system/shutdown}}]
+                        :early-commands []
+                        :shutdown-events
+                        [{:path  "/hardware/output/leds"
+                          :value {:action :led/set
+                                  :groups [:all]
+                                  :value  0.0}}]
+                        :final-state
+                        {:system-state             :system-state/shutdown
+                         :pending-system-operation nil}}]
+    (try
+      (let [results (mapv #(graceful-system-control-result
+                            state_ settings %)
+                          operations)]
+        (is (= {:pending-operations operations
+                :flows              (repeat 3 expected-flow)
+                :commands
+                [[["systemctl" "poweroff"]]
+                 [["systemctl" "reboot"]]
+                 [["systemctl" "--user" "restart"
+                   "fairybox.service"]]]}
+               {:pending-operations (mapv :pending-operation results)
+                :flows              (mapv #(select-keys % flow-keys)
+                                          results)
+                :commands           (mapv :commands results)})))
+      (finally
+        (reset! state_ previous-state)))))
+
+(deftest manual-system-controls-honor-the-profile-safety-gate
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 8)
+        commands_      (atom [])
+        settings       {:shutdown {:poweroff-enabled? false}}]
+    (try
+      (with-redefs [shell/sh
+                    (fn [& command]
+                      (swap! commands_ conj (vec command))
+                      {:exit 0 :out "" :err ""})]
+        (reset! state_ (assoc previous-state
+                              :system-state :system-state/ready
+                              :pending-system-operation nil))
+        (doseq [operation [:system/poweroff
+                           :system/reboot
+                           :system/restart-fairybox]]
+          (switchboard/system-handler
+           {:emitter emitter :settings settings}
+           {:value {:event operation}}))
+        (is (= {:events   []
+                :state    {:system-state             :system-state/ready
+                           :pending-system-operation nil}
+                :commands []}
+               {:events   (drain-events emitter)
+                :state    (select-keys @state_
+                                       [:system-state
+                                        :pending-system-operation])
+                :commands @commands_})))
+      (finally
+        (async/close! emitter)
+        (reset! state_ previous-state)))))
+
+(deftest graceful-system-control-completes-without-a-shutdown-sound
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 8)
+        commands_      (atom [])
+        settings       {:shutdown {:poweroff-enabled? true}}]
+    (with-redefs [shell/sh
+                  (fn [& command]
+                    (swap! commands_ conj (vec command))
+                    {:exit 0 :out "" :err ""})]
+      (reset! state_ (assoc previous-state
+                            :system-state :system-state/ready
+                            :pending-system-operation nil))
+      (switchboard/system-handler
+       {:emitter emitter :settings settings}
+       {:value {:event :system/poweroff}})
+      (let [request-events (drain-events emitter)]
+        (switchboard/system-handler
+         {:emitter emitter :settings settings}
+         {:value (:value (first request-events))})
+        (let [cooling-events (drain-events emitter)
+              early-commands @commands_]
+          (switchboard/system-handler
+           {:emitter emitter :settings settings}
+           {:value (:value (last cooling-events))})
+          (is (= {:request-events
+                  [{:path  "/system"
+                    :value {:event :system/cooling-down}}]
+                  :cooling-events
+                  [{:path  "/player/commands"
+                    :value {:action :audio/stop}}
+                   {:path  "/hardware/output/leds"
+                    :value {:action      :led/fade
+                            :groups      [:all]
+                            :duration    3000
+                            :from        1.0
+                            :to          0.0
+                            :after-set   0.0
+                            :start-delay 14000}}
+                   {:path  "/system"
+                    :value {:event :system/shutdown}}]
+                  :early-commands []
+                  :shutdown-events
+                  [{:path  "/hardware/output/leds"
+                    :value {:action :led/set
+                            :groups [:all]
+                            :value  0.0}}]
+                  :commands       [["systemctl" "poweroff"]]}
+                 {:request-events  request-events
+                  :cooling-events  cooling-events
+                  :early-commands  early-commands
+                  :shutdown-events (drain-events emitter)
+                  :commands        @commands_}))))
+      (async/close! emitter)
+      (reset! state_ previous-state))))

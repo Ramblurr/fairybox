@@ -100,6 +100,19 @@
                sleep (update-in [:settings :sleep] merge sleep)))))
   nil)
 
+(def ^:private system-control-events
+  {"poweroff"         :system/poweroff
+   "reboot"           :system/reboot
+   "restart-fairybox" :system/restart-fairybox})
+
+(defaction control-system
+  [{:keys [query-params] :fairy.box/keys [component]}]
+  (when-let [event (get system-control-events
+                        (get query-params "operation"))]
+    (when-let [controller (component :fairy.box.switchboard/switchboard)]
+      (switchboard/emit-system! (:emitter controller) {:event event})))
+  nil)
+
 (def ^:private timer-cycle-directions
   {"next"     :next
    "previous" :previous})
@@ -211,16 +224,84 @@
               :icon-class (css :h-8 :w-8 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])
               :class (css :group :flex :items-center :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold :cursor-pointer))])
 
-(defn settings-view [{:keys [url-for] :as _req}]
-  [:div {:class [(css :max-w-5xl) ui/$page-margin]}
-   [:h1 {:class (css :text-2xl :mb-2)} "Settings"]
-   [:div
-    [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
-     [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
-      (settings-option "RFID Tags" icon/radio-frequency (url-for :page.settings/rfid-link))
-      (settings-option "Browse Audio" icon/file-audio (url-for :page.settings/browse))
-      (settings-option "Device" icon/cog (url-for :page.settings/device))
-      (settings-option "Text to Speech" icon/tts (url-for :page.settings/tts))]]]])
+(defn- system-control-expression [operation]
+  (str "document.getElementById('power-dialog').close(); @post('"
+       control-system
+       (h/url-query-string {:operation operation})
+       "')"))
+
+(defn- power-control-action
+  [controls-enabled? operation label description dangerous?]
+  [:button
+   (cond-> {:type     "button"
+            :class    (cond-> ["power-dialog-action"]
+                        dangerous? (conj "power-dialog-action--danger"))
+            :disabled (not controls-enabled?)}
+     controls-enabled?
+     (assoc :data-on:click (system-control-expression operation)))
+   [:span {:class "power-dialog-action__label"} label]
+   [:span {:class "power-dialog-action__description"} description]])
+
+(defn- power-controls [controls-enabled?]
+  [:div {:class (css :mt-16 :flex :justify-end :border-t
+                     :border-smoky-200 :pt-6
+                     [:dark :border-smoky-800])}
+   [:button#power-controls-launcher.power-controls-launcher
+    {:type          "button"
+     :aria-label    "Open power controls"
+     :title         "Power controls"
+     :data-on:click "document.getElementById('power-dialog').showModal()"}
+    (icon/power {:class (css :h-5 :w-5)})]
+   [:dialog#power-dialog.power-dialog
+    {:aria-labelledby  "power-dialog-title"
+     :aria-describedby "power-dialog-description"}
+    [:div {:class "power-dialog__content"}
+     [:header {:class "power-dialog__header"}
+      [:h2#power-dialog-title "Power controls"]
+      [:p#power-dialog-description
+       "Choose what to restart or shut down."]]
+     [:div {:class "power-dialog__groups"}
+      [:section {:aria-labelledby "device-power-heading"}
+       [:h3#device-power-heading "Device"]
+       [:div {:class "power-dialog__actions"}
+        (power-control-action controls-enabled?
+                              "poweroff"
+                              "Power off"
+                              "Shut down the Fairybox device completely."
+                              true)
+        (power-control-action controls-enabled?
+                              "reboot"
+                              "Reboot"
+                              "Restart the operating system and Fairybox."
+                              true)]]
+      [:section {:aria-labelledby "fairybox-power-heading"}
+       [:h3#fairybox-power-heading "Fairybox"]
+       [:div {:class "power-dialog__actions"}
+        (power-control-action controls-enabled?
+                              "restart-fairybox"
+                              "Restart"
+                              "Restart only the Fairybox systemd service."
+                              false)]]]
+     (when-not controls-enabled?
+       [:p {:class "power-dialog__disabled-notice"}
+        "Power controls are disabled outside the Raspberry Pi production profile."])
+     [:form {:method "dialog" :class "power-dialog__footer"}
+      [:button {:value "cancel" :class "power-dialog__cancel"}
+       "Cancel"]]]]])
+
+(defn settings-view [{:keys [url-for] :as req}]
+  (let [controls-enabled? (switchboard/poweroff-enabled?
+                           (app-settings/settings req))]
+    [:div {:class [(css :max-w-5xl) ui/$page-margin]}
+     [:h1 {:class (css :text-2xl :mb-2)} "Settings"]
+     [:div
+      [:nav {:class (css :flex :flex-1 :flex-col), :aria-label "Sidebar"}
+       [:ul {:role "list", :class (css :-mx-2 :space-y-1 :max-w-lg)}
+        (settings-option "RFID Tags" icon/radio-frequency (url-for :page.settings/rfid-link))
+        (settings-option "Browse Audio" icon/file-audio (url-for :page.settings/browse))
+        (settings-option "Device" icon/cog (url-for :page.settings/device))
+        (settings-option "Text to Speech" icon/tts (url-for :page.settings/tts))]]
+      (power-controls controls-enabled?)]]))
 
 (defn browse-audio [req]
   [:div {:id "active-tab"}
@@ -717,5 +798,3 @@
      [:div {:id "active-tab"}
       [:div {:class "fade-in-out"}
        (settings-view req)]]]]))
-
-(h/refresh-all!)

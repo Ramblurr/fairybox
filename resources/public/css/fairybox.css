@@ -115,3 +115,268 @@ button {
     box-shadow: inset 0 0 0 1px var(--smoky-400);
   }
 }
+
+:root {
+  --power-dialog-backdrop: rgb(15 23 42 / 65%);
+}
+
+.power-controls-launcher {
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 1px solid var(--smoky-300);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--smoky-500);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.power-controls-launcher:hover {
+  border-color: var(--smoky-500);
+  background: var(--smoky-100);
+  color: var(--smoky-800);
+}
+
+.power-controls-launcher:focus-visible,
+.power-dialog button:focus-visible {
+  outline: 2px solid var(--cloud-burst-600);
+  outline-offset: 2px;
+}
+
+.power-dialog {
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 2rem));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--smoky-300);
+  border-radius: 1rem;
+  background: var(--white-rock-50);
+  color: var(--smoky-900);
+  box-shadow: 0 24px 80px rgb(15 23 42 / 35%);
+  opacity: 0;
+  transform: translateY(0.75rem) scale(0.98);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+
+.power-dialog[open] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.power-dialog::backdrop {
+  background: transparent;
+  backdrop-filter: blur(0);
+  transition:
+    background-color 160ms ease,
+    backdrop-filter 160ms ease,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+
+.power-dialog[open]::backdrop {
+  background: var(--power-dialog-backdrop);
+  backdrop-filter: blur(2px);
+}
+
+@starting-style {
+  .power-dialog[open] {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.98);
+  }
+
+  .power-dialog[open]::backdrop {
+    background: transparent;
+    backdrop-filter: blur(0);
+  }
+}
+
+.power-dialog__content {
+  padding: 1.25rem;
+}
+
+.power-dialog__header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.power-dialog__header p,
+.power-dialog-action__description {
+  color: var(--smoky-600);
+}
+
+.power-dialog__header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.power-dialog__groups {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.power-dialog__groups h3 {
+  margin: 0 0 0.5rem;
+  color: var(--smoky-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.power-dialog__actions {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.power-dialog-action {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--smoky-300);
+  border-radius: 0.75rem;
+  background: white;
+  color: var(--smoky-900);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.power-dialog-action:hover {
+  border-color: var(--smoky-500);
+  background: var(--smoky-100);
+}
+
+.power-dialog-action--danger {
+  border-color: var(--form-invalid-300);
+}
+
+.power-dialog-action--danger .power-dialog-action__label {
+  color: var(--form-invalid-700);
+}
+
+.power-dialog-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.power-dialog-action__label {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.power-dialog-action__description {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.power-dialog__disabled-notice {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--smoky-100);
+  color: var(--smoky-700);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.power-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--smoky-200);
+}
+
+.power-dialog__cancel {
+  padding: 0.625rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--smoky-200);
+  color: var(--smoky-900);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  .power-controls-launcher {
+    border-color: var(--smoky-700);
+    color: var(--smoky-500);
+  }
+
+  .power-controls-launcher:hover {
+    border-color: var(--smoky-500);
+    background: var(--smoky-800);
+    color: var(--smoky-200);
+  }
+
+  .power-dialog {
+    border-color: var(--smoky-700);
+    background: var(--smoky-900);
+    color: var(--smoky-100);
+  }
+
+  .power-dialog__header p,
+  .power-dialog-action__description {
+    color: var(--smoky-400);
+  }
+
+  .power-dialog__groups h3 {
+    color: var(--smoky-300);
+  }
+
+  .power-dialog-action {
+    border-color: var(--smoky-700);
+    background: var(--smoky-950);
+    color: var(--smoky-100);
+  }
+
+  .power-dialog-action:hover {
+    border-color: var(--smoky-500);
+    background: var(--smoky-800);
+  }
+
+  .power-dialog-action--danger {
+    border-color: var(--form-invalid-700);
+  }
+
+  .power-dialog-action--danger .power-dialog-action__label {
+    color: var(--form-invalid-300);
+  }
+
+  .power-dialog__disabled-notice {
+    background: var(--smoky-800);
+    color: var(--smoky-300);
+  }
+
+  .power-dialog__footer {
+    border-color: var(--smoky-700);
+  }
+
+  .power-dialog__cancel {
+    background: var(--smoky-700);
+    color: var(--smoky-100);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .power-dialog,
+  .power-dialog::backdrop {
+    transition-duration: 0s;
+  }
+}
