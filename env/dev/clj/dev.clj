@@ -2,17 +2,28 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns dev
   (:require
+   [clojure.tools.logging :as log]
    [clojure.core.async :as async]
    [clj-reload.core :as clj-reload]
-   [fairy.box.env :as env]
    [fairy.box.hardware.rfid :as rfid]
    [ol.dev.portal :as my-portal]))
 
 ;; --------------------------------------------------------------------------------------------
 ;; System Control
+(def defaults
+  {:init  (fn []
+            (log/info "\n-=[box starting using the development or test profile]=-"))
+   :start (fn []
+            (log/info "\n-=[box started successfully using the development or test profile]=-"))
+   :stop  (fn []
+            (log/info "\n-=[box has shut down successfully]=-"))
+   :opts  {:profile       (if (System/getenv "NOT_A_RPI")
+                            :dev-no-rpi
+                            :dev)
+           :persist-data? true}})
 
 (defn- profile []
-  (get-in env/defaults [:opts :profile]))
+  (get-in defaults [:opts :profile]))
 
 (defn- stop-system! []
   ((requiring-resolve 'fairy.box.system/stop!)))
@@ -74,17 +85,17 @@
 (defn remove []
   (rfid/remove! (rfid-comp)))
 
-(do
-  (reset-and-restart)
-  #_(require '[babashka.fs :as fs])
-  (require '[fairy.box.audio.browse :as browse])
-  (let [component (requiring-resolve 'fairy.box.system/component)
-        audio     (component :fairy.box.audio.system2/player)]
-    (def settings (component :fairy.box/settings))
-    (def player (:player audio))
-    (def emitter (:emitter audio))
-    (def db-conn (component :fairy.box.db/db))
-    (def bus (component :fairy.box.bus/bus))))
+#_(do
+    (reset-and-restart)
+    #_(require '[babashka.fs :as fs])
+    (require '[fairy.box.audio.browse :as browse])
+    (let [component (requiring-resolve 'fairy.box.system/component)
+          audio     (component :fairy.box.audio.system2/player)]
+      (def settings (component :fairy.box/settings))
+      (def player (:player audio))
+      (def emitter (:emitter audio))
+      (def db-conn (component :fairy.box.db/db))
+      (def bus (component :fairy.box.bus/bus))))
 
 (comment
   (reset-and-restart)

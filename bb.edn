@@ -37,4 +37,6 @@
          lint              {:doc  "Lint code with clj-kondo"
                             :task (if (seq *command-line-args*)
                                     (apply shell "clj-kondo" "--lint" *command-line-args*)
-                                    (apply shell "clj-kondo --lint" paths))}}}
+                                    (apply shell "clj-kondo --lint" paths))}
+         qa                {:doc     "Run full quality assurance: format, lint, and test"
+                            :depends [fmt lint test]}}}
