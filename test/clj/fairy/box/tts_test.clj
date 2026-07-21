@@ -13,6 +13,17 @@
   (or (ns-resolve 'fairy.box.tts symbol)
       (throw (ex-info "TTS private var not found" {:symbol symbol}))))
 
+(deftest renders-ssml-as-json-encodable-strings
+  (let [ssmls {"card"  (tts/metadata->ssml [{:title "Introduction"}
+                                            {:title "Tomorrow"}])
+               "track" (tts/tts-track-text {:title "Introduction"} {:index 0})}]
+    (is (= {:all-strings?    true
+            :json-round-trip ssmls}
+           {:all-strings?    (every? string? (vals ssmls))
+            :json-round-trip (-> ssmls
+                                 cheshire/generate-string
+                                 cheshire/parse-string)}))))
+
 (deftest reads-openai-key-from-development-key-file
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-openai-key-"}]
     (spit (str (fs/path temp-dir ".llm-keys"))

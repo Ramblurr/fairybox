@@ -26,3 +26,4 @@ env/dev/scratch/
 *.log
 hosts
 datastar-inspector.js
+prompts/

@@ -69,7 +69,7 @@
     #_(require '[babashka.fs :as fs])
     (require '[fairy.box.audio.browse :as browse])
     (let [component (requiring-resolve 'fairy.box.system/component)
-          audio (component :fairy.box.audio.system2/player)]
+          audio     (component :fairy.box.audio.system2/player)]
       (def settings (component :fairy.box/settings))
       (def player (:player audio))
       (def emitter (:emitter audio))
@@ -83,8 +83,8 @@
   (async/put! emitter {:path "/player/commands" :value {:action :audio/play}})
   (async/put! emitter {:path "/player/commands" :value {:action :audio/set-volume :volume 80}})
 
-  (async/put! emitter {:path "/player/commands"
-                       :value {:action :audio/play-path
+  (async/put! emitter {:path  "/player/commands"
+                       :value {:action              :audio/play-path
                                :item-path
                                "audiobooks/Arnold Lobel/Days with Frog and Toad"
                                ;; "/srv/media/audiobooks/Margaret Wise Brown"
@@ -92,6 +92,9 @@
                                :announce-per-track? true}})
 
   (my-portal/open-portals)
+
+  (rfid/place! (rfid-comp) "dev-card-001")
+  (rfid/remove! (rfid-comp))
 
   (require '[fairy.box.hardware.led :as led])
   (def led-controller

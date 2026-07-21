@@ -389,6 +389,7 @@
 (defn tts
   "Returns the local path to the file of the tts'ed audio of `text`"
   [sys text]
+  (tap> [:tts text])
   (let [sys (with-db sys)]
     (condp = (db/tts-engine (:db sys))
       :mimic3 (caching-mimic3-tts sys text)
@@ -424,6 +425,7 @@
 
     (catch Exception e
       (log/error "tts-speak failed" e)
+      (tap> e)
       (speak-problem! sys))))
 
 (defn choose-album [mm]
@@ -435,6 +437,7 @@
       (first albums))))
 
 (defn metadata->ssml [metadata]
+  (tap> [:metadata->ssml metadata])
   (let [album  (choose-album metadata)
         titles (map :title metadata)
         ssml   [:speak
@@ -452,7 +455,7 @@
                    [[:s " and " (count titles) ", " [:break {:time "500ms"}] (last titles)]])
                   [:s (first titles)])]]
 
-    (h2/html {:mode :xml} ssml)))
+    (str (h2/html {:mode :xml} ssml))))
 
 (defn tts-track-text [{:keys [title] :as metadata} {:keys [with-artist? with-album? index] :or {with-artist? false with-album? false}}]
   (let [ssml [:speak
@@ -463,7 +466,7 @@
               (when with-album?
                 [:s " from the album " (:album metadata)])]]
 
-    (h2/html {:mode :xml} ssml)))
+    (str (h2/html {:mode :xml} ssml))))
 
 (defn tts-track [sys metadata opts]
   (try
