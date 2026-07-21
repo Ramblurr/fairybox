@@ -9,6 +9,7 @@
    [exoscale.cloak :as cloak]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
+   [fairy.box.tts.speech :as speech]
    [fairy.box.util :as util]
    [hato.client :as hc])
   (:import
@@ -18,16 +19,55 @@
   (or (ns-resolve 'fairy.box.tts symbol)
       (throw (ex-info "TTS private var not found" {:symbol symbol}))))
 
-(deftest renders-ssml-as-json-encodable-strings
-  (let [ssmls {:card  (tts/metadata->ssml [{:title "Introduction"}
-                                           {:title "Tomorrow"}])
-               :track (tts/tts-track-text {:title "Introduction"} {:index 0})}]
-    (is (= {:all-strings?    true
-            :json-round-trip ssmls}
-           {:all-strings?    (every? string? (vals ssmls))
-            :json-round-trip (-> ssmls
-                                 util/->json
-                                 util/<-json)}))))
+(deftest creates-semantic-metadata-speech-plans
+  (let [one-title    (tts/metadata->speech [{:title "Introduction"}])
+        shared-album (tts/metadata->speech [{:album "Stories"
+                                             :title "Introduction"}
+                                            {:album "Stories"
+                                             :title "Tomorrow"}])
+        mixed-albums (tts/metadata->speech [{:album "Stories"
+                                             :title "Introduction"}
+                                            {:album "Other"
+                                             :title "Tomorrow"}])
+        special      (tts/metadata->speech [{:album "2 < 3 & 5 > 4"
+                                             :title "A < B & C"}])
+        track        (tts/tts-track-speech {:title "Introduction"}
+                                           {:index 0})]
+    (is (= {:one-title
+            (speech/plan [(speech/text "This one has ")
+                          (speech/pause 1000)
+                          (speech/text "Introduction")])
+            :shared-album
+            (speech/plan [(speech/text "This one is Stories")
+                          (speech/pause 1000)
+                          (speech/text "1, ")
+                          (speech/pause 500)
+                          (speech/text "Introduction")
+                          (speech/pause 500)
+                          (speech/text " and 2, ")
+                          (speech/pause 500)
+                          (speech/text "Tomorrow")])
+            :mixed-albums
+            (speech/plan [(speech/text "This one has ")
+                          (speech/pause 1000)
+                          (speech/text "1, ")
+                          (speech/pause 500)
+                          (speech/text "Introduction")
+                          (speech/pause 500)
+                          (speech/text " and 2, ")
+                          (speech/pause 500)
+                          (speech/text "Tomorrow")])
+            :special
+            (speech/plan [(speech/text "This one is 2 < 3 & 5 > 4")
+                          (speech/pause 1000)
+                          (speech/text "A < B & C")])
+            :track
+            (speech/plan [(speech/text "Number 1 Introduction")])}
+           {:one-title    one-title
+            :shared-album shared-album
+            :mixed-albums mixed-albums
+            :special      special
+            :track        track}))))
 
 (deftest reads-openai-key-from-development-key-file
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-openai-key-"}]
@@ -41,15 +81,6 @@
                ((private-var 'openai-api-key-from-file))))
         (finally
           (System/setProperty "user.home" original-home))))))
-
-(deftest normalizes-openai-speech-input
-  (let [normalize (private-var 'openai-input)]
-    (is (= {:ssml           "Hello & welcome.\nNext."
-            :literal-angles "Read 2 < 3 and 5 > 4"
-            :plain          "Hello there"}
-           {:ssml           (normalize "<speak>Hello &amp; welcome.<break time=\"1s\"/>Next.</speak>")
-            :literal-angles (normalize "Read 2 < 3 and 5 > 4")
-            :plain          (normalize "Hello there")}))))
 
 (deftest creates-openai-speech-request
   (let [requests_ (atom [])
@@ -65,12 +96,16 @@
                                :authorization (get-in opts [:headers "Authorization"])})
                        {:body ::audio-stream})}
                     #(vector
-                      (tts/openai-tts {} "Default")
-                      (tts/openai-tts {:model        "test-model"
-                                       :voice        "onyx"
-                                       :instructions "Speak slowly."
-                                       :speed        1.5}
-                                      "Custom")))]
+                      (tts/openai-tts
+                       {:prepared-input
+                        (speech/prepared-input "Default" :openai {})})
+                      (tts/openai-tts
+                       {:model          "test-model"
+                        :voice          "onyx"
+                        :instructions   "Speak slowly."
+                        :speed          1.5
+                        :prepared-input (speech/prepared-input
+                                         "Custom" :openai {})})))]
     (is (= {:requests
             [{:url           "https://api.openai.com/v1/audio/speech"
               :body          {:model           "gpt-4o-mini-tts"
@@ -96,6 +131,85 @@
            {:requests  @requests_
             :responses responses}))))
 
+(deftest selects-google-input-field-from-prepared-speech
+  (let [requests_ (atom [])
+        plan      (speech/plan [(speech/text "Hello <friend>")
+                                (speech/pause 1000)
+                                (speech/text "again")])
+        responses
+        (with-redefs [hc/post
+                      (fn [url opts]
+                        (swap! requests_ conj
+                               {:url          url
+                                :body         (util/<-json (:body opts))
+                                :content-type (:content-type opts)
+                                :api-key
+                                (get-in opts [:headers "X-Goog-Api-Key"])})
+                        {:body (util/->json {:audioContent "YQ=="})})]
+          [(tts/google-cloud-tts
+            {:credential     (cloak/mask "test-api-key")
+             :language-code  "en-US"
+             :voice          "en-US-Standard-A"
+             :prepared-input (speech/prepared-input
+                              plan
+                              :google-cloud
+                              {:voice "en-US-Standard-A"})})
+           (tts/google-cloud-tts
+            {:credential     (cloak/mask "test-api-key")
+             :language-code  "en-US"
+             :voice          "en-US-Chirp3-HD-Algieba"
+             :prepared-input (speech/prepared-input
+                              plan
+                              :google-cloud
+                              {:voice "en-US-Chirp3-HD-Algieba"})})])]
+    (is (= [{:url          "https://texttospeech.googleapis.com/v1/text:synthesize"
+             :body         {:input       {:ssml
+                                          "<speak>Hello &lt;friend&gt;<break time=\"1000ms\"/>again</speak>"}
+                            :voice       {:languageCode "en-US"
+                                          :name         "en-US-Standard-A"}
+                            :audioConfig {:audioEncoding "MP3"}}
+             :content-type :json
+             :api-key      "test-api-key"}
+            {:url          "https://texttospeech.googleapis.com/v1/text:synthesize"
+             :body         {:input       {:text "Hello <friend>...\nagain"}
+                            :voice       {:languageCode "en-US"
+                                          :name         "en-US-Chirp3-HD-Algieba"}
+                            :audioConfig {:audioEncoding "MP3"}}
+             :content-type :json
+             :api-key      "test-api-key"}]
+           @requests_))
+    (is (every? #(instance? java.io.InputStream %) responses))))
+
+(deftest sends-generated-ssml-to-mimic3
+  (let [request_ (atom nil)
+        plan     (speech/plan [(speech/text "Hello <friend>")
+                               (speech/pause 1000)
+                               (speech/text "again")])
+        response
+        (with-redefs [hc/get
+                      (fn [url opts]
+                        (reset! request_
+                                {:url          url
+                                 :query-params (:query-params opts)
+                                 :as           (:as opts)})
+                        {:body ::audio-stream})]
+          (tts/mimic3-tts
+           {:prepared-input (speech/prepared-input plan :mimic3 {})}))]
+    (is (= {:request
+            {:url "http://10.9.4.3:59125/api/tts"
+             :query-params
+             {"text"
+              "<speak>Hello &lt;friend&gt;<break time=\"1000ms\"/>again</speak>"
+              "voice"       "en_US/cmu-arctic_low#clb"
+              "noiseScale"  "0.677"
+              "noiseW"      "0.8"
+              "ssml"        "true"
+              "audioTarget" "client"}
+             :as  :stream}
+            :response ::audio-stream}
+           {:request  @request_
+            :response response}))))
+
 (deftest dispatches-openai-engine-to-existing-cache
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-openai-cache-"}]
     (let [text       "Already synthesized"
@@ -104,14 +218,50 @@
                       :tts-cache-dir (str cache-dir)}
           options    (:options (tts/effective-provider-config
                                 {:db database} :openai :normal))
-          cache-key  [:fairy.box.tts/openai options text]
+          prepared   (speech/prepared-input text :openai options)
+          cache-key  [:fairy.box.tts/openai
+                      options
+                      (speech/cache-identity prepared)]
           cache-file (io/file (str cache-dir) (tts/hash-text cache-key))]
       (spit cache-file "cached audio")
       (with-redefs [tts/openai-tts
-                    (fn [_ _]
+                    (fn [_]
                       (throw (ex-info "Cache miss unexpectedly reached OpenAI" {})))]
         (is (= (.getAbsolutePath cache-file)
                (tts/tts sys text)))))))
+
+(deftest renderer-identity-misses-legacy-openai-cache-entry
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-openai-legacy-cache-"}]
+    (let [input       "<speak>Hello</speak>"
+          database    {:settings {:tts {:engine :openai}}}
+          sys         {:db-conn       (atom database)
+                       :tts-cache-dir (str cache-dir)}
+          options     (:options (tts/effective-provider-config
+                                 {:db database} :openai :normal))
+          legacy-key  [:fairy.box.tts/openai options input]
+          legacy-file (io/file (str cache-dir) (tts/hash-text legacy-key))
+          prepared_   (atom nil)
+          _           (spit legacy-file "legacy audio")
+          result      (with-redefs [tts/openai-tts
+                                    (fn [{:keys [prepared-input]}]
+                                      (reset! prepared_ prepared-input)
+                                      (java.io.ByteArrayInputStream.
+                                       (.getBytes "new audio")))]
+                        (tts/tts sys input))]
+      (is (= {:legacy-reused? false
+              :content        "new audio"
+              :cache-files    2
+              :prepared       {:profile :openai/plain
+                               :field   :text
+                               :value   input
+                               :version 1}}
+             {:legacy-reused? (= (.getAbsolutePath legacy-file) result)
+              :content        (slurp result)
+              :cache-files    (count (fs/list-dir cache-dir))
+              :prepared       {:profile (:speech-input/profile @prepared_)
+                               :field   (:speech-input/field @prepared_)
+                               :value   (:speech-input/value @prepared_)
+                               :version (:speech-renderer/version @prepared_)}})))))
 
 (deftest reads-elevenlabs-key-from-development-key-file
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-elevenlabs-key-"}]
@@ -125,16 +275,6 @@
                ((private-var 'elevenlabs-api-key-from-file))))
         (finally
           (System/setProperty "user.home" original-home))))))
-
-(deftest normalizes-elevenlabs-speech-input
-  (let [normalize (private-var 'elevenlabs-input)]
-    (is (= {:ssml           "Hello &amp; welcome. <break time=\"1s\"/> Next."
-            :literal-angles "Read 2 < 3 and 5 > 4"
-            :plain          "Hello there"}
-           {:ssml           (normalize
-                             "<speak><s>Hello &amp; welcome.</s><break time=\"1s\"/><s>Next.</s></speak>")
-            :literal-angles (normalize "Read 2 < 3 and 5 > 4")
-            :plain          (normalize "Hello there")}))))
 
 (deftest creates-elevenlabs-speech-request
   (let [requests_   (atom [])
@@ -154,14 +294,22 @@
                                  :timeout             (:timeout opts)})
                          {:body ::audio-stream})}
                       #(vector
-                        (tts/elevenlabs-tts {} "Default")
+                        (tts/elevenlabs-tts
+                         {:prepared-input
+                          (speech/prepared-input
+                           "Default"
+                           :elevenlabs
+                           {:model "eleven_multilingual_v2"})})
                         (tts/elevenlabs-tts
                          {:model          "test-model"
                           :voice-id       "test-voice"
                           :output-format  "mp3_22050_32"
                           :voice-settings {:stability 0.4
-                                           :speed     0.9}}
-                         "<speak>Custom<break time=\"1s\"/></speak>")))]
+                                           :speed     0.9}
+                          :prepared-input (speech/prepared-input
+                                           "Custom"
+                                           :elevenlabs
+                                           {:model "test-model"})})))]
     (is (= {:requests
             [{:url                 "https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb"
               :body                {:text           "Default"
@@ -178,7 +326,7 @@
               :shared-http-client? true
               :timeout             30000}
              {:url                 "https://api.elevenlabs.io/v1/text-to-speech/test-voice"
-              :body                {:text           "Custom<break time=\"1s\"/>"
+              :body                {:text           "Custom"
                                     :model_id       "test-model"
                                     :voice_settings {:stability         0.4
                                                      :similarity_boost  0.75
@@ -203,11 +351,14 @@
                       :tts-cache-dir (str cache-dir)}
           options    (:options (tts/effective-provider-config
                                 {:db database} :elevenlabs :normal))
-          cache-key  [:fairy.box.tts/elevenlabs options text]
+          prepared   (speech/prepared-input text :elevenlabs options)
+          cache-key  [:fairy.box.tts/elevenlabs
+                      options
+                      (speech/cache-identity prepared)]
           cache-file (io/file (str cache-dir) (tts/hash-text cache-key))]
       (spit cache-file "cached audio")
       (with-redefs [tts/elevenlabs-tts
-                    (fn [_ _]
+                    (fn [_]
                       (throw (ex-info "Cache miss unexpectedly reached ElevenLabs" {})))]
         (is (= (.getAbsolutePath cache-file)
                (tts/tts sys text)))))))
@@ -216,19 +367,24 @@
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-elevenlabs-write-cache-"}]
     (let [closed?_      (atom false)
           synthesized?_ (atom false)
+          text          "Cache this stream"
           input         (proxy [java.io.ByteArrayInputStream] [(.getBytes "complete audio")]
                           (close []
                             (reset! closed?_ true)))
           args          {:tts-cache-dir  (str cache-dir)
-                         :voice-settings {:speed 0.9}}
-          text          "Cache this stream"
+                         :model          "eleven_multilingual_v2"
+                         :voice-settings {:speed 0.9}
+                         :prepared-input (speech/prepared-input
+                                          text
+                                          :elevenlabs
+                                          {:model "eleven_multilingual_v2"})}
           paths         (with-redefs [tts/elevenlabs-tts
-                                      (fn [_ _]
+                                      (fn [_]
                                         (if (compare-and-set! synthesized?_ false true)
                                           input
                                           (throw (ex-info "Cache hit synthesized twice" {}))))]
-                          [(tts/caching-elevenlabs-tts args text)
-                           (tts/caching-elevenlabs-tts args text)])]
+                          [(tts/caching-elevenlabs-tts args)
+                           (tts/caching-elevenlabs-tts args)])]
       (is (= {:same-path?     true
               :content        "complete audio"
               :stream-closed? true
@@ -240,21 +396,25 @@
 
 (deftest removes-incomplete-elevenlabs-cache-file
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-elevenlabs-broken-cache-"}]
-    (let [compressed (let [out (java.io.ByteArrayOutputStream.)]
-                       (with-open [gzip (java.util.zip.GZIPOutputStream. out)]
-                         (.write gzip (.getBytes "partial audio")))
-                       (.toByteArray out))
-          truncated  (byte-array (take (- (alength compressed) 4) compressed))
-          input      (java.util.zip.GZIPInputStream.
-                      (java.io.ByteArrayInputStream. truncated))
-          error      (with-redefs [tts/elevenlabs-tts (fn [_ _] input)]
-                       (try
-                         (tts/caching-elevenlabs-tts
-                          {:tts-cache-dir (str cache-dir)}
-                          "Broken stream")
-                         nil
-                         (catch Exception e
-                           e)))]
+    (let [compressed     (let [out (java.io.ByteArrayOutputStream.)]
+                           (with-open [gzip (java.util.zip.GZIPOutputStream. out)]
+                             (.write gzip (.getBytes "partial audio")))
+                           (.toByteArray out))
+          truncated      (byte-array (take (- (alength compressed) 4) compressed))
+          input          (java.util.zip.GZIPInputStream.
+                          (java.io.ByteArrayInputStream. truncated))
+          prepared-input (speech/prepared-input
+                          "Broken stream"
+                          :elevenlabs
+                          {:model "eleven_multilingual_v2"})
+          error          (with-redefs [tts/elevenlabs-tts (fn [_] input)]
+                           (try
+                             (tts/caching-elevenlabs-tts
+                              {:tts-cache-dir  (str cache-dir)
+                               :prepared-input prepared-input})
+                             nil
+                             (catch Exception e
+                               e)))]
       (is (= {:error-class java.io.EOFException
               :cache-files 0}
              {:error-class (class error)
@@ -262,21 +422,25 @@
 
 (deftest abandons-timed-out-elevenlabs-cache-write
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-elevenlabs-timeout-cache-"}]
-    (let [output (java.io.PipedOutputStream.)
-          input  (java.io.PipedInputStream. output)
-          error  (try
-                   (with-redefs-fn
-                     {(private-var 'tts-cache-timeout-ms) 20
-                      #'tts/elevenlabs-tts                (fn [_ _] input)}
-                     #(try
-                        (tts/caching-elevenlabs-tts
-                         {:tts-cache-dir (str cache-dir)}
-                         "Blocked stream")
-                        nil
-                        (catch Exception e
-                          e)))
-                   (finally
-                     (.close output)))]
+    (let [output         (java.io.PipedOutputStream.)
+          input          (java.io.PipedInputStream. output)
+          prepared-input (speech/prepared-input
+                          "Blocked stream"
+                          :elevenlabs
+                          {:model "eleven_multilingual_v2"})
+          error          (try
+                           (with-redefs-fn
+                             {(private-var 'tts-cache-timeout-ms) 20
+                              #'tts/elevenlabs-tts                (fn [_] input)}
+                             #(try
+                                (tts/caching-elevenlabs-tts
+                                 {:tts-cache-dir  (str cache-dir)
+                                  :prepared-input prepared-input})
+                                nil
+                                (catch Exception e
+                                  e)))
+                           (finally
+                             (.close output)))]
       (Thread/sleep 50)
       (is (= {:message     "TTS cache write timed out"
               :data        {:timeout-ms 20}
@@ -351,10 +515,12 @@
         preview-a  (tts/effective-provider-config {:db database-a}
                                                   :openai :browser-preview)
         identity   (fn [config suffix]
-                     (tts/hash-text [:fairy.box.tts/openai
-                                     (:options config)
-                                     "Hello"]
-                                    suffix))]
+                     (let [options  (:options config)
+                           prepared (speech/prepared-input "Hello" :openai options)]
+                       (tts/hash-text [:fairy.box.tts/openai
+                                       options
+                                       (speech/cache-identity prepared)]
+                                      suffix)))]
     (is (= {:credential-change-same?   true
             :voice-change-different?   true
             :speed-change-different?   true
@@ -443,22 +609,31 @@
 
 (deftest reveals-masked-home-assistant-token-only-at-http-boundary
   (let [request_ (atom nil)
-        result   (with-redefs [hc/post
-                               (fn [url opts]
-                                 (reset! request_
-                                         {:url url
-                                          :authorization
-                                          (get-in opts
-                                                  [:headers "authorization"])})
-                                 {:body (util/->json
-                                         {:url "http://audio.test/tts.mp3"})})]
-                   (tts/home-assistant-tts
-                    {:db {:settings
-                          {:homeassistant
-                           {:ha-url          "http://ha.test"
-                            :ha-bearer-token "ha-probe-token"}}}}
-                    "Hello"))]
+        result
+        (with-redefs [hc/post
+                      (fn [url opts]
+                        (reset! request_
+                                {:url  url
+                                 :body (util/<-json (:body opts))
+                                 :authorization
+                                 (get-in opts [:headers "authorization"])})
+                        {:body (util/->json
+                                {:url "http://audio.test/tts.mp3"})})]
+          (tts/home-assistant-tts
+           {:db {:settings
+                 {:homeassistant
+                  {:ha-url          "http://ha.test"
+                   :ha-bearer-token "ha-probe-token"}}}
+            :prepared-input
+            (speech/prepared-input
+             (speech/plan [(speech/text "Hello")
+                           (speech/pause 1000)
+                           (speech/text "again")])
+             :ha
+             {})}))]
     (is (= {:request                   {:url           "http://ha.test/api/tts_get_url"
+                                        :body          {:message   "Hello...\nagain"
+                                                        :engine_id "tts.piper"}
                                         :authorization "Bearer ha-probe-token"}
             :result                    "http://audio.test/tts.mp3"
             :database-access-redacted? true}

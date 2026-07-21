@@ -12,8 +12,12 @@
   {:providers
    {:google-cloud
     {:catalog {:languages ["de-DE" "en-US"]
-               :voices    [{:id "de-DE-Test" :language-codes ["de-DE"]}
-                           {:id "en-US-Test" :language-codes ["en-US"]}]}
+               :voices    [{:id "de-DE-Standard-A" :language-codes ["de-DE"]}
+                           {:id "de-DE-Wavenet-A" :language-codes ["de-DE"]}
+                           {:id "en-US-Polyglot-1" :language-codes ["en-US"]}
+                           {:id "en-US-Standard-A" :language-codes ["en-US"]}
+                           {:id "en-US-Standard-B" :language-codes ["en-US"]}
+                           {:id "en-US-Wavenet-A" :language-codes ["en-US"]}]}
      :source  :remote}
     :elevenlabs
     {:catalog    {:models [{:id "eleven_multilingual_v2"
@@ -142,8 +146,9 @@
                 :secret-absent      (not (str/includes? html "view-secret-probe"))
                 :provider-controls
                 (every? #(str/includes? html %)
-                        ["google_language_code" "openai_instructions" "openai_speed"
-                         "elevenlabs_output_format" "elevenlabs_speed"])
+                        ["google_language_code" "google_family" "openai_instructions"
+                         "openai_speed" "elevenlabs_output_format"
+                         "elevenlabs_speed"])
                 :unsupported-controls-disabled
                 (count (filter #(and (or (str/includes? % "name=\"elevenlabs-style\"")
                                          (str/includes? % "name=\"elevenlabs-speaker-boost\""))
@@ -236,7 +241,7 @@
               :speed             1.1
               :openai-speed      3.25
               :google-language   "de-DE"
-              :google-voice      "de-DE-Test"
+              :google-voice      "de-DE-Standard-A"
               :untrusted-absent? true
               :unrelated         :kept}
              {:engine          (db/tts-engine @database)
@@ -261,6 +266,63 @@
                                       [:settings :tts :providers :openai])
                               :untrusted))
               :unrelated       (:unrelated @database)})))))
+
+(deftest renders-new-google-options-after-live-save
+  (let [database     (atom (db/migrate-db {:settings {}}))
+        tts-system   {:db-conn       database
+                      :catalog-store ::catalog-store}
+        req          (request database tts-system)
+        save-setting (action 'save-tts-provider-setting-fn)]
+    (with-redefs [tts/ensure-provider-catalogs! (constantly nil)
+                  tts/provider-catalog-snapshot (constantly catalog-snapshot)
+                  tts/credential-status
+                  (fn [_ _] {:configured? true :source :database})]
+      (let [initial-html
+            (h/html->str (view/tts-settings req))
+            family-response
+            (h/html->str
+             (save-setting
+              (assoc req
+                     :query-params {"provider" "google-cloud"
+                                    "field"    "family"}
+                     :body {:google_family "Standard"})))
+            family-html
+            (h/html->str (view/tts-settings req))
+            language-response
+            (h/html->str
+             (save-setting
+              (assoc req
+                     :query-params {"provider" "google-cloud"
+                                    "field"    "language-code"}
+                     :body {:google_language_code "de-DE"})))
+            language-html
+            (h/html->str (view/tts-settings req))]
+        (is (= {:initial-polyglot?         true
+                :family-signal?            true
+                :family-selected?          true
+                :family-voices-replaced?   true
+                :language-signal?          true
+                :language-selected?        true
+                :language-voices-replaced? true}
+               {:initial-polyglot?
+                (str/includes? initial-html "en-US-Polyglot-1")
+                :family-signal?
+                (str/includes? family-response "en-US-Standard-A")
+                :family-selected?
+                (str/includes? family-html "value=\"Standard\" selected")
+                :family-voices-replaced?
+                (and (str/includes? family-html "en-US-Standard-A")
+                     (str/includes? family-html "en-US-Standard-B")
+                     (not (str/includes? family-html "en-US-Wavenet-A"))
+                     (not (str/includes? family-html "en-US-Polyglot-1")))
+                :language-signal?
+                (str/includes? language-response "de-DE-Standard-A")
+                :language-selected?
+                (str/includes? language-html "value=\"de-DE\" selected")
+                :language-voices-replaced?
+                (and (str/includes? language-html "de-DE-Standard-A")
+                     (not (str/includes? language-html "de-DE-Wavenet-A"))
+                     (not (str/includes? language-html "en-US-Standard-A")))}))))))
 
 (deftest saves-only-boolean-track-announcement-values
   (let [database (atom (db/migrate-db {:settings {}}))

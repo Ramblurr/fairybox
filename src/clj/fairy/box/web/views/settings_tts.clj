@@ -121,6 +121,7 @@
 
 (defn- tts-component [{:fairy.box/keys [component]}]
   (component :fairy.box.tts/tts))
+
 (defaction save-tts-engine
   [{:fairy.box/keys [component] :as request}]
   (when-let [engine (get tts-engine-by-name (get-in request [:body :tts_engine]))]
@@ -207,6 +208,8 @@
         (let [values (provider-values @db-conn catalog provider field spec value)]
           (when (seq values)
             (db/set-tts-provider-values! db-conn provider values))
+          ;; The database watch owns the serialized structural refresh. This
+          ;; response only updates dependent signals while that refresh is queued.
           (when (and (= :google-cloud provider)
                      (contains? #{"language-code" "family"} field))
             (h/patch-signals (google-selection-signals @db-conn))))))))

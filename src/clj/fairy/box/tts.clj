@@ -486,7 +486,7 @@
 
 (defn caching-home-assistant-tts
   [{:keys [prepared-input tts-cache-dir] :as sys}]
-  (let [cache-key (:speech-input/value prepared-input)]
+  (let [cache-key [::home-assistant (speech/cache-identity prepared-input)]]
     (if-let [local-url (cache-get tts-cache-dir cache-key)]
       local-url
       (let [remote-url (home-assistant-tts sys)]
@@ -507,7 +507,7 @@
    :body))
 
 (defn caching-mimic3-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
-  (let [cache-key (:speech-input/value prepared-input)]
+  (let [cache-key [::mimic3 (speech/cache-identity prepared-input)]]
     (if-let [local-url (cache-get tts-cache-dir cache-key)]
       local-url
       (let [in (mimic3-tts sys)]
@@ -537,7 +537,7 @@
 (defn caching-google-cloud-tts
   [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (google-cloud-request-options sys)
-        cache-key [::google-cloud options (:speech-input/value prepared-input)]
+        cache-key [::google-cloud options (speech/cache-identity prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -573,7 +573,7 @@
 
 (defn caching-openai-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (openai-request-options sys)
-        cache-key [::openai options (:speech-input/value prepared-input)]
+        cache-key [::openai options (speech/cache-identity prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -617,7 +617,7 @@
 (defn caching-elevenlabs-tts
   [{:keys [prepared-input tts-cache-dir] :as sys}]
   (let [options   (elevenlabs-options sys)
-        cache-key [::elevenlabs options (:speech-input/value prepared-input)]
+        cache-key [::elevenlabs options (speech/cache-identity prepared-input)]
         suffix    (cache-suffix sys)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
       local-url
@@ -947,12 +947,12 @@
 (comment
   (require '[ol.vinyl :as vinyl])
 
-  (defn play-tts-test [tts-fn args prompt]
-    (let [audio-path      (tts-fn
-                           (assoc args
-                                  :tts-cache-dir
-                                  (System/getProperty "java.io.tmpdir"))
-                           prompt)
+  (defn play-tts-test [provider tts-fn args prompt]
+    (let [args            (assoc args
+                                 :tts-cache-dir
+                                 (System/getProperty "java.io.tmpdir"))
+          prepared-input  (speech/prepared-input prompt provider args)
+          audio-path      (tts-fn (assoc args :prepared-input prepared-input))
           player          (vinyl/create-player)
           playback-result (promise)]
       (try
@@ -973,6 +973,7 @@
           (vinyl/release-player! player)))))
 
   (play-tts-test
+   :openai
    caching-openai-tts
    {:model        "gpt-4o-mini-tts"
     :voice        "marin"
@@ -980,6 +981,7 @@
    "Hello world")
 
   (play-tts-test
+   :elevenlabs
    caching-elevenlabs-tts
    {:model          "eleven_multilingual_v2"
     :voice-id       "JBFqnCBsd6RMkjVDRZzb"

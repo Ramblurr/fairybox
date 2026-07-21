@@ -11,6 +11,11 @@
    [dev.onionpancakes.chassis.core :as chassis]))
 
 (def renderer-version 1)
+(def cache-identity-keys
+  [:speech-renderer/version
+   :speech-input/profile
+   :speech-input/field
+   :speech-input/value])
 (def maximum-pause-ms 3000)
 (def elevenlabs-break-models
   #{"eleven_multilingual_v2"
@@ -151,10 +156,12 @@
     segment))
 
 (defn plan
-  "Returns a normalized speech plan containing `segments`."
+  "Returns a validated speech plan containing `segments`."
   [segments]
-  (:plan (normalization {:speech/type     :plan
-                         :speech/segments segments})))
+  (let [speech-plan {:speech/type     :plan
+                     :speech/segments segments}]
+    (normalization speech-plan)
+    speech-plan))
 
 (defn normalize
   "Returns `input` as a validated and normalized speech plan.
@@ -297,6 +304,11 @@
                                 :text)
      :speech-input/value      value
      :speech-input/degraded   degraded}))
+
+(defn cache-identity
+  "Returns the output-affecting cache identity from `prepared-input`."
+  [prepared-input]
+  (select-keys prepared-input cache-identity-keys))
 
 (comment
   (def example
