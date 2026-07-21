@@ -151,7 +151,7 @@
               :tag :a
               :icon icon
               :icon-class (css :h-8 :w-8 :shrink-0 :text-smoky-800 [:dark :text-smoky-400])
-              :class (css :group :flex :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold :cursor-pointer))])
+              :class (css :group :flex :items-center :gap-x-3 :rounded-md :p-2 :text-sm :leading-6 :font-semibold :cursor-pointer))])
 
 (defn settings-view [{:keys [url-for] :as _req}]
   [:div {:class [(css :max-w-5xl) ui/$page-margin]}
