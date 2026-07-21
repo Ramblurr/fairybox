@@ -7,6 +7,8 @@
    [fairy.box.audio.system2 :as audio]
    [fairy.box.media-test-utils :as media]
    [fairy.box.playback-limits :as limits]
+   [fairy.box.tts :as tts]
+   [fairy.box.tts.speech :as speech]
    [jp.nijohando.event :as ev]
    [ol.vinyl :as mp])
   (:import
@@ -101,6 +103,106 @@
                :album  "Days with Frog and Toad"
                :artist "Arnold Lobel"}]
              metadata)))))
+
+(deftest builds-semantic-announcements-from-vinyl-metadata
+  (let [announcement (fn [meta mrl]
+                       (audio/announcement-for-track
+                        {:mrl  mrl
+                         :meta meta}))]
+    (is (= {:leading-zero
+            (speech/plan
+             [(speech/text "Number 1, \"Introduction\"")])
+            :numbered-total
+            (speech/plan
+             [(speech/text "Number 1, \"Introduction\"")])
+            :numeric
+            (speech/plan
+             [(speech/text "Number 8, \"Introduction\"")])
+            :invalid-number
+            (speech/plan
+             [(speech/text "\"Introduction\"")])
+            :missing-number
+            (speech/plan
+             [(speech/text "\"Introduction\"")])
+            :fallback-title
+            (speech/plan
+             [(speech/text "\"Fallback Title\"")])}
+           {:leading-zero
+            (announcement #:meta{:title        "Introduction"
+                                 :track-number "01"}
+                          "file:///media/01-Introduction.ogg")
+            :numbered-total
+            (announcement #:meta{:title        "Introduction"
+                                 :track-number "01/22"}
+                          "file:///media/01-Introduction.ogg")
+            :numeric
+            (announcement #:meta{:title        "Introduction"
+                                 :track-number 8}
+                          "file:///media/08-Introduction.ogg")
+            :invalid-number
+            (announcement #:meta{:title        "Introduction"
+                                 :track-number "side-a"}
+                          "file:///media/Introduction.ogg")
+            :missing-number
+            (announcement #:meta{:title "Introduction"}
+                          "file:///media/Introduction.ogg")
+            :fallback-title
+            (announcement {}
+                          "file:///media/Fallback%20Title.ogg")}))))
+
+(deftest announces-and-plays-tracks-in-numeric-order
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-track-announcements-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          audio-track        {:bit-rate          224000
+                              :channels          2
+                              :codec             1651666806
+                              :codec-description "Vorbis Audio"
+                              :codec-name        "vorb"
+                              :description       nil
+                              :id                0
+                              :language          nil
+                              :level             -1
+                              :profile           -1
+                              :rate              44100}
+          track              (fn [filename title track-number]
+                               {:mrl          (str "file:///media/" filename)
+                                :meta         (cond-> #:meta{:title title}
+                                                track-number
+                                                (assoc :meta/track-number
+                                                       track-number))
+                                :duration     60914
+                                :audio-tracks [audio-track]
+                                :media-type   :media-type/file
+                                :parse-status :media-parsed-status/done})
+          two                (track "two.ogg" "Two" "02/12")
+          ten                (track "ten.ogg" "Ten" "10")
+          unknown            (track "unknown.ogg" "Unknown" nil)
+          dispatches_        (atom [])]
+      (with-redefs [mp/parse-meta
+                    (fn [_ _]
+                      (doto (promise)
+                        (deliver [ten unknown two])))
+                    tts/tts
+                    (fn [_ plan]
+                      (str "tts://"
+                           (get-in plan
+                                   [:speech/segments 0 :segment/text])))
+                    mp/dispatch
+                    (fn [player command & {:as options}]
+                      (swap! dispatches_ conj [player command options]))]
+        (.join ^Thread
+         (audio/play-path!
+          {:player   :player
+           :settings settings}
+          {:item-path           "audiobooks/Author One/Book One"
+           :announce-per-track? true}))
+        (is (= [[:player :playback/clear-all nil]
+                [:player :playback/append
+                 {:paths ["tts://Number 2, \"Two\"" two
+                          "tts://Number 10, \"Ten\"" ten
+                          "tts://\"Unknown\"" unknown]}]
+                [:player :playback/advance nil]]
+               @dispatches_))))))
 
 (deftest publishes-queue-change-after-updating-state
   (let [events (async/chan 1)

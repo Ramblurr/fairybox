@@ -20,54 +20,74 @@
       (throw (ex-info "TTS private var not found" {:symbol symbol}))))
 
 (deftest creates-semantic-metadata-speech-plans
-  (let [one-title    (tts/metadata->speech [{:title "Introduction"}])
-        shared-album (tts/metadata->speech [{:album "Stories"
-                                             :title "Introduction"}
-                                            {:album "Stories"
-                                             :title "Tomorrow"}])
-        mixed-albums (tts/metadata->speech [{:album "Stories"
-                                             :title "Introduction"}
-                                            {:album "Other"
-                                             :title "Tomorrow"}])
-        special      (tts/metadata->speech [{:album "2 < 3 & 5 > 4"
-                                             :title "A < B & C"}])
-        track        (tts/tts-track-speech {:title "Introduction"}
-                                           {:index 0})]
+  (let [one-title      (tts/metadata->speech [{:title "Introduction"}])
+        shared-album   (tts/metadata->speech [{:album "Stories"
+                                               :title "Introduction"}
+                                              {:album "Stories"
+                                               :title "Tomorrow"}])
+        mixed-albums   (tts/metadata->speech [{:album "Stories"
+                                               :title "Introduction"}
+                                              {:album "Other"
+                                               :title "Tomorrow"}])
+        special        (tts/metadata->speech [{:album "2 < 3 & 5 > 4"
+                                               :title "A < B & C"}])
+        indexed-track  (tts/tts-track-speech {:title "Introduction"}
+                                             {:index 0})
+        numbered-track (tts/tts-track-speech
+                        {:album        "Stories"
+                         :artist       "Arnold Lobel"
+                         :title        "Introduction"
+                         :track-number 7}
+                        {:index        0
+                         :with-album?  true
+                         :with-artist? true})
+        unnumbered     (tts/tts-track-speech {:title "Introduction"} {})]
     (is (= {:one-title
             (speech/plan [(speech/text "This one has ")
                           (speech/pause 1000)
-                          (speech/text "Introduction")])
+                          (speech/text "\"Introduction\"")])
             :shared-album
-            (speech/plan [(speech/text "This one is Stories")
+            (speech/plan [(speech/text "This one is \"Stories\"")
                           (speech/pause 1000)
                           (speech/text "1, ")
                           (speech/pause 500)
-                          (speech/text "Introduction")
+                          (speech/text "\"Introduction\"")
                           (speech/pause 500)
                           (speech/text " and 2, ")
                           (speech/pause 500)
-                          (speech/text "Tomorrow")])
+                          (speech/text "\"Tomorrow\"")])
             :mixed-albums
             (speech/plan [(speech/text "This one has ")
                           (speech/pause 1000)
                           (speech/text "1, ")
                           (speech/pause 500)
-                          (speech/text "Introduction")
+                          (speech/text "\"Introduction\"")
                           (speech/pause 500)
                           (speech/text " and 2, ")
                           (speech/pause 500)
-                          (speech/text "Tomorrow")])
+                          (speech/text "\"Tomorrow\"")])
             :special
-            (speech/plan [(speech/text "This one is 2 < 3 & 5 > 4")
+            (speech/plan [(speech/text
+                           "This one is \"2 < 3 & 5 > 4\"")
                           (speech/pause 1000)
-                          (speech/text "A < B & C")])
-            :track
-            (speech/plan [(speech/text "Number 1 Introduction")])}
-           {:one-title    one-title
-            :shared-album shared-album
-            :mixed-albums mixed-albums
-            :special      special
-            :track        track}))))
+                          (speech/text "\"A < B & C\"")])
+            :indexed-track
+            (speech/plan
+             [(speech/text "Number 1, \"Introduction\"")])
+            :numbered-track
+            (speech/plan
+             [(speech/text "Number 7, \"Introduction\"")
+              (speech/text " by Arnold Lobel")
+              (speech/text " from the album \"Stories\"")])
+            :unnumbered
+            (speech/plan [(speech/text "\"Introduction\"")])}
+           {:one-title      one-title
+            :shared-album   shared-album
+            :mixed-albums   mixed-albums
+            :special        special
+            :indexed-track  indexed-track
+            :numbered-track numbered-track
+            :unnumbered     unnumbered}))))
 
 (deftest reads-openai-key-from-development-key-file
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-openai-key-"}]

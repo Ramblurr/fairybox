@@ -43,14 +43,6 @@
    fs/file-name
    fs/strip-ext))
 
-(defn announcment-for-track [{:keys [track-number title mrl]}]
-  (let [title (if (str/blank? title)
-                (mrl->title mrl)
-                title)]
-    (if (str/blank? track-number)
-      (str "<speak>" title "</speak>")
-      (str "<speak><say-as interpret-as=\"cardinal\">" track-number "</say-as> " title "</speak>"))))
-
 (defn- play-now [{:keys [player] :as _sys} paths]
   (tap> [:playing-now paths])
   (mp/dispatch player :playback/clear-all)
@@ -79,6 +71,24 @@
    :album  (non-blank-string (:meta/album meta))
    :artist (non-blank-string (:meta/artist meta))})
 
+(def ^:private track-number-pattern
+  #"\s*0*(\d+)(?:\s*/\s*\d+)?\s*")
+
+(defn- normalized-track-number [value]
+  (when-let [[_ number] (some->> value
+                                 str
+                                 (re-matches track-number-pattern))]
+    (parse-long number)))
+
+(defn- track-number [{:keys [meta]}]
+  (normalized-track-number (:meta/track-number meta)))
+
+(defn announcement-for-track [track]
+  (tts/tts-track-speech
+   (assoc (track->metadata track)
+          :track-number (track-number track))
+   {}))
+
 (defn metadata-for [{:keys [settings] :as sys} item-path]
   (let [path (when item-path
                (browse/canonicalize-path settings item-path))]
@@ -100,11 +110,14 @@
   (util/thread
     (try
       (when-let [tracks (expand-path sys path)]
-        (let [announcements (->> tracks
-                                 (sort-by #(-> % :meta :track-number))
-                                 (map announcment-for-track)
-                                 (mapv  #(tts/tts (assoc sys
-                                                         :tts-cache-dir (tts/tts-cache-dir (:settings sys))) %)))
+        (let [tracks        (sort-by #(or (track-number %) Long/MAX_VALUE)
+                                     tracks)
+              tts-system    (assoc sys
+                                   :tts-cache-dir
+                                   (tts/tts-cache-dir (:settings sys)))
+              announcements (mapv #(tts/tts tts-system
+                                            (announcement-for-track %))
+                                  tracks)
               new-tracks    (interleave announcements tracks)]
           (play-now sys new-tracks)))
       (catch Exception e

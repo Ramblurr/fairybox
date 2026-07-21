@@ -820,12 +820,15 @@
     (when (= 1 (count albums))
       (first albums))))
 
+(defn- quoted-title [title]
+  (str "\"" title "\""))
+
 (defn metadata->speech [metadata]
   (let [album  (choose-album metadata)
-        titles (mapv #(str (or (:title %) "")) metadata)
+        titles (mapv #(quoted-title (str (or (:title %) ""))) metadata)
         segments
         (into [(speech/text (if album
-                              (str "This one is " album)
+                              (str "This one is " (quoted-title album))
                               "This one has "))
                (speech/pause 1000)]
               (if (> (count titles) 1)
@@ -843,16 +846,21 @@
     (speech/plan segments)))
 
 (defn tts-track-speech
-  [{:keys [title artist album]}
+  [{:keys [title artist album track-number]}
    {:keys [with-artist? with-album? index]
     :or   {with-artist? false
            with-album?  false}}]
-  (speech/plan
-   (cond-> [(speech/text (str "Number " (inc index) " " (or title "")))]
-     (and with-artist? (some-> artist str str/trim not-empty))
-     (conj (speech/text (str " by " artist)))
-     (and with-album? (some-> album str str/trim not-empty))
-     (conj (speech/text (str " from the album " album))))))
+  (let [number (or track-number (some-> index inc))]
+    (speech/plan
+     (cond-> [(speech/text
+               (str (when (some? number)
+                      (str "Number " number ", "))
+                    (quoted-title (or title ""))))]
+       (and with-artist? (some-> artist str str/trim not-empty))
+       (conj (speech/text (str " by " artist)))
+       (and with-album? (some-> album str str/trim not-empty))
+       (conj (speech/text
+              (str " from the album " (quoted-title album))))))))
 
 (defn tts-track [sys metadata opts]
   (try
