@@ -160,6 +160,54 @@
                 :ordinary-back-link
                 (str/includes? html "href=\"/settings\"")}))))))
 
+(deftest renders-and-clears-audio-cache-with-human-readable-size
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-settings-audio-cache-"}]
+    (let [database   (atom (db/migrate-db {:settings {}}))
+          tts-system {:db-conn       database
+                      :tts-cache-dir (str cache-dir)}
+          req        (request database tts-system)
+          clear!     (action 'clear-tts-audio-cache-fn)]
+      (fs/write-bytes (fs/path cache-dir (tts/hash-text :normal))
+                      (byte-array 1024))
+      (fs/write-bytes (fs/path cache-dir
+                               (tts/hash-text :preview tts/preview-cache-suffix))
+                      (byte-array 512))
+      (spit (fs/file cache-dir "provider-catalogs.edn") "catalog")
+      (with-redefs [tts/ensure-provider-catalogs! (constantly nil)
+                    tts/provider-catalog-snapshot (constantly catalog-snapshot)
+                    tts/credential-status
+                    (fn [_ _] {:configured? false :source nil})]
+        (let [page          (h/html->str (view/tts-settings req))
+              response      (h/html->str (clear! req))
+              remaining     (->> (fs/list-dir cache-dir)
+                                 (map fs/file-name)
+                                 set)
+              response-data (str/includes?
+                             response
+                             "0 cached audio files \\u00b7 0 bytes")]
+          (is (= {:card-rendered?       true
+                  :human-readable-size? true
+                  :clear-action?        true
+                  :dynamic-disabled?    true
+                  :cleared-signals?     true
+                  :clear-status?        true
+                  :cache-stats          {:file-count 0 :total-bytes 0}
+                  :remaining            #{"provider-catalogs.edn"}}
+                 {:card-rendered?       (str/includes? page "id=\"tts-audio-cache\"")
+                  :human-readable-size? (str/includes?
+                                         page
+                                         "2 cached audio files · 1.5 KB")
+                  :clear-action?        (str/includes? page ">Clear audio cache</button>")
+                  :dynamic-disabled?    (str/includes?
+                                         page
+                                         "data-attr:disabled=\"$_tts_cache_file_count === 0\"")
+                  :cleared-signals?     response-data
+                  :clear-status?        (str/includes?
+                                         response
+                                         "Cleared 2 cached audio files.")
+                  :cache-stats          (tts/audio-cache-stats tts-system)
+                  :remaining            remaining})))))))
+
 (deftest renders-refresh-started-event-as-transient-status
   (let [database          (atom (db/migrate-db {:settings {}}))
         tts-system        {:db-conn database}

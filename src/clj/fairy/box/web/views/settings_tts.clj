@@ -122,6 +122,32 @@
 (defn- tts-component [{:fairy.box/keys [component]}]
   (component :fairy.box.tts/tts))
 
+(def ^:private file-size-units
+  ["bytes" "KB" "MB" "GB" "TB" "PB" "EB"])
+
+(defn- human-file-size [bytes]
+  (loop [size       (double bytes)
+         unit-index 0]
+    (if (or (< size 1024.0)
+            (= unit-index (dec (count file-size-units))))
+      (if (zero? unit-index)
+        (str bytes (if (= 1 bytes) " byte" " bytes"))
+        (String/format java.util.Locale/ROOT
+                       "%.1f %s"
+                       (object-array [size (nth file-size-units unit-index)])))
+      (recur (/ size 1024.0) (inc unit-index)))))
+
+(defn- cache-summary [{:keys [file-count total-bytes]}]
+  (str file-count
+       " cached audio "
+       (if (= 1 file-count) "file" "files")
+       " · "
+       (human-file-size total-bytes)))
+
+(defn- cache-signals [{:keys [file-count] :as stats}]
+  {:_tts_cache_file_count file-count
+   :_tts_cache_summary    (cache-summary stats)})
+
 (defaction save-tts-engine
   [{:fairy.box/keys [component] :as request}]
   (when-let [engine (get tts-engine-by-name (get-in request [:body :tts_engine]))]
@@ -133,6 +159,19 @@
   (when-let [[announce?] (parsed-boolean (:tts_announce_tracks body))]
     (db/set-announce-tracks! (component :fairy.box.db/db) announce?))
   nil)
+
+(defaction clear-tts-audio-cache [request]
+  (if-let [tts-system (tts-component request)]
+    (let [removed-count (tts/clear-audio-cache! tts-system)
+          stats         (tts/audio-cache-stats tts-system)
+          status        (if (zero? (:file-count stats))
+                          (str "Cleared " removed-count " cached audio "
+                               (if (= 1 removed-count) "file." "files."))
+                          "Some cached audio files remain.")]
+      (h/patch-signals
+       (assoc (cache-signals stats) :_tts_cache_status status)))
+    (h/patch-signals
+     {:_tts_cache_status "The TTS audio cache is unavailable."})))
 
 (defn- current-provider-catalog [request provider]
   (let [tts-system (tts-component request)]
@@ -297,8 +336,11 @@
                                :browser "Browser preview ready."
                                :fairybox "Preview sent to Fairybox."
                                :both "Browser preview ready and sent to Fairybox.")
-              signals        {:tts_preview_url    preview-url
-                              :tts_preview_status status}]
+              signals        (merge
+                              {:tts_preview_url    preview-url
+                               :tts_preview_status status}
+                              (cache-signals
+                               (tts/audio-cache-stats tts-system)))]
           (h/patch-signals
            (cond-> signals
              browser-result
@@ -387,15 +429,16 @@
       description]]]
    content))
 
-(defn- small-action-button [label action disabled?]
-  [:button {:type          "button"
-            :disabled      disabled?
-            :data-on:click action
-            :class         (css :rounded-md :border :border-smoky-300 :px-3 :py-2
-                                :text-sm :font-semibold :text-smoky-800
-                                [:hover :bg-smoky-100]
-                                [:disabled :cursor-not-allowed :opacity-50]
-                                [:dark :border-smoky-700 :text-smoky-200])}
+(defn- small-action-button [label action disabled? & [attrs]]
+  [:button (merge {:type          "button"
+                   :disabled      disabled?
+                   :data-on:click action
+                   :class         (css :rounded-md :border :border-smoky-300 :px-3 :py-2
+                                       :text-sm :font-semibold :text-smoky-800
+                                       [:hover :bg-smoky-100]
+                                       [:disabled :cursor-not-allowed :opacity-50]
+                                       [:dark :border-smoky-700 :text-smoky-200])}
+                  attrs)
    label])
 
 (defn- credential-description [{:keys [configured? source]}]
@@ -741,6 +784,26 @@
             :data-effect (preview-audio-effect)
             :class       (css :mt-4 :w-full)}]))
 
+(defn- audio-cache-card [{:keys [file-count] :as stats}]
+  (settings-card
+   {:id          "tts-audio-cache"
+    :title       "TTS audio cache"
+    :description "Generated speech is cached so Fairybox can reuse it without calling the provider again."}
+   [:div {:class (css :mt-4 :flex :flex-wrap :items-center :gap-4)}
+    [:p {:data-text "$_tts_cache_summary"
+         :class     (css :text-sm :font-medium :text-smoky-800
+                         [:dark :text-smoky-200])}
+     (cache-summary stats)]
+    (small-action-button
+     "Clear audio cache"
+     (str "@post('" clear-tts-audio-cache "')")
+     (zero? file-count)
+     {:data-attr:disabled "$_tts_cache_file_count === 0"})]
+   [:p {:aria-live "polite"
+        :data-text "$_tts_cache_status"
+        :class     (css :mt-3 :text-sm :text-smoky-700
+                        [:dark :text-smoky-300])}]))
+
 (defn- page-signals [settings]
   (let [google     (get-in settings [:providers :google-cloud])
         openai     (get-in settings [:providers :openai])
@@ -800,10 +863,14 @@
                                              (when tts-system
                                                (tts/credential-status
                                                 tts-system provider)))])))
-                                  tts/configurable-providers)]
+                                  tts/configurable-providers)
+        cache-stats         (tts/audio-cache-stats tts-system)]
     [:div {:id "active-tab"}
      [:div {:class                   [ui/$page-margin
                                       (css :mx-auto :max-w-5xl)]
+            :data-signals            (h/edn->json
+                                      (assoc (cache-signals cache-stats)
+                                             :_tts_cache_status ""))
             :data-signals__ifmissing (h/edn->json (page-signals settings))}
       [:div
        [:h2 {:class (css :text-2xl :font-bold :text-smoky-900
@@ -825,6 +892,8 @@
           :checked? (:announce-tracks? settings)
           :data-bind "tts_announce_tracks"
           :change-action (str "@post('" save-track-announcements "')"))])]
+      [:div {:class (css :mt-6)}
+       (audio-cache-card cache-stats)]
       [:div {:class (css :mt-6)}
        (ui/select-input
         :name "tts-engine"

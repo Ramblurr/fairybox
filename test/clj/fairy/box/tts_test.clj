@@ -562,6 +562,39 @@
             (every? #(not (contains? % :credential))
                     [(:options normal-a) (:options normal-b)])}))))
 
+(deftest reports-and-clears-only-tts-audio-cache-files
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-audio-cache-test-"}]
+    (let [normal-name  (tts/hash-text :normal)
+          preview-name (tts/hash-text :preview tts/preview-cache-suffix)
+          system       {:tts-cache-dir (str cache-dir)}]
+      (spit (fs/file cache-dir normal-name) "1234")
+      (spit (fs/file cache-dir preview-name) "123456")
+      (spit (fs/file cache-dir "provider-catalogs.edn") "catalog")
+      (spit (fs/file cache-dir "cache-write.tmp") "temporary")
+      (fs/create-dir (fs/path cache-dir "nested.tts-cache"))
+      (let [before        (tts/audio-cache-stats system)
+            removed-count (tts/clear-audio-cache! system)
+            after         (tts/audio-cache-stats system)
+            remaining     (->> (fs/list-dir cache-dir)
+                               (map fs/file-name)
+                               set)
+            missing-dir   {:tts-cache-dir
+                           (str (fs/path cache-dir "missing"))}]
+        (is (= {:before          {:file-count 2 :total-bytes 10}
+                :removed-count   2
+                :after           {:file-count 0 :total-bytes 0}
+                :remaining       #{"provider-catalogs.edn"
+                                   "cache-write.tmp"
+                                   "nested.tts-cache"}
+                :missing-stats   {:file-count 0 :total-bytes 0}
+                :missing-removed 0}
+               {:before          before
+                :removed-count   removed-count
+                :after           after
+                :remaining       remaining
+                :missing-stats   (tts/audio-cache-stats missing-dir)
+                :missing-removed (tts/clear-audio-cache! missing-dir)}))))))
+
 (deftest validates-contained-preview-cache-files
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-preview-cache-test-"}]
     (let [name    (tts/hash-text :valid-preview tts/preview-cache-suffix)

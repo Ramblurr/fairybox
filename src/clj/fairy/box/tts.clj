@@ -367,6 +367,48 @@
 (defn tts-cache-dir [settings]
   (str (browse/media-dir settings) "/tts-cache"))
 
+(defn- audio-cache-file? [^File file]
+  (and (.isFile file)
+       (str/ends-with? (.getName file) normal-cache-suffix)))
+
+(defn- audio-cache-files [cache-dir]
+  (if cache-dir
+    (let [^File cache-root (io/file cache-dir)]
+      (if (.isDirectory cache-root)
+        (into [] (filter audio-cache-file?) (.listFiles cache-root))
+        []))
+    []))
+
+(defn audio-cache-stats
+  "Returns the generated TTS audio file count and total byte size.
+
+  Non-audio cache entries, including the provider catalog, are excluded."
+  [{:keys [tts-cache-dir]}]
+  (let [files (audio-cache-files tts-cache-dir)]
+    {:file-count  (count files)
+     :total-bytes (reduce (fn [total ^File file]
+                            (+ total (.length file)))
+                          0
+                          files)}))
+
+(defn clear-audio-cache!
+  "Deletes generated TTS audio files and returns the number removed.
+
+  Non-audio cache entries, including the provider catalog, remain untouched."
+  [{:keys [tts-cache-dir]}]
+  (reduce (fn [deleted-count ^File file]
+            (try
+              (if (Files/deleteIfExists (.toPath file))
+                (inc deleted-count)
+                deleted-count)
+              (catch Exception error
+                (log/warn error
+                          "Unable to delete TTS audio cache file"
+                          (.getName file))
+                deleted-count)))
+          0
+          (audio-cache-files tts-cache-dir)))
+
 (defn hash-text
   ([text]
    (hash-text text normal-cache-suffix))
