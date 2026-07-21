@@ -11,7 +11,7 @@
    :page/settings           {:path "/settings"}
    :page.settings/rfid-link {:path "/settings/rfid"}
    :page.settings/browse    {:path "/settings/browse"}
-   :page.settings/playback  {:path "/settings/playback"}})
+   :page.settings/device    {:path "/settings/device"}})
 
 (defn url-for [r]
   (get-in pages [r :path] "/404"))

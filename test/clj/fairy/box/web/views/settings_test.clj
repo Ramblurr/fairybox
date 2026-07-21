@@ -5,6 +5,7 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
    [fairy.box.media-test-utils :as media]
+   [fairy.box.web.views :as views]
    [fairy.box.web.views.settings :as settings-view]
    [hyperlith.core :as h]))
 
@@ -14,14 +15,15 @@
 (defn- play-action-fn []
   (ns-resolve 'fairy.box.web.views.settings 'play-audio-path-fn))
 
-(defn- save-playback-action-fn []
+(defn- save-device-action-fn []
   (ns-resolve 'fairy.box.web.views.settings
-              'save-playback-settings-fn))
+              'save-device-settings-fn))
 
-(defn- playback-request [db-conn]
-  {:url-for             {:page/home     "/"
-                         :page/queue    "/queue"
-                         :page/settings "/settings"}
+(defn- device-request [db-conn]
+  {:url-for             {:page/home            "/"
+                         :page/queue           "/queue"
+                         :page/settings        "/settings"
+                         :page.settings/device "/settings/device"}
    :fairy.box/component {:fairy.box.db/db db-conn}})
 
 (defn- browse-request [tree dir]
@@ -237,7 +239,7 @@
                             :emitted?  false})
                  results)))))))
 
-(deftest playback-settings-use-time-and-brightness-controls
+(deftest device-settings-use-responsive-cards-and-sliders
   (let [db-conn
         (atom {:settings
                {:audio {:min-volume               1
@@ -250,72 +252,96 @@
                         :night-start              "19:45"
                         :card-removal-behavior    :pause
                         :card-return-behavior     :restart}}})
-        req         (playback-request db-conn)
+        req         (device-request db-conn)
         action-path (ns-resolve 'fairy.box.web.views.settings
-                                'save-playback-settings)
+                                'save-device-settings)
         render-page (ns-resolve 'fairy.box.web.views.settings
-                                'render-playback-fn)]
+                                'render-device-fn)]
     (is (= {:action true :render true}
            {:action (some? action-path)
             :render (some? render-page)}))
     (when (and action-path render-page)
-      (let [html              (h/html->str (render-page req))
-            inputs            (re-seq #"<input[^>]+>" html)
-            number-inputs     (filter #(str/includes? % "type=\"number\"")
-                                      inputs)
-            time-inputs       (filter #(str/includes? % "type=\"time\"")
-                                      inputs)
-            playback-bindings ["min_volume" "max_volume"
-                               "max_volume_day" "max_volume_night"
-                               "max_led_brightness_day"
-                               "max_led_brightness_night"
-                               "day_start" "night_start"]
-            card-bindings     ["card_removal_behavior"
-                               "card_return_behavior"]
-            labels            ["Min Volume" "Max Volume"
-                               "Max Volume (Day)" "Max Volume (Night)"
-                               "Max LED Brightness (Day)"
-                               "Max LED Brightness (Night)"
-                               "Day Starts At" "Night Starts At"]
-            card-labels       ["RFID card behavior" "Keep playing"
-                               "Pause playback" "Resume playback"
-                               "Restart the playlist"]
-            radio-inputs      (filter #(str/includes? % "type=\"radio\"")
-                                      inputs)]
-        (is (= {:legacy-layout                true
-                :labels true
-                :form-signals-removed         true
-                :bindings true
+      (let [html            (h/html->str (render-page req))
+            menu-html       (h/html->str
+                             (settings-view/settings-view req))
+            inputs          (re-seq #"<input[^>]+>" html)
+            range-inputs    (filter #(str/includes? % "type=\"range\"")
+                                    inputs)
+            number-inputs   (filter #(str/includes? % "type=\"number\"")
+                                    inputs)
+            time-inputs     (filter #(str/includes? % "type=\"time\"")
+                                    inputs)
+            outputs         (re-seq #"<output[^>]+>[^<]*</output>" html)
+            slider-bindings ["min_volume" "max_volume"
+                             "max_volume_day" "max_volume_night"
+                             "max_led_brightness_day"
+                             "max_led_brightness_night"]
+            time-bindings   ["day_start" "night_start"]
+            card-bindings   ["card_removal_behavior"
+                             "card_return_behavior"]
+            labels          ["Device Settings" "Overall volume"
+                             "Minimum volume" "Safety maximum"
+                             "Day &amp; night profiles" "Day" "Night"
+                             "Starts at" "Maximum volume" "LED brightness"]
+            card-labels     ["RFID card behavior" "Keep playing"
+                             "Pause playback" "Resume playback"
+                             "Restart the playlist"]
+            card-ids        ["overall-volume-settings"
+                             "card-behavior-settings"
+                             "day-night-settings"
+                             "day-profile" "night-profile"]
+            radio-inputs    (filter #(str/includes? % "type=\"radio\"")
+                                    inputs)]
+        (is (= {:device-page         true
+                :device-route        true
+                :menu-link           true
+                :responsive-cards    true
+                :labels              true
+                :signals-initialized true
+                :bindings            true
                 :card-controls
                 {:labels           true
                  :radio-count      4
                  :bindings         true
                  :checked-defaults true}
-                :number-input-count           6
-                :number-limits                true
+                :sliders
+                {:count          6
+                 :number-inputs  0
+                 :limits         true
+                 :current-values true
+                 :endpoints      true}
                 :time-inputs
                 {:count       2
                  :day         true
                  :night       true
                  :minute-step true}
-                :live-save-on-change          true
-                :save-button-removed          true
-                :ordinary-back-link           true
-                :settings-placeholder-removed true
-                :htmx-removed                 true}
-               {:legacy-layout
+                :live-save-on-change true
+                :save-button-removed true
+                :ordinary-back-link  true
+                :legacy-name-removed true
+                :htmx-removed        true}
+               {:device-page
                 (and (str/includes? html "id=\"active-tab\"")
-                     (str/includes? html "id=\"playback-settings\"")
-                     (str/includes? html "Playback Settings"))
-                :labels             (every? #(str/includes? html %) labels)
-                :form-signals-removed
-                (not-any? #(str/includes?
-                            html
-                            (str "data-signals:" % "__ifmissing="))
-                          (concat playback-bindings card-bindings))
+                     (str/includes? html "id=\"device-settings\"")
+                     (str/includes? html "Device Settings"))
+                :device-route
+                (and (= "/settings/device"
+                        (views/url-for :page.settings/device))
+                     (= "/404"
+                        (views/url-for :page.settings/playback)))
+                :menu-link
+                (and (str/includes? menu-html "href=\"/settings/device\"")
+                     (str/includes? menu-html ">Device</span>"))
+                :responsive-cards
+                (every? #(str/includes? html (str "id=\"" % "\""))
+                        card-ids)
+                :labels
+                (every? #(str/includes? html %) labels)
+                :signals-initialized
+                (str/includes? html "data-signals__ifmissing=")
                 :bindings
                 (every? #(str/includes? html (str "data-bind=\"" % "\""))
-                        playback-bindings)
+                        (concat slider-bindings time-bindings))
                 :card-controls
                 {:labels      (every? #(str/includes? html %) card-labels)
                  :radio-count (count radio-inputs)
@@ -328,17 +354,28 @@
                                        (str/includes? % "checked"))
                                  radio-inputs))
                          ["pause" "restart"])}
-                :number-input-count (count number-inputs)
-                :number-limits
-                (every? #(and (str/includes? % "min=\"0\"")
-                              (str/includes? % "max=\"100\"")
-                              (str/includes? % "step=\"1\""))
-                        number-inputs)
+                :sliders
+                {:count         (count range-inputs)
+                 :number-inputs (count number-inputs)
+                 :limits
+                 (every? #(and (str/includes? % "min=\"0\"")
+                               (str/includes? % "max=\"100\"")
+                               (str/includes? % "step=\"1\""))
+                         range-inputs)
+                 :current-values
+                 (and (= 6 (count outputs))
+                      (every? (fn [binding]
+                                (some #(str/includes? % (str "$" binding))
+                                      outputs))
+                              slider-bindings))
+                 :endpoints
+                 (and (= 6 (count (re-seq #">0%</span>" html)))
+                      (= 6 (count (re-seq #">100%</span>" html))))}
                 :time-inputs
                 {:count       (count time-inputs)
-                 :day         (some #(str/includes? % "name=\"day-start\"")
+                 :day         (some #(str/includes? % "name=\"day-profile-start\"")
                                     time-inputs)
-                 :night       (some #(str/includes? % "name=\"night-start\"")
+                 :night       (some #(str/includes? % "name=\"night-profile-start\"")
                                     time-inputs)
                  :minute-step (every? #(str/includes? % "step=\"60\"")
                                       time-inputs)}
@@ -351,11 +388,12 @@
                      (not (str/includes? html ">Save</span>")))
                 :ordinary-back-link
                 (str/includes? html "href=\"/settings\"")
-                :settings-placeholder-removed
-                (not (str/includes? html ">Settings</h1>"))
-                :htmx-removed       (not (str/includes? html "hx-"))}))))))
+                :legacy-name-removed
+                (not (or (str/includes? html "Playback Settings")
+                         (str/includes? menu-html ">Playback</span>")))
+                :htmx-removed (not (str/includes? html "hx-"))}))))))
 
-(deftest saves-one-complete-playback-update
+(deftest saves-one-complete-device-update
   (let [db-conn    (atom {:settings
                           {:audio {:min-volume               1
                                    :max-volume               95
@@ -373,8 +411,8 @@
         _          (add-watch db-conn ::write-count
                               (fn [_ _ _ _]
                                 (swap! writes_ inc)))
-        req        (playback-request db-conn)
-        save!      (save-playback-action-fn)
+        req        (device-request db-conn)
+        save!      (save-device-action-fn)
         valid-body {:min_volume               2
                     :max_volume               91
                     :max_volume_day           81
