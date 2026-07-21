@@ -89,7 +89,7 @@
         (async/close! emitter)
         result))))
 
-(defn- track-announcement-command [state_ settings announce?]
+(defn- playback-command [state_ settings announce?]
   (let [emitter (async/chan 4)
         db-conn (atom {:linked-tags
                        {"card-a"
@@ -155,18 +155,22 @@
           (reset! state_ previous-state)
           (reset! audio-system/audio-state previous-audio-state))))))
 
-(deftest applies-track-announcement-setting-only-to-normal-card-playback
+(deftest emits-policy-free-playback-intent-for-rfid-cards
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-track-announcement-"}]
     (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
           state_             (var-get (ns-resolve 'fairy.box.switchboard
                                                   'state))
-          previous-state     @state_]
+          previous-state     @state_
+          expected-playback  {:action    :audio/play-path
+                              :item-path (str (fs/canonicalize
+                                               (fs/path
+                                                temp-dir
+                                                "audiobooks/Author One/Book One")))
+                              :uid       "card-a"}]
       (try
         (is (= {:normal-playback
-                {:disabled {:action              :audio/play-path
-                            :announce-per-track? false}
-                 :enabled  {:action              :audio/play-path
-                            :announce-per-track? true}}
+                {:disabled expected-playback
+                 :enabled  expected-playback}
                 :card-identification
                 {:disabled {:action              :tts/speak
                             :audio/play-one-shot false
@@ -175,12 +179,8 @@
                             :audio/play-one-shot false
                             :text                "This one is empty."}}}
                {:normal-playback
-                {:disabled (select-keys
-                            (track-announcement-command state_ settings false)
-                            [:action :announce-per-track?])
-                 :enabled  (select-keys
-                            (track-announcement-command state_ settings true)
-                            [:action :announce-per-track?])}
+                {:disabled (playback-command state_ settings false)
+                 :enabled  (playback-command state_ settings true)}
                 :card-identification
                 {:disabled (card-identification-command false)
                  :enabled  (card-identification-command true)}}))

@@ -1,5 +1,6 @@
 (ns fairy.box.web.views.settings
   (:require
+   [babashka.fs :as fs]
    [fairy.box.audio.browse :as browse]
    [fairy.box.db :as db]
    [fairy.box.settings :as app-settings]
@@ -29,6 +30,25 @@
           (h/execute-expr
            (format "window.location.assign('%s')"
                    ((:url-for req) :page/home))))))))
+
+(defn- announcement-path? [settings path]
+  (let [{:keys [dir? media-file? playlist-file?]}
+        (browse/dir-item (fs/path (browse/media-dir settings))
+                         (fs/file path))]
+    (or dir? media-file? playlist-file?)))
+
+(defaction cycle-path-announcement
+  [{:keys [query-params] :fairy.box/keys [component] :as req}]
+  (let [selected-path (get query-params "path")
+        settings      (app-settings/settings req)
+        db-conn       (component :fairy.box.db/db)]
+    (when (and db-conn (seq selected-path))
+      (when-let [canonical-path (browse/canonicalize-path settings
+                                                          selected-path)]
+        (when (announcement-path? settings canonical-path)
+          (db/cycle-announcement! {:db-conn db-conn :settings settings}
+                                  canonical-path)))))
+  nil)
 
 (defaction link-rfid-folder [{:fairy.box/keys [component] :as req}]
   (let [presence        (component :fairy.box.web/refresh)
@@ -302,17 +322,24 @@
         (settings-option "Text to Speech" icon/tts (url-for :page.settings/tts))]]
       (power-controls controls-enabled?)]]))
 
-(defn browse-audio [req]
-  [:div {:id "active-tab"}
-   [:div {:class [(css :max-w-5xl) ui/$page-margin]}
-    [:div
-     [:p {:class (css :text-lg :font-bold :text-smoky-900
-                      [:dark :text-smoky-300])}
-      "Fairybox Audio Folders"]]
-    (uic/browse-media-folder req
-                             {:mode        :play
-                              :play-action play-audio-path}
-                             (get-in req [:query-params "dir"]))]])
+(defn browse-audio [{:fairy.box/keys [component] :as req}]
+  (let [settings (app-settings/settings req)
+        db-conn  (component :fairy.box.db/db)]
+    [:div {:id "active-tab"}
+     [:div {:class [(css :max-w-5xl) ui/$page-margin]}
+      [:div
+       [:p {:class (css :text-lg :font-bold :text-smoky-900
+                        [:dark :text-smoky-300])}
+        "Fairybox Audio Folders"]]
+      (uic/browse-media-folder
+       req
+       {:mode                :play
+        :play-action         play-audio-path
+        :announcement-action cycle-path-announcement
+        :announcement-status (partial db/announcement-status
+                                      {:db-conn  db-conn
+                                       :settings settings})}
+       (get-in req [:query-params "dir"]))]]))
 
 (defn- settings-card
   [{:keys [id title description class]} & content]

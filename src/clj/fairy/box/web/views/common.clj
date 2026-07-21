@@ -45,13 +45,40 @@
        (when (seq rel-path)
          (h/url-query-string {:dir rel-path}))))
 
+(defn- announcement-title
+  [{:keys [state path-announce? announce?]}]
+  (let [title (case state
+                :announce "Announce tracks for this path"
+                :do-not-announce "Do not announce tracks for this path"
+                :inherit (str "Inherit track announcement setting; currently "
+                              (if path-announce?
+                                "announces"
+                                "does not announce")))]
+    (str title
+         (when (and path-announce? (not announce?))
+           "; global track announcements are off"))))
+
+(defn- announcement-icon [state]
+  (case state
+    :announce icon/comment-solid
+    :do-not-announce icon/comment-slash
+    :inherit icon/comment-inherit))
+
 (defn file-row
-  [req {:keys [mode active-value play-action]} idx
-   {:keys [name rel-path abs-path dir?] :as file}]
-  (let [$icon-color (css :text-smoky-900 [:dark :text-smoky-300])
-        $icon-size  (css :h-5 :w-5)
-        $hover      (css [:hover :bg-smoky-300]
-                         [:dark [:hover :bg-smoky-800]])]
+  [req {:keys [mode active-value play-action
+               announcement-action announcement-status]} idx
+   {:keys [name rel-path abs-path dir? media-file? playlist-file?] :as file}]
+  (let [$icon-color         (css :text-smoky-900 [:dark :text-smoky-300])
+        $icon-size          (css :h-5 :w-5)
+        $hover              (css [:hover :bg-smoky-300]
+                                 [:dark [:hover :bg-smoky-800]])
+        playable?           (browse/playable-type (settings/settings req)
+                                                  abs-path)
+        announcement-path?  (or dir? media-file? playlist-file?)
+        announcement-status (when (and (= :play mode)
+                                       announcement-path?
+                                       (ifn? announcement-status))
+                              (announcement-status rel-path))]
     [:tr
      [:td {:class (cs (css :py-4 :pl-0 :pr-3 :text-sm :font-medium
                            [:sm :pl-6] [:lg :pl-8]
@@ -71,17 +98,37 @@
      [:td {:class (css :whitespace-nowrap :px-3 :py-4 :text-sm :text-gray-500)}
       (condp = mode
         :play
-        (when (browse/playable-type (settings/settings req) abs-path)
-          [:button
-           {:class         (css :p-1 :transform-all :duration-200
-                                [:hover-mouse [:hover :scale-125]])
-            :data-on:click (str "@post('" play-action
-                                (h/url-query-string {:path rel-path})
-                                "')")}
-           (icon/play {:class (cs $icon-color $icon-size)})])
+        [:div {:class (css :grid :grid-cols-2 :items-center :gap-3)}
+         (when playable?
+           [:button
+            {:type          "button"
+             :class         (css :flex :h-10 :w-10 :items-center
+                                 :justify-center :transition-all :duration-200
+                                 [:hover-mouse [:hover :scale-125]])
+             :data-on:click (str "@post('" play-action
+                                 (h/url-query-string {:path rel-path})
+                                 "')")}
+            (icon/play {:class (cs $icon-color $icon-size)})])
+         (when announcement-status
+           (let [title (announcement-title announcement-status)
+                 state (:state announcement-status)]
+             [:button
+              {:type                    "button"
+               :class                   (css :col-start-2 :flex :h-10 :w-10
+                                             :items-center :justify-center
+                                             :transition-all :duration-200
+                                             [:hover-mouse [:hover :scale-125]])
+               :data-on:click           (str "@post('" announcement-action
+                                             (h/url-query-string {:path rel-path})
+                                             "')")
+               :data-announcement-state (clojure.core/name state)
+               :title                   title
+               :aria-label              title}
+              ((announcement-icon state)
+               {:class (cs $icon-color $icon-size)})]))]
 
         :choose
-        (when (browse/playable-type (settings/settings req) abs-path)
+        (when playable?
           [:input {:id        (str idx name)
                    :name      "folder-item"
                    :type      "radio"

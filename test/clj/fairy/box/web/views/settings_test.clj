@@ -16,6 +16,10 @@
 (defn- play-action-fn []
   (ns-resolve 'fairy.box.web.views.settings 'play-audio-path-fn))
 
+(defn- cycle-announcement-action-fn []
+  (ns-resolve 'fairy.box.web.views.settings
+              'cycle-path-announcement-fn))
+
 (defn- save-device-action-fn []
   (ns-resolve 'fairy.box.web.views.settings
               'save-device-settings-fn))
@@ -77,13 +81,14 @@
                           h/html->str)]
       (is (some? action-path))
       (when action-path
-        (is (= {:form                true
-                :selection-signal    true
-                :submit-action       true
-                :radio-binding       true
-                :ordinary-back-link  true
-                :client-rfid-removed true
-                :htmx-removed        true}
+        (is (= {:form                  true
+                :selection-signal      true
+                :submit-action         true
+                :radio-binding         true
+                :ordinary-back-link    true
+                :client-rfid-removed   true
+                :announcement-controls false
+                :htmx-removed          true}
                {:form         (str/starts-with? html "<form")
                 :selection-signal
                 (str/includes?
@@ -98,6 +103,8 @@
                 (str/includes? html "href=\"/settings\"")
                 :client-rfid-removed
                 (not (str/includes? html "name=\"rfid-uid\""))
+                :announcement-controls
+                (str/includes? html "data-announcement-state=")
                 :htmx-removed (not (str/includes? html "hx-"))}))))))
 
 (deftest links-selected-folder-to-current-rfid
@@ -146,58 +153,212 @@
           (is (= [{:linked-tags {}} {:linked-tags {}}]
                  db-states)))))))
 
-(deftest browse-audio-uses-relative-navigation-and-datastar-action
+(deftest browse-audio-preserves-navigation-and-adds-announcement-controls
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-browser-"}]
     (let [tree        (media/populate-media-tree! temp-dir)
-          action-path (ns-resolve 'fairy.box.web.views.settings
+          play-action (ns-resolve 'fairy.box.web.views.settings
                                   'play-audio-path)
+          announcement-action
+          (ns-resolve 'fairy.box.web.views.settings
+                      'cycle-path-announcement)
           render-page (ns-resolve 'fairy.box.web.views.settings
-                                  'render-browse-fn)]
-      (is (= {:action true :render true}
-             {:action (some? action-path)
-              :render (some? render-page)}))
-      (when (and action-path render-page)
-        (let [nav-html  (-> (render-page (browse-request tree "audiobooks"))
-                            h/html->str)
-              play-html (-> (render-page
-                             (browse-request tree
-                                             "audiobooks/Author Two"))
-                            h/html->str)]
-          (is (= {:legacy-layout                true
-                  :heading true
-                  :requested-directory          true
-                  :ordinary-directory-link      true
-                  :datastar-play-action         true
-                  :relative-play-path           true
-                  :settings-placeholder-removed true
-                  :absolute-path-hidden         true
-                  :htmx-removed                 true}
-                 {:legacy-layout
-                  (str/includes? nav-html
-                                 "<div id=\"active-tab\"><div class=")
-                  :heading
-                  (str/includes? nav-html "Fairybox Audio Folders")
-                  :requested-directory
-                  (str/includes? play-html "Story.mp3")
-                  :ordinary-directory-link
-                  (str/includes?
-                   nav-html
-                   "href=\"/settings/browse?dir=audiobooks%2FAuthor+One\"")
-                  :datastar-play-action
-                  (and (str/includes? play-html "data-on:click=")
-                       (str/includes? play-html (var-get action-path)))
-                  :relative-play-path
-                  (str/includes?
-                   play-html
-                   "path=audiobooks%2FAuthor+Two%2FStory.mp3")
-                  :settings-placeholder-removed
-                  (not (str/includes? nav-html ">Settings</h1>"))
-                  :absolute-path-hidden
-                  (not (or (str/includes? nav-html (:root tree))
-                           (str/includes? play-html (:root tree))))
-                  :htmx-removed
-                  (not (or (str/includes? nav-html "hx-")
-                           (str/includes? play-html "hx-")))})))))))
+                                  'render-browse-fn)
+          request     (browse-request tree nil)
+          db-conn     ((:fairy.box/component request)
+                       :fairy.box.db/db)]
+      (swap! db-conn assoc
+             :settings {:tts {:announce-tracks? false}}
+             :media-metadata
+             {"audiobooks" {:announce? true}
+              "audiobooks/Author One"           {:announce? false}
+              "audiobooks/Author Two/Story.mp3" {:announce? true}})
+      (let [root-html     (h/html->str (render-page request))
+            nav-html      (h/html->str
+                           (render-page
+                            (assoc request
+                                   :query-params {"dir" "audiobooks"})))
+            play-html     (h/html->str
+                           (render-page
+                            (assoc request
+                                   :query-params
+                                   {"dir" "audiobooks/Author Two"})))
+            playlist-html (h/html->str
+                           (render-page
+                            (assoc request
+                                   :query-params {"dir" "playlists"})))
+            labeled?      (fn [html title]
+                            (and (str/includes? html
+                                                (str "title=\"" title "\""))
+                                 (str/includes?
+                                  html
+                                  (str "aria-label=\"" title "\""))))
+            inherit-enabled-title
+            (str "Inherit track announcement setting; currently announces"
+                 "; global track announcements are off")
+            announce-disabled-title
+            (str "Announce tracks for this path"
+                 "; global track announcements are off")]
+        (is (= {:registered
+                {:play         true
+                 :announcement true
+                 :render       true}
+                :legacy-layout                true
+                :heading true
+                :requested-directory          true
+                :ordinary-directory-link      true
+                :datastar-play-action         true
+                :relative-play-path           true
+                :announcement-controls
+                {:root      3
+                 :directory 2
+                 :file      1
+                 :playlist  1}
+                :announcement-states
+                {:announce        true
+                 :do-not-announce true
+                 :inherit         true}
+                :announcement-titles
+                {:announce        true
+                 :do-not-announce true
+                 :inherit-enabled true
+                 :inherit-quiet   true}
+                :relative-announcement-paths  true
+                :button-types                 true
+                :settings-placeholder-removed true
+                :absolute-path-hidden         true
+                :htmx-removed                 true}
+               {:registered
+                {:play         (some? play-action)
+                 :announcement (some? announcement-action)
+                 :render       (some? render-page)}
+                :legacy-layout
+                (str/includes? nav-html
+                               "<div id=\"active-tab\"><div class=")
+                :heading
+                (str/includes? nav-html "Fairybox Audio Folders")
+                :requested-directory
+                (str/includes? play-html "Story.mp3")
+                :ordinary-directory-link
+                (str/includes?
+                 nav-html
+                 "href=\"/settings/browse?dir=audiobooks%2FAuthor+One\"")
+                :datastar-play-action
+                (and (str/includes? play-html "data-on:click=")
+                     (str/includes? play-html (var-get play-action)))
+                :relative-play-path
+                (str/includes?
+                 play-html
+                 "path=audiobooks%2FAuthor+Two%2FStory.mp3")
+                :announcement-controls
+                {:root      (count (re-seq #"data-announcement-state="
+                                           root-html))
+                 :directory (count (re-seq #"data-announcement-state="
+                                           nav-html))
+                 :file      (count (re-seq #"data-announcement-state="
+                                           play-html))
+                 :playlist  (count (re-seq #"data-announcement-state="
+                                           playlist-html))}
+                :announcement-states
+                {:announce
+                 (str/includes? play-html
+                                "data-announcement-state=\"announce\"")
+                 :do-not-announce
+                 (str/includes? nav-html
+                                "data-announcement-state=\"do-not-announce\"")
+                 :inherit
+                 (and (str/includes? nav-html
+                                     "data-announcement-state=\"inherit\"")
+                      (str/includes? playlist-html
+                                     "data-announcement-state=\"inherit\""))}
+                :announcement-titles
+                {:announce
+                 (labeled? play-html announce-disabled-title)
+                 :do-not-announce
+                 (labeled? nav-html "Do not announce tracks for this path")
+                 :inherit-enabled
+                 (labeled? nav-html inherit-enabled-title)
+                 :inherit-quiet
+                 (labeled?
+                  playlist-html
+                  (str "Inherit track announcement setting; currently "
+                       "does not announce"))}
+                :relative-announcement-paths
+                (and (str/includes?
+                      nav-html
+                      (str (var-get announcement-action)
+                           "?path=audiobooks%2FAuthor+One"))
+                     (str/includes?
+                      play-html
+                      (str (var-get announcement-action)
+                           "?path=audiobooks%2FAuthor+Two%2FStory.mp3"))
+                     (str/includes?
+                      playlist-html
+                      (str (var-get announcement-action)
+                           "?path=playlists%2FFavorites.m3u")))
+                :button-types
+                (>= (count (re-seq #"type=\"button\"" play-html)) 2)
+                :settings-placeholder-removed
+                (not (str/includes? nav-html ">Settings</h1>"))
+                :absolute-path-hidden
+                (not (some #(str/includes? % (:root tree))
+                           [root-html nav-html play-html playlist-html]))
+                :htmx-removed
+                (not (some #(str/includes? % "hx-")
+                           [root-html nav-html play-html playlist-html]))}))))))
+
+(deftest cycles-valid-announcement-paths-and-rejects-invalid-paths
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-announcement-action-"}]
+    (let [tree       (media/populate-media-tree! temp-dir)
+          request    (browse-request tree nil)
+          db-conn    ((:fairy.box/component request) :fairy.box.db/db)
+          cycle!     (cycle-announcement-action-fn)
+          writes_    (atom 0)
+          refreshes_ (atom 0)
+          invoke!    (fn [path]
+                       (cycle! (assoc request
+                                      :query-params {"path" path})))]
+      (add-watch db-conn ::announcement-writes
+                 (fn [_ _ _ _]
+                   (swap! writes_ inc)))
+      (with-redefs [h/refresh-all! (fn [& _]
+                                     (swap! refreshes_ inc))]
+        (let [r1                 (invoke! "audiobooks")
+              s1                 (get-in @db-conn [:media-metadata "audiobooks"])
+              r2                 (invoke! "audiobooks")
+              s2                 (get-in @db-conn [:media-metadata "audiobooks"])
+              r3                 (invoke! "audiobooks")
+              s3                 (get-in @db-conn [:media-metadata "audiobooks"])
+              file-result        (invoke! "audiobooks/Author Two/Story.mp3")
+              playlist-result    (invoke! "playlists/Favorites.m3u")
+              after-valid        @db-conn
+              writes-after-valid @writes_
+              invalid-results    (mapv invoke!
+                                       ["missing" "../escape" "notes.txt"])]
+          (remove-watch db-conn ::announcement-writes)
+          (is (= {:action-available?   true
+                  :directory-cycle     [{:announce? true}
+                                        {:announce? false}
+                                        nil]
+                  :returns             [nil nil nil nil nil]
+                  :database-after-valid
+                  {:linked-tags {}
+                   :media-metadata
+                   {"audiobooks/Author Two/Story.mp3" {:announce? true}
+                    "playlists/Favorites.m3u"         {:announce? true}}}
+                  :valid-write-count   5
+                  :invalid-results     [nil nil nil]
+                  :invalid-write-count 0
+                  :invalid-changed?    false
+                  :direct-refreshes    0}
+                 {:action-available?    (some? cycle!)
+                  :directory-cycle      [s1 s2 s3]
+                  :returns              [r1 r2 r3 file-result playlist-result]
+                  :database-after-valid after-valid
+                  :valid-write-count    writes-after-valid
+                  :invalid-results      invalid-results
+                  :invalid-write-count  (- @writes_ writes-after-valid)
+                  :invalid-changed?     (not= after-valid @db-conn)
+                  :direct-refreshes     @refreshes_})))))))
 
 (deftest plays-canonical-media-path-and-redirects-home
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-action-"}]

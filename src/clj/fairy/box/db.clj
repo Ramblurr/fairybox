@@ -278,15 +278,36 @@
 (defn upsert-audio-settings! [conn audio-settings]
   (swap! conn assoc-in [:settings :audio] audio-settings))
 
-(defn set-announce! [sys path]
-  (mm/set-metadata! sys path
-                    (merge (mm/get-metadata sys (str path))
-                           {:announce? true})))
+(defn- announcement-state [metadata]
+  (case (:announce? metadata)
+    true :announce
+    false :do-not-announce
+    :inherit))
 
-(defn announce-file? [sys file]
-  (let [res (:announce? (mm/get-metadata sys (str file)))]
-    (tap> [:announce-file? :result res :file file])
-    res))
+(defn announcement-status
+  [{:keys [db-conn settings] :as sys} path]
+  (when (mm/metadata-path settings path)
+    (let [local-metadata  (or (mm/get-exact-metadata sys path) {})
+          state           (announcement-state local-metadata)
+          path-announce?  (true? (:announce? (mm/get-metadata sys path)))
+          global-enabled? (true? (announce-tracks? @db-conn))]
+      {:state          state
+       :path-announce? path-announce?
+       :announce?      (and global-enabled? path-announce?)})))
+
+(defn cycle-announcement! [sys path]
+  (mm/update-exact-metadata!
+   sys
+   path
+   (fn [metadata]
+     (let [metadata (if (map? metadata) metadata {})]
+       (case (announcement-state metadata)
+         :inherit (assoc metadata :announce? true)
+         :announce (assoc metadata :announce? false)
+         :do-not-announce (dissoc metadata :announce?))))))
+
+(defn announce-path? [sys path]
+  (true? (:announce? (announcement-status sys path))))
 
 (comment
   (require '[fairy.box.system :as system])

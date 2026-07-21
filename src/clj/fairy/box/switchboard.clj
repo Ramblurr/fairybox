@@ -125,10 +125,9 @@
           (emit-player! emitter {:action :audio/play})
 
           :else
-          (emit-player! emitter {:action              :audio/play-path
-                                 :announce-per-track? (db/announce-tracks? database)
-                                 :item-path           item-path
-                                 :uid                 uid}))
+          (emit-player! emitter {:action    :audio/play-path
+                                 :item-path item-path
+                                 :uid       uid}))
         (swap! state assoc
                :active-card-uid uid
                :removed-card nil))

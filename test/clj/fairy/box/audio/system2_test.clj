@@ -193,9 +193,11 @@
         (.join ^Thread
          (audio/play-path!
           {:player   :player
-           :settings settings}
-          {:item-path           "audiobooks/Author One/Book One"
-           :announce-per-track? true}))
+           :settings settings
+           :db-conn
+           (atom {:settings       {:tts {:announce-tracks? true}}
+                  :media-metadata {"audiobooks" {:announce? true}}})}
+          {:item-path "audiobooks/Author One/Book One"}))
         (is (= [[:player :playback/clear-all nil]
                 [:player :playback/append
                  {:paths ["tts://Number 2, \"Two\"" two
@@ -203,6 +205,123 @@
                           "tts://\"Unknown\"" unknown]}]
                 [:player :playback/advance nil]]
                @dispatches_))))))
+
+(deftest resolves-global-and-path-policy-before-expanding-the-source
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-playback-policy-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          selected           "audiobooks/Author One/Book One"
+          selected-path      (str (fs/canonicalize (fs/path temp-dir selected)))
+          audio-track        {:bit-rate          224000
+                              :channels          2
+                              :codec             1651666806
+                              :codec-description "Vorbis Audio"
+                              :codec-name        "vorb"
+                              :description       nil
+                              :id                0
+                              :language          nil
+                              :level             -1
+                              :profile           -1
+                              :rate              44100}
+          track              {:mrl          "file:///media/01-Track.ogg"
+                              :meta         #:meta{:album        "Album"
+                                                   :artist       "Artist"
+                                                   :title        "Track"
+                                                   :track-number "1"}
+                              :duration     60914
+                              :audio-tracks [audio-track]
+                              :media-type   :media-type/file
+                              :parse-status :media-parsed-status/done}
+          direct-dispatches  [[:player :playback/clear-all nil]
+                              [:player :playback/append
+                               {:paths [selected-path]}]
+                              [:player :playback/advance nil]]
+          run-case
+          (fn [global? metadata command tts-fails?]
+            (let [database    (atom {:settings
+                                     {:tts {:announce-tracks? global?}}
+                                     :media-metadata metadata})
+                  dispatches_ (atom [])
+                  parses_     (atom 0)
+                  syntheses_  (atom 0)]
+              (with-redefs [mp/parse-meta
+                            (fn [_ _]
+                              (swap! parses_ inc)
+                              (doto (promise)
+                                (deliver [track])))
+                            mp/dispatch
+                            (fn [player command & {:as options}]
+                              (swap! dispatches_ conj
+                                     [player
+                                      command
+                                      (cond-> options
+                                        (:paths options)
+                                        (update :paths vec))]))
+                            tts/tts-cache-dir (constantly (str temp-dir))
+                            tts/tts
+                            (fn [_ _]
+                              (swap! syntheses_ inc)
+                              (if tts-fails?
+                                (throw (ex-info "TTS failed" {}))
+                                "tts://track"))]
+                (let [result (audio/play-path!
+                              {:player   :player
+                               :settings settings
+                               :db-conn  database}
+                              command)]
+                  (when (instance? Thread result)
+                    (.join ^Thread result))))
+              {:dispatches @dispatches_
+               :parses     @parses_
+               :syntheses  @syntheses_}))]
+      (is (= {:global-off
+              {:dispatches direct-dispatches
+               :parses     0
+               :syntheses  0}
+              :unmarked
+              {:dispatches direct-dispatches
+               :parses     0
+               :syntheses  0}
+              :inherited-true
+              {:dispatches [[:player :playback/clear-all nil]
+                            [:player :playback/append
+                             {:paths ["tts://track" track]}]
+                            [:player :playback/advance nil]]
+               :parses     1
+               :syntheses  1}
+              :child-false
+              {:dispatches direct-dispatches
+               :parses     0
+               :syntheses  0}
+              :tts-fallback
+              {:dispatches direct-dispatches
+               :parses     1
+               :syntheses  1}}
+             {:global-off
+              (run-case false
+                        {"audiobooks" {:announce? true}}
+                        {:item-path selected}
+                        false)
+              :unmarked
+              (run-case true
+                        {}
+                        {:item-path selected :uid "browser-or-rfid"}
+                        false)
+              :inherited-true
+              (run-case true
+                        {"audiobooks" {:announce? true}}
+                        {:item-path selected}
+                        false)
+              :child-false
+              (run-case true
+                        {"audiobooks" {:announce? true}
+                         selected     {:announce? false}}
+                        {:item-path selected :uid "card"}
+                        false)
+              :tts-fallback
+              (run-case true
+                        {selected {:announce? true}}
+                        {:item-path selected}
+                        true)})))))
 
 (deftest publishes-queue-change-after-updating-state
   (let [events (async/chan 1)
@@ -242,7 +361,10 @@
 (deftest records-and-clears-media-relative-queue-source
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-queue-source-"}]
     (let [tree (media/populate-media-tree! temp-dir)
-          sys  {:settings (:settings tree) :player :fake-player}]
+          sys  {:settings (:settings tree)
+                :player   :fake-player
+                :db-conn  (atom {:settings       {:tts {:announce-tracks? false}}
+                                 :media-metadata {}})}]
       (reset! audio/audio-state
               {:playback {:state nil}
                :mixer    {}

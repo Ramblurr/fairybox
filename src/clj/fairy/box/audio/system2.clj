@@ -23,18 +23,6 @@
 
 (defonce audio-state (atom audio-init-state))
 
-(defn announce-mrl? [sys mrl]
-  (when (str/starts-with? (or mrl "") "file://")
-    (db/announce-file? sys (-> (io/as-url mrl) .toURI fs/path str))))
-
-(defn announce-track? [sys {:keys [genre duration mrl]}]
-  (or
-   ;; audiobook genre
-   (str/includes? (str/lower-case (or genre "")) "book")
-   ;; longer than 10 minutes
-   (>= (or duration 0) (* 10 60 1000))
-   (announce-mrl? sys mrl)))
-
 (defn mrl->title [mrl]
   (->
    (io/as-url mrl)
@@ -121,7 +109,8 @@
               new-tracks    (interleave announcements tracks)]
           (play-now sys new-tracks)))
       (catch Exception e
-        (log/error e "Error parsing track metadata for announcement")))))
+        (log/error e "Error generating track announcements; playing normally")
+        (play-now sys [path])))))
 
 (defn- set-queue-source! [settings path]
   (swap! audio-state update :queue merge
@@ -134,13 +123,12 @@
   (swap! audio-state update :queue dissoc :source-type :source-path))
 
 (defn play-path!
-  [{:keys [settings] :as sys}
-   {:keys [item-path announce-per-track?] :as _value}]
+  [{:keys [settings] :as sys} {:keys [item-path] :as _value}]
   (assert item-path "Path must not be nil")
   (if-let [path (browse/canonicalize-path settings item-path)]
     (do
       (set-queue-source! settings path)
-      (if announce-per-track?
+      (if (db/announce-path? sys path)
         (announce-then-play sys path)
         (play-now sys [path])))
     (throw (ex-info
