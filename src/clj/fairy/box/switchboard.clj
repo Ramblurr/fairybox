@@ -149,7 +149,9 @@
            :removed-card (when active-card?
                            {:uid              uid
                             :removal-behavior removal-behavior}))
-    (when (and active-card? (= :pause removal-behavior))
+    (when (and active-card?
+               (= :pause removal-behavior)
+               (= :playing (:state (audio/current-playback!))))
       (emit-player! emitter {:action :audio/pause}))))
 
 (defn cap-volume! [emitter]
@@ -228,6 +230,7 @@
                                       :path    "/player/events"}})
 
 (defn init-switchboard! [{:keys [bus] :as opts}]
+  (reset! state init-state)
   (let [channels (m/map-keys (fn [_] (async/chan)) patch-ports)
         exit-ch  (async/chan)
         emitter  (async/chan)]
