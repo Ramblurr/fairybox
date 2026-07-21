@@ -352,9 +352,11 @@
       ansible.builtin.copy:
         content: |
           #!/usr/bin/bash
-          set -e
+          set -euo pipefail
           trigger_pin="17"
           led_pin="17"
+          shutdown_url="http://127.0.0.1/api/shutdown"
+          grace_period_seconds="30"
           /usr/bin/pinctrl set "$trigger_pin" ip
           power=$(/usr/bin/pinctrl get "$trigger_pin" | awk '{print $5}')
           if [ "$power" = "hi" ]; then
@@ -367,20 +369,44 @@
           fi
           until [ "$power" = "$switchtype" ]; do
             power=$(/usr/bin/pinctrl get "$trigger_pin" | awk '{print $5}')
-            sleep 1
+            /usr/bin/sleep 1
           done
           /usr/bin/pinctrl set "$led_pin" op
           # Blink the LED
-          for iteration in 1 2 3 5 6 7 8; do
+          for _ in 1 2 3 5 6 7 8; do
             /usr/bin/pinctrl set "$led_pin" dl
-            sleep 0.2
+            /usr/bin/sleep 0.2
             /usr/bin/pinctrl set "$led_pin" dh
-            sleep 0.2
+            /usr/bin/sleep 0.2
           done
-          echo "Powering Off!"
-          set +e
-          curl -X POST http://localhost/api/shutdown
-          curl -X POST http://localhost:3000/api/shutdown
+          echo "Requesting graceful Fairybox poweroff"
+          if /usr/bin/curl \
+            --fail \
+            --silent \
+            --show-error \
+            --connect-timeout 2 \
+            --max-time 5 \
+            --header "Accept-Encoding: br" \
+            --header "Sec-Fetch-Site: same-origin" \
+            --cookie "__Host-sid=onoff-shim-trigger" \
+            --request POST \
+            "$shutdown_url"; then
+            echo "Graceful poweroff request accepted"
+            for ((attempt = 1; attempt <= grace_period_seconds; attempt++)); do
+              system_state=$(/usr/bin/systemctl is-system-running 2>/dev/null || true)
+              case "$system_state" in
+                stopping|offline)
+                  echo "System shutdown has begun"
+                  exit 0
+                  ;;
+              esac
+              /usr/bin/sleep 1
+            done
+            echo "Graceful poweroff deadline expired; forcing host poweroff" >&2
+          else
+            echo "Graceful poweroff request failed; forcing host poweroff" >&2
+          fi
+          /usr/bin/systemctl poweroff
         dest: /usr/local/bin/onoff-shim-trigger
         owner: root
         group: root

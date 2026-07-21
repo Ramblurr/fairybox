@@ -5,7 +5,7 @@
    [clojure.core.async :as async]
    [clojure.test :refer [deftest is]]
    [donut.system :as ds]
-   [fairy.box.core]
+   [fairy.box.core :as core]
    [fairy.box.db :as db]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
@@ -35,8 +35,7 @@
                               {:gpio 23 :action :audio/next}
                               {:gpio 27 :action :audio/play-pause}
                               {:gpio 5 :action :audio/volume-up}
-                              {:gpio 6 :action :audio/volume-down}
-                              {:gpio 17 :action :system/shutdown}]
+                              {:gpio 6 :action :audio/volume-down}]
             :leds            [{:gpio 14 :led-type :pwm :name :audio/prev}
                               {:gpio 7 :led-type :pwm :name :audio/next}
                               {:gpio 12 :led-type :pwm :name :audio/play-pause}
@@ -153,8 +152,7 @@
                             :audio/next
                             :audio/play-pause
                             :audio/volume-up
-                            :audio/volume-down
-                            :system/shutdown}
+                            :audio/volume-down}
                           :logical-input? true}
                 :leds    {:enabled?        false
                           :gpio-handles    {}
@@ -213,6 +211,30 @@
                                      :uri      nil})]
     (mqtt/halt-client! instance)
     (is (= {:enabled? false} instance))))
+
+(deftest jvm-component-shutdown-does-not-request-host-poweroff
+  (let [selected  #{(component-id :fairy.box/settings)
+                    (component-id :fairy.box.bus/bus)
+                    (component-id :fairy.box.switchboard/switchboard)}
+        running   (ds/start (system/system {:profile :test}) {} selected)
+        event-bus (ds/instance running
+                               (component-id :fairy.box.bus/bus))
+        listener  (async/chan 4)
+        test-app_ (atom running)]
+    (try
+      (ev/listen event-bus "/system" listener)
+      (with-redefs [clojure.core/shutdown-agents (constantly nil)
+                    system/app_                  test-app_]
+        (core/stop-jvm!))
+      (is (= {:running-system nil
+              :system-event   nil}
+             {:running-system @test-app_
+              :system-event   (some-> (async/poll! listener)
+                                      (select-keys [:path :value]))}))
+      (finally
+        (when-let [running-system @test-app_]
+          (ds/stop running-system))
+        (async/close! listener)))))
 
 (deftest loads-production-entry-point-without-starting
   (is (= {:main? true :running-system nil}
