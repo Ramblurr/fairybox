@@ -2,16 +2,12 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.mqtt
   (:require
-   [cheshire.core :as cheshire]
    [clojure.core.async :as async]
    [clojure.tools.logging :as log]
    [clojurewerkz.machine-head.client :as mh]
    [donut.system :as ds]
    [fairy.box.util :as util]
    [jp.nijohando.event :as ev]))
-
-(def ->json cheshire/generate-string)
-(def <-json #(cheshire/parse-string % true))
 
 (comment
 
@@ -21,23 +17,23 @@
                                                                       (tap> (String. payload "UTF-8"))))
   (mh/subscribe conn {"fairybox/test/command" 0} (fn [^String _topic _ ^bytes payload]
                                                    (tap>
-                                                    (<-json
+                                                    (util/<-json
                                                      (String. payload "UTF-8")))))
 
   (mh/publish conn "fairybox1/title" "Hello World")
 
-  (mh/publish conn "fairybox/discovery/test" (->json {:fairybox-discovery     true
-                                                      :fairybox-id            "test"
-                                                      :fairybox-name          "TestBox"
-                                                      :fairybox-command-topic "fairybox/test/command"
-                                                      :fairybox-state-topic   "fairybox/test/state"}))
-  (mh/publish conn "fairybox/test/state" (->json {:state       "playing"
-                                                  :now-playing {:title            "Bear Roll"
-                                                                :artist           "ABBA"
-                                                                :album            "Bear Things"
-                                                                :track-number     1
-                                                                :duration-seconds 60
-                                                                :playlist-name    "All About Bears"}}))
+  (mh/publish conn "fairybox/discovery/test" (util/->json {:fairybox-discovery     true
+                                                           :fairybox-id            "test"
+                                                           :fairybox-name          "TestBox"
+                                                           :fairybox-command-topic "fairybox/test/command"
+                                                           :fairybox-state-topic   "fairybox/test/state"}))
+  (mh/publish conn "fairybox/test/state" (util/->json {:state       "playing"
+                                                       :now-playing {:title            "Bear Roll"
+                                                                     :artist           "ABBA"
+                                                                     :album            "Bear Things"
+                                                                     :track-number     1
+                                                                     :duration-seconds 60
+                                                                     :playlist-name    "All About Bears"}}))
 
   (mh/disconnect conn)
 
@@ -76,7 +72,7 @@
 (defn events-handler! [{:keys [client topic]} {event :value}]
   (when (mqtt-connected?!)
     (when (public-events (:event event))
-      (mh/publish client topic (->json event))  event)))
+      (mh/publish client topic (util/->json event))  event)))
 
 (defn start-publish-loop! [opts listener]
   (async/go-loop []
@@ -109,7 +105,7 @@
     (mh/subscribe client {topic qos}
                   (fn [^String _topic _ ^bytes payload]
                     (let [emit! (partial emit! emitter)]
-                      (command-handler! emit! (<-json (String. payload "UTF-8"))))))
+                      (command-handler! emit! (util/<-json (String. payload "UTF-8"))))))
     {:emitter emitter
      :client  client
      :topic   topic}))

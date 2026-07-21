@@ -3,13 +3,13 @@
 (ns fairy.box.tts-test
   (:require
    [babashka.fs :as fs]
-   [cheshire.core :as cheshire]
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
    [exoscale.cloak :as cloak]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
+   [fairy.box.util :as util]
    [hato.client :as hc])
   (:import
    [java.time Duration]))
@@ -19,15 +19,15 @@
       (throw (ex-info "TTS private var not found" {:symbol symbol}))))
 
 (deftest renders-ssml-as-json-encodable-strings
-  (let [ssmls {"card"  (tts/metadata->ssml [{:title "Introduction"}
-                                            {:title "Tomorrow"}])
-               "track" (tts/tts-track-text {:title "Introduction"} {:index 0})}]
+  (let [ssmls {:card  (tts/metadata->ssml [{:title "Introduction"}
+                                           {:title "Tomorrow"}])
+               :track (tts/tts-track-text {:title "Introduction"} {:index 0})}]
     (is (= {:all-strings?    true
             :json-round-trip ssmls}
            {:all-strings?    (every? string? (vals ssmls))
             :json-round-trip (-> ssmls
-                                 cheshire/generate-string
-                                 cheshire/parse-string)}))))
+                                 util/->json
+                                 util/<-json)}))))
 
 (deftest reads-openai-key-from-development-key-file
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-openai-key-"}]
@@ -59,7 +59,7 @@
                      (fn [url opts]
                        (swap! requests_ conj
                               {:url           url
-                               :body          (cheshire/parse-string (:body opts) true)
+                               :body          (util/<-json (:body opts))
                                :as            (:as opts)
                                :content-type  (:content-type opts)
                                :authorization (get-in opts [:headers "Authorization"])})
@@ -145,7 +145,7 @@
                        (fn [url opts]
                          (swap! requests_ conj
                                 {:url                 url
-                                 :body                (cheshire/parse-string (:body opts) true)
+                                 :body                (util/<-json (:body opts))
                                  :as                  (:as opts)
                                  :content-type        (:content-type opts)
                                  :api-key             (get-in opts [:headers "xi-api-key"])
@@ -450,7 +450,7 @@
                                           :authorization
                                           (get-in opts
                                                   [:headers "authorization"])})
-                                 {:body (cheshire/generate-string
+                                 {:body (util/->json
                                          {:url "http://audio.test/tts.mp3"})})]
                    (tts/home-assistant-tts
                     {:db {:settings

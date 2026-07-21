@@ -48,7 +48,6 @@
   The rich comment form at the bottom of this namespace contains cached OpenAI
   and ElevenLabs synthesis examples that play the result through Vinyl."
   (:require
-   [cheshire.core :as cheshire]
    [chime.core :as chime]
    [clojure.core.async :as async]
    [clojure.java.io :as io]
@@ -62,6 +61,7 @@
    [hato.client :as hc]
    [hiccup2.core :as h2]
    [hyperlith.core :as h]
+   [fairy.box.util :refer [->json <-json]]
    [jp.nijohando.event :as ev])
   (:import
    [java.io File]
@@ -69,9 +69,6 @@
    [java.nio.file CopyOption Files Paths StandardCopyOption]
    [java.time Duration Instant]
    [java.util Base64]))
-
-(def ->json cheshire/generate-string)
-(def <-json #(cheshire/parse-string % true))
 
 (def configurable-providers [:google-cloud :openai :elevenlabs])
 (def synthesis-modes #{:normal :browser-preview})

@@ -2,8 +2,8 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.web.controllers.health
   (:require
-   [cheshire.core :as cheshire]
    [fairy.box.switchboard :as switchboard]
+   [fairy.box.util :as util]
    [hyperlith.impl.router :as router]
    [ring.util.http-response :as http-response])
   (:import
@@ -16,7 +16,7 @@
         response     ((if (= system-state :system-state/ready)
                         http-response/ok
                         http-response/service-unavailable)
-                      (cheshire/generate-string body))]
+                      (util/->json body))]
     (http-response/content-type response
                                 "application/json; charset=utf-8")))
 

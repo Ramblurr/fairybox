@@ -2,6 +2,7 @@
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns fairy.box.util
   (:require
+   [cheshire.core :as cheshire]
    [clojure.core.async :as async])
   (:import
    [java.time LocalTime]))
@@ -88,3 +89,6 @@
   `(Thread/startVirtualThread
     (bound-fn* ;; binding conveyance
      (fn [] ~@body))))
+
+(def ->json cheshire/generate-string)
+(def <-json #(cheshire/parse-string % true))
