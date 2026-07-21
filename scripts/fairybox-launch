@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(readlink -m -- "${FAIRYBOX_ROOT:-/var/lib/fairybox}")
+authbind=${FAIRYBOX_AUTHBIND:-/usr/bin/authbind}
+java=${FAIRYBOX_JAVA:-/usr/bin/java}
+current="$root/current"
+
+fail() {
+  printf 'fairybox-launch: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ -L "$current" ]] || fail "managed current release symlink is missing: $current"
+release=$(readlink -f -- "$current") || fail "$current is a broken symlink"
+case "$release" in
+  "$root"/releases/*) ;;
+  *) fail "$current resolves outside $root/releases" ;;
+esac
+
+jar="$release/box-standalone.jar"
+cache="$release/box-standalone.aot"
+metadata="$release/release.env"
+complete_marker="$release/.complete"
+release_name=${release##*/}
+[[ "$release_name" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "release directory is not named by its SHA-256: $release"
+
+[[ -f "$complete_marker" ]] || fail "release is not marked complete: $release"
+[[ -r "$jar" && -s "$jar" ]] || fail "jar is missing or unreadable: $jar"
+[[ -r "$cache" && -s "$cache" ]] || fail "AOT cache is missing or unreadable: $cache"
+[[ -r "$metadata" && -s "$metadata" ]] || fail "release metadata is missing or unreadable: $metadata"
+jar_sha=$(awk -F= '$1 == "JAR_SHA256" {print $2; exit}' "$metadata")
+cache_sha=$(awk -F= '$1 == "CACHE_SHA256" {print $2; exit}' "$metadata")
+java_fingerprint=$(awk -F= '$1 == "JAVA_FINGERPRINT" {print $2; exit}' "$metadata")
+architecture=$(awk -F= '$1 == "ARCHITECTURE" {print $2; exit}' "$metadata")
+[[ "$jar_sha" == "$release_name" ]] || fail "release metadata does not match its jar"
+[[ "$cache_sha" =~ ^[0-9a-f]{64}$ ]] || fail "release metadata lacks a valid cache checksum"
+[[ "$java_fingerprint" =~ ^[0-9a-f]{64}$ ]] || fail "release metadata lacks a valid JDK fingerprint"
+[[ "$architecture" == aarch64 ]] || fail "release metadata is not for Linux ARM64"
+
+aot_args=(-XX:AOTMode=auto "-XX:AOTCache=$cache" -Xlog:aot=info)
+aot_state=enabled
+
+printf 'fairybox-launch: release=%s aot=%s jar=%s\n' \
+  "$release_name" "$aot_state" "$jar" >&2
+
+exec "$authbind" --deep "$java" \
+  -XX:-OmitStackTraceInFastThrow \
+  -DPIGPIOD_HOST=127.0.0.1 \
+  -XX:+UseZGC \
+  --enable-native-access=ALL-UNNAMED \
+  "${aot_args[@]}" \
+  -jar "$jar"

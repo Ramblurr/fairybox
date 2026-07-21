@@ -120,3 +120,32 @@
          {:healthy         (trigger-result 0 true)
           :api-unavailable (trigger-result 22 true)
           :graceful-stall  (trigger-result 0 false)})))
+
+(deftest playbook-provisions-aot-release-deployment
+  (let [playbook (slurp "playbook.yml")]
+    (is (= {:release-directories true
+            :migration-required  true
+            :launcher-source     true
+            :launcher-dest       true
+            :deployer-source     true
+            :deployer-dest       true
+            :service-launcher    true
+            :fixed-aot-in-unit   false}
+           {:release-directories
+            (and (str/includes? playbook "- name: Create Fairybox release directories")
+                 (str/includes? playbook "        - releases\n        - incoming"))
+            :migration-required
+            (and (str/includes? playbook "- name: Require an explicitly migrated Fairybox release")
+                 (str/includes? playbook "/var/lib/fairybox/current must be an explicitly provisioned release"))
+            :launcher-source
+            (str/includes? playbook "        src: scripts/fairybox-launch")
+            :launcher-dest
+            (str/includes? playbook "        dest: /usr/local/bin/fairybox-launch")
+            :deployer-source
+            (str/includes? playbook "        src: scripts/fairybox-deploy")
+            :deployer-dest
+            (str/includes? playbook "        dest: /usr/local/bin/fairybox-deploy")
+            :service-launcher
+            (str/includes? playbook "          ExecStart=/usr/local/bin/fairybox-launch")
+            :fixed-aot-in-unit
+            (str/includes? playbook "          ExecStart=/usr/local/bin/fairybox-launch -XX:AOTCache=")}))))

@@ -1,0 +1,406 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+root=$(readlink -m -- "${FAIRYBOX_ROOT:-/var/lib/fairybox}")
+service_unit=${FAIRYBOX_SERVICE_UNIT:-fairybox.service}
+ready_url=${FAIRYBOX_READY_URL:-http://127.0.0.1/api/ready}
+ready_timeout=${FAIRYBOX_READY_TIMEOUT:-90}
+poll_interval=${FAIRYBOX_POLL_INTERVAL:-0.25}
+minimum_free_kib=${FAIRYBOX_MINIMUM_FREE_KIB:-1048576}
+
+systemctl=${FAIRYBOX_SYSTEMCTL:-/usr/bin/systemctl}
+systemd_run=${FAIRYBOX_SYSTEMD_RUN:-/usr/bin/systemd-run}
+journalctl=${FAIRYBOX_JOURNALCTL:-/usr/bin/journalctl}
+curl=${FAIRYBOX_CURL:-/usr/bin/curl}
+sha256sum=${FAIRYBOX_SHA256SUM:-$(command -v sha256sum)}
+jar_tool=${FAIRYBOX_JAR:-/usr/bin/jar}
+java=${FAIRYBOX_JAVA:-/usr/bin/java}
+authbind=${FAIRYBOX_AUTHBIND:-/usr/bin/authbind}
+flock=${FAIRYBOX_FLOCK:-$(command -v flock)}
+
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+
+service_was_active=0
+service_stopped=0
+training_started=0
+production_started=0
+activated=0
+trained=0
+old_current=
+training_unit=
+
+log() {
+  printf '%s fairybox-deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
+fail() {
+  log "ERROR: $*" >&2
+  return 1
+}
+
+systemctl_user() {
+  "$systemctl" --user "$@"
+}
+
+sha256_file() {
+  "$sha256sum" "$1" | awk '{print $1}'
+}
+
+metadata_value() {
+  local key=$1
+  local metadata=$2
+  awk -F= -v key="$key" '$1 == key {print substr($0, length(key) + 2); exit}' "$metadata"
+}
+
+atomic_symlink() {
+  local target=$1
+  local link=$2
+  local temporary="${link}.part.$$"
+  rm -f -- "$temporary"
+  ln -s -- "$target" "$temporary"
+  mv -Tf -- "$temporary" "$link"
+}
+
+current_target() {
+  local current="$root/current"
+  if [[ -L "$current" ]]; then
+    readlink -f -- "$current"
+  elif [[ -e "$current" ]]; then
+    fail "$current exists but is not a symlink"
+  fi
+}
+
+write_metadata() {
+  local directory=$1
+  local jar_sha=$2
+  local cache_sha=$3
+  local destination="$directory/release.env.part"
+  cat > "$destination" <<EOF
+JAR_SHA256=$jar_sha
+CACHE_SHA256=$cache_sha
+JAVA_FINGERPRINT=$java_fingerprint
+ARCHITECTURE=$architecture
+CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+  chmod 640 "$destination"
+}
+
+validate_jar() {
+  local jar=$1
+  local expected_sha=$2
+  local actual_sha
+  local entries
+
+  [[ -r "$jar" && -s "$jar" ]] || fail "jar is missing or unreadable: $jar"
+  actual_sha=$(sha256_file "$jar")
+  [[ "$actual_sha" == "$expected_sha" ]] \
+    || fail "jar checksum mismatch: expected $expected_sha, got $actual_sha"
+
+  entries=$("$jar_tool" tf "$jar")
+  for entry in \
+    fairy/box/core.class \
+    com/aayushatharva/brotli4j/linux/aarch64/NativeLoader.class \
+    lib/linux-aarch64/libbrotli.so
+  do
+    grep -Fxq -- "$entry" <<< "$entries" \
+      || fail "jar is missing required entry: $entry"
+  done
+}
+
+wait_ready() {
+  local unit=$1
+  local deadline=$((SECONDS + ready_timeout))
+  local response
+  local status
+  local body
+
+  while ((SECONDS < deadline)); do
+    response=$("$curl" \
+      --silent \
+      --show-error \
+      --compressed \
+      --connect-timeout 1 \
+      --max-time 2 \
+      --header 'Accept-Encoding: br' \
+      --write-out $'\n%{http_code}' \
+      "$ready_url" 2>/dev/null || true)
+    status=${response##*$'\n'}
+    body=${response%$'\n'*}
+
+    if [[ "$status" == 200 ]] \
+      && grep -Eq '"system-state"[[:space:]]*:[[:space:]]*"ready"' <<< "$body"
+    then
+      log "$unit reached ready"
+      return 0
+    fi
+
+    if ! systemctl_user is-active --quiet "$unit"; then
+      fail "$unit exited before readiness"
+    fi
+    sleep "$poll_interval"
+  done
+
+  fail "$unit did not reach ready within ${ready_timeout}s"
+}
+
+
+show_status() {
+  local current=
+  local previous=
+  current=$(current_target || true)
+  if [[ -L "$root/previous" ]]; then
+    previous=$(readlink -f -- "$root/previous")
+  fi
+  printf 'root=%s\ncurrent=%s\nprevious=%s\n' "$root" "$current" "$previous"
+  systemctl_user show "$service_unit" \
+    -p UnitFileState -p ActiveState -p SubState -p MainPID -p DropInPaths \
+    --no-pager
+  if [[ -n "$current" ]]; then
+    [[ -s "$current/box-standalone.jar" ]] \
+      && printf 'jar_sha256=%s\n' "$(sha256_file "$current/box-standalone.jar")"
+    [[ -s "$current/box-standalone.aot" ]] \
+      && printf 'cache_sha256=%s\n' "$(sha256_file "$current/box-standalone.aot")"
+    [[ -f "$current/release.env" ]] && cat -- "$current/release.env"
+  fi
+}
+
+
+cleanup_after_error() {
+  local status=$?
+  trap - ERR
+  set +e
+  log "deployment failed; restoring previous state" >&2
+
+  if ((training_started)); then
+    systemctl_user stop "$training_unit" >/dev/null 2>&1
+    systemctl_user reset-failed "$training_unit" >/dev/null 2>&1
+  fi
+  if ((production_started)); then
+    systemctl_user stop "$service_unit" >/dev/null 2>&1
+  fi
+  if ((activated)); then
+    if [[ -n "$old_current" ]]; then
+      atomic_symlink "$old_current" "$root/current"
+    else
+      rm -f -- "$root/current"
+    fi
+  fi
+  if ((service_was_active && service_stopped)); then
+    systemctl_user start "$service_unit" >/dev/null 2>&1
+  fi
+  exit "$status"
+}
+
+if [[ $# -eq 1 && $1 == status ]]; then
+  show_status
+  exit 0
+fi
+
+trap cleanup_after_error ERR
+
+[[ $# -eq 2 && $1 == install ]] \
+  || fail "usage: fairybox-deploy {status|install <jar-sha256>}"
+release_sha=$2
+[[ "$release_sha" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "release ID must be a lowercase SHA-256"
+
+incoming="$root/incoming/$release_sha"
+incoming_jar="$incoming/box-standalone.jar.part"
+release="$root/releases/$release_sha"
+release_jar="$release/box-standalone.jar"
+release_cache="$release/box-standalone.aot"
+release_cache_part="$release/box-standalone.aot.part"
+release_config="${release_cache_part}.config"
+training_log="$release/aot-training.log"
+complete_marker="$release/.complete"
+lock="$root/deploy.lock"
+
+mkdir -p "$root/releases" "$root/incoming"
+exec 9> "$lock"
+"$flock" -n 9 || fail "another deployment holds $lock"
+
+validate_jar "$incoming_jar" "$release_sha"
+available_kib=$(df -Pk "$root" | awk 'NR == 2 {print $4}')
+[[ "$available_kib" =~ ^[0-9]+$ && "$available_kib" -ge "$minimum_free_kib" ]] \
+  || fail "less than ${minimum_free_kib} KiB is free under $root"
+
+java_internal_version=$("$java" -Xinternalversion 2>&1)
+java_flags=$("$java" -XX:+PrintFlagsFinal -version 2>&1)
+grep -Fq AOTMode <<< "$java_flags" || fail "$java does not support AOTMode"
+grep -Fq AOTCacheOutput <<< "$java_flags" || fail "$java does not support AOTCacheOutput"
+"$java" -XX:+UseZGC --enable-native-access=ALL-UNNAMED -version >/dev/null 2>&1 \
+  || fail "$java does not support the production JVM options"
+java_fingerprint=$(printf '%s' "$java_internal_version" | "$sha256sum" | awk '{print $1}')
+architecture=${FAIRYBOX_ARCHITECTURE:-$(uname -m)}
+[[ "$architecture" == aarch64 ]] || fail "unsupported deployment architecture: $architecture"
+
+old_current=$(current_target || true)
+[[ -n "$old_current" ]] \
+  || fail "managed current release symlink is missing: $root/current"
+old_current_sha=${old_current##*/}
+[[ "$old_current_sha" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "current release directory is not named by its SHA-256: $old_current"
+[[ -f "$old_current/.complete" ]] \
+  || fail "current release is not marked complete: $old_current"
+[[ -s "$old_current/box-standalone.aot" && -f "$old_current/release.env" ]] \
+  || fail "current release is incomplete: $old_current"
+validate_jar "$old_current/box-standalone.jar" "$old_current_sha"
+[[ "$(metadata_value JAR_SHA256 "$old_current/release.env")" == "$old_current_sha" ]] \
+  || fail "current release metadata does not match its jar"
+old_cache_sha=$(sha256_file "$old_current/box-standalone.aot")
+[[ "$(metadata_value CACHE_SHA256 "$old_current/release.env")" == "$old_cache_sha" ]] \
+  || fail "current release metadata does not match its AOT cache"
+[[ "$(metadata_value ARCHITECTURE "$old_current/release.env")" == "$architecture" ]] \
+  || fail "current release architecture does not match this host"
+
+if systemctl_user is-active --quiet "$service_unit"; then
+  service_was_active=1
+fi
+
+needs_training=1
+if [[ -f "$complete_marker" ]]; then
+  validate_jar "$release_jar" "$release_sha"
+  [[ -s "$release_cache" && -f "$release/release.env" ]] \
+    || fail "existing release is incomplete: $release"
+  [[ "$(metadata_value JAR_SHA256 "$release/release.env")" == "$release_sha" ]] \
+    || fail "existing release metadata does not match its jar"
+  existing_cache_sha=$(sha256_file "$release_cache")
+  [[ "$(metadata_value CACHE_SHA256 "$release/release.env")" == "$existing_cache_sha" ]] \
+    || fail "existing release metadata does not match its AOT cache"
+  if [[ "$(metadata_value JAVA_FINGERPRINT "$release/release.env")" == "$java_fingerprint" \
+    && "$(metadata_value ARCHITECTURE "$release/release.env")" == "$architecture" ]]
+  then
+    needs_training=0
+    log "reusing complete release $release_sha"
+  else
+    log "retraining release $release_sha for the current JDK"
+  fi
+fi
+
+if ((needs_training)); then
+  mkdir -p "$release"
+  if [[ -s "$release_jar" ]]; then
+    validate_jar "$release_jar" "$release_sha"
+    rm -- "$incoming_jar"
+  else
+    mv -- "$incoming_jar" "$release_jar"
+    chmod 640 "$release_jar"
+  fi
+  rmdir "$incoming" 2>/dev/null || true
+
+  if ((service_was_active)); then
+    log "stopping current production service"
+    systemctl_user stop "$service_unit"
+    service_stopped=1
+  fi
+
+  rm -f -- "$release_cache_part" "$release_config" "$training_log"
+  training_unit="fairybox-aot-training-${release_sha:0:12}.service"
+  systemctl_user stop "$training_unit" >/dev/null 2>&1 || true
+  systemctl_user reset-failed "$training_unit" >/dev/null 2>&1 || true
+
+  log "starting full production AOT training for $release_sha"
+  training_started=1
+  "$systemd_run" --user \
+    --unit="$training_unit" \
+    --property=Type=simple \
+    --property="WorkingDirectory=$root" \
+    --property=Restart=no \
+    --property=TimeoutStopSec=10min \
+    --property="EnvironmentFile=$root/secret-env" \
+    --property="StandardOutput=append:$training_log" \
+    --property="StandardError=append:$training_log" \
+    --setenv=NREPL_HOST=0.0.0.0 \
+    --setenv=PORT=80 \
+    --setenv="DB_PATH=$root/db.edn" \
+    --setenv=MEDIA_DIR=/srv/media \
+    "$authbind" --deep "$java" \
+      -XX:-OmitStackTraceInFastThrow \
+      -DPIGPIOD_HOST=127.0.0.1 \
+      -XX:+UseZGC \
+      --enable-native-access=ALL-UNNAMED \
+      -XX:AOTMode=record \
+      "-XX:AOTCacheOutput=$release_cache_part" \
+      -Xlog:aot=info \
+      -jar "$release_jar"
+
+  wait_ready "$training_unit"
+  log "stopping trainer and assembling AOT cache"
+  systemctl_user stop "$training_unit"
+
+  training_pid=$(systemctl_user show "$training_unit" -p MainPID --value)
+  training_status=$(systemctl_user show "$training_unit" -p ExecMainStatus --value)
+  [[ "$training_pid" == 0 ]] || fail "trainer still has MainPID=$training_pid"
+  if [[ "$training_status" != 0 && "$training_status" != 143 ]]; then
+    fail "trainer stopped with unexpected status $training_status"
+  fi
+  training_started=0
+  systemctl_user reset-failed "$training_unit" >/dev/null 2>&1 || true
+
+  [[ -s "$release_cache_part" ]] || fail "JDK did not create an AOT cache"
+  [[ ! -e "$release_config" ]] || fail "temporary AOT configuration remains"
+  grep -Fq "AOTCache creation is complete: $release_cache_part" "$training_log" \
+    || fail "training log lacks AOT completion evidence"
+  validate_jar "$release_jar" "$release_sha"
+
+  cache_sha=$(sha256_file "$release_cache_part")
+  write_metadata "$release" "$release_sha" "$cache_sha"
+  mv -- "$release_cache_part" "$release_cache"
+  mv -- "$release/release.env.part" "$release/release.env"
+  chmod 640 "$release_cache" "$release/release.env"
+  printf 'complete\n' > "$release/.complete.part"
+  chmod 640 "$release/.complete.part"
+  mv -- "$release/.complete.part" "$complete_marker"
+  trained=1
+  log "completed release $release_sha"
+else
+  rm -f -- "$incoming_jar"
+  rmdir "$incoming" 2>/dev/null || true
+fi
+
+if [[ "$old_current" == "$release" && "$trained" == 0 ]]; then
+  log "release $release_sha is already current"
+  trap - ERR
+  exit 0
+fi
+
+if ((service_was_active && !service_stopped)); then
+  log "stopping current production service"
+  systemctl_user stop "$service_unit"
+  service_stopped=1
+fi
+
+if [[ -n "$old_current" ]]; then
+  atomic_symlink "$old_current" "$root/previous"
+fi
+atomic_symlink "$release" "$root/current"
+activated=1
+
+log "starting AOT-backed production release $release_sha"
+production_start_epoch=$(date +%s)
+systemctl_user start "$service_unit"
+production_started=1
+wait_ready "$service_unit"
+
+production_log=$("$journalctl" --user \
+  --unit="$service_unit" \
+  --since="@$production_start_epoch" \
+  --output=cat \
+  --no-pager)
+grep -Fq "Opened AOT cache $release/box-standalone.aot" <<< "$production_log" \
+  || fail "production log does not show the release cache opening"
+grep -Fq 'Using AOT-linked classes: true' <<< "$production_log" \
+  || fail "production log does not show AOT-linked classes"
+
+if ((!service_was_active)); then
+  log "restoring initially inactive service state"
+  systemctl_user stop "$service_unit"
+  systemctl_user reset-failed "$service_unit" >/dev/null 2>&1 || true
+  production_started=0
+else
+  service_stopped=0
+fi
+
+activated=0
+trap - ERR
+log "deployment complete: release=$release_sha aot=enabled"

@@ -229,6 +229,19 @@
         group: ramblurr
         mode: "0750"
 
+    - name: Create Fairybox release directories
+      become: true
+      tags: [app, deploy-tools]
+      ansible.builtin.file:
+        path: "/var/lib/fairybox/{{ item }}"
+        state: directory
+        owner: ramblurr
+        group: ramblurr
+        mode: "0750"
+      loop:
+        - releases
+        - incoming
+
     - name: Create /srv/media directory
       become: true
       ansible.builtin.file:
@@ -260,6 +273,47 @@
         access_time: preserve
         modification_time: preserve
         owner: ramblurr
+        group: root
+        mode: "0755"
+
+    - name: Inspect managed Fairybox current release
+      become: true
+      tags: [app, deploy-tools]
+      ansible.builtin.stat:
+        path: /var/lib/fairybox/current
+        follow: false
+      register: fairybox_current_release
+
+    - name: Require an explicitly migrated Fairybox release
+      become: true
+      tags: [app, deploy-tools]
+      ansible.builtin.assert:
+        that:
+          - fairybox_current_release.stat.exists
+          - fairybox_current_release.stat.islnk
+        fail_msg: >-
+          /var/lib/fairybox/current must be an explicitly provisioned release
+          symlink before installing the managed launcher. Perform the one-time
+          release migration separately.
+
+    - name: Install Fairybox production launcher
+      become: true
+      tags: [app, deploy-tools]
+      ansible.builtin.copy:
+        src: scripts/fairybox-launch
+        dest: /usr/local/bin/fairybox-launch
+        owner: root
+        group: root
+        mode: "0755"
+      notify: restart fairybox
+
+    - name: Install Fairybox release deploy command
+      become: true
+      tags: [app, deploy-tools]
+      ansible.builtin.copy:
+        src: scripts/fairybox-deploy
+        dest: /usr/local/bin/fairybox-deploy
+        owner: root
         group: root
         mode: "0755"
 
@@ -306,7 +360,7 @@
           [Service]
           Type=simple
           WorkingDirectory=/var/lib/fairybox
-          ExecStart=authbind --deep /usr/bin/java -XX:-OmitStackTraceInFastThrow -DPIGPIOD_HOST=127.0.0.1 -jar /var/lib/fairybox/box-standalone.jar
+          ExecStart=/usr/local/bin/fairybox-launch
           Environment="NREPL_HOST=0.0.0.0"
           Environment="PORT=80"
           Environment="DB_PATH=/var/lib/fairybox/db.edn"

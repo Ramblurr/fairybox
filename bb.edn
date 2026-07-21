@@ -4,7 +4,7 @@
 
  :tasks {:requires         ([babashka.fs :as fs]
                             [clojure.string :as str]
-                            [babashka.tasks :refer [shell]])
+                            [babashka.tasks :refer [run shell]])
          :init             (do (def paths ["src" "test"]))
          dev               {:doc "Start a local development server" :task (clojure "-M:dev:repl/dev")}
          remote-dev        {:doc  "Start nREPL for remote development. Designed to be ran on the RPI"
@@ -27,6 +27,15 @@
          watch             {:requires ([pod.babashka.fswatcher :as fw])
                             :task     (exec 'watch/dev-watch)}
          sync              {:task (exec 'sync/do-sync!)}
+         deploy            {:doc  "Validate, build, and deploy a production AOT release"
+                            :task (do
+                                    (run 'qa)
+                                    (run 'uber)
+                                    (exec 'deploy/deploy!))}
+         deploy:artifact   {:doc  "Deploy the existing production uberjar"
+                            :task (exec 'deploy/deploy!)}
+         deploy:status     {:doc  "Show the device release and service status"
+                            :task (exec 'deploy/status!)}
          credits           {:task (exec 'credits/build-attribution)}
          fmt               {:doc  "Format code with cljfmt"
                             :task (if (seq *command-line-args*)
