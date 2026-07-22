@@ -11,6 +11,7 @@
    [fairy.box.hardware.led :as led]
    [fairy.box.hardware.rfid :as rfid]
    [fairy.box.mqtt :as mqtt]
+   [fairy.box.nrepl :as nrepl]
    [fairy.box.playback-limits :as playback-limits]
    [fairy.box.settings :as settings]
    [fairy.box.switchboard :as switchboard]
@@ -104,6 +105,7 @@
                                       :fairy.box.hardware/buttons        buttons/ButtonsComponent
                                       :fairy.box.hardware/leds           led/LedsComponent
                                       :fairy.box.mqtt/client             mqtt/MqttComponent
+                                      :fairy.box.nrepl/server            nrepl/NreplComponent
                                       :fairy.box.web/server              WebServerComponent
                                       :fairy.box/startup                 settings/StartupComponent}}}))
 

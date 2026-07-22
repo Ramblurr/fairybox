@@ -31,7 +31,8 @@
            jp.nijohando/event                              {:git/url "https://github.com/Ramblurr/event"
                                                             :git/sha "9cb238a9ea2f4cb972289b532c0612c9598fb686"}
               ;; http client requests
-           hato/hato                                       {:mvn/version "1.0.0"}}
+           hato/hato                                       {:mvn/version "1.0.0"}
+           nrepl/nrepl                                     {:mvn/version "1.7.0"}}
  :aliases {:build      {:deps       {fairy/box                     {:local/root "."}
                                      io.github.clojure/tools.build {:mvn/version "0.10.14"}}
                         :ns-default build}
@@ -47,7 +48,6 @@
                                       "-XX:+UseZGC"
                                       "--enable-native-access=ALL-UNNAMED"]}
            :remote-dev {:extra-deps {refactor-nrepl/refactor-nrepl {:mvn/version "3.14.0"}
-                                     nrepl/nrepl                   {:mvn/version "1.7.0"}
                                      cider/cider-nrepl             {:mvn/version "0.62.2"}}
                         :main-opts  ["-m" "nrepl.cmdline"
                                      "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware,portal.nrepl/wrap-portal]"

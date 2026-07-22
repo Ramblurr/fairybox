@@ -64,6 +64,10 @@
                                   :shutdown
                                   :poweroff-enabled?])))))
 
+(deftest configures-production-nrepl-server
+  (is (= {:bind "127.0.0.1" :port 7000}
+         (get (components :prod) :fairy.box.nrepl/server))))
+
 (deftest defines-complete-donut-graph
   (let [component-defs
         (get-in (system/system {:profile :test})
@@ -89,6 +93,7 @@
                                      :fairy.box.hardware/leds
                                      :fairy.box.hardware/rfid
                                      :fairy.box.mqtt/client
+                                     :fairy.box.nrepl/server
                                      :fairy.box.playback-limits/policy
                                      :fairy.box.sleep/timer
                                      :fairy.box.switchboard/switchboard
