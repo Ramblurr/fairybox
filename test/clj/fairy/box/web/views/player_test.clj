@@ -8,6 +8,7 @@
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.hardware.buttons :as buttons]
    [fairy.box.hardware.led :as led]
+   [fairy.box.switchboard :as switchboard]
    [fairy.box.timers :as timers]
    [fairy.box.web.api :as api]
    [fairy.box.web.views.player :as player]
@@ -354,6 +355,27 @@
             :play-control-visible (str/includes? html "id=\"play-pause\"")
             :nothing-playing-hidden
             (not (str/includes? html "Nothing is playing."))}))))
+
+(deftest renders-current-system-state-when-no-track-is-loaded
+  (let [messages-by-state
+        {:system-state/booting      "Fairybox is booting..."
+         :system-state/initialized  "Fairybox is initializing..."
+         :system-state/warming-up   "Fairybox is warming up..."
+         :system-state/ready        "Nothing is playing."
+         :system-state/cooling-down "Fairybox is shutting down..."
+         :system-state/shutdown     "Fairybox has shut down."}
+        rendered-messages
+        (into {}
+              (map (fn [[state _]]
+                     [state
+                      (with-redefs [switchboard/system-state!
+                                    (constantly state)]
+                        (->> (player/player (player-request))
+                             h/html->str
+                             (re-find #"<p[^>]*>([^<]+)</p>")
+                             second))])
+                   messages-by-state))]
+    (is (= messages-by-state rendered-messages))))
 
 (deftest exposes-current-track-and-playback-state
   (let [state (sample-state)]

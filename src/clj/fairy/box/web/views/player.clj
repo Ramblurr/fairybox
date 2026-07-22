@@ -386,8 +386,17 @@
                :class     (css :text-sm :tabular-nums)}
       countdown]]))
 
+(def ^:private player-messages-by-system-state
+  {:system-state/booting      "Fairybox is booting..."
+   :system-state/initialized  "Fairybox is initializing..."
+   :system-state/warming-up   "Fairybox is warming up..."
+   :system-state/ready        "Nothing is playing."
+   :system-state/cooling-down "Fairybox is shutting down..."
+   :system-state/shutdown     "Fairybox has shut down."})
+
 (defn player [{:keys [url-for current sleep-timer]}]
-  (let [ready?                (= (switchboard/system-state!) :system-state/ready)
+  (let [system-state          (switchboard/system-state!)
+        ready?                (= system-state :system-state/ready)
         track-loaded?         (and (player/mrl current) (player/state current))
         sleep-countdown-state (when sleep-timer
                                 (timers/sleep-countdown-state sleep-timer))
@@ -472,9 +481,9 @@
                             :outline-smoky-400 :text-smoky-900
                             [:dark :text-smoky-300])}
           [:p {:class (css :text-lg)}
-           (if ready?
-             "Nothing is playing."
-             "Fairybox is getting ready...")]
+           (get player-messages-by-system-state
+                system-state
+                "Fairybox status is unavailable.")]
           (when ready?
             [:p {:class (css :text-sm :mt-2 :underline
                              :decoration-inherit)}
