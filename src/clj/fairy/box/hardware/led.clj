@@ -15,14 +15,14 @@
 
 (defn init-led-led! [{:keys [gpio name active-high?]
                       :or   {active-high? true}}]
-  (let [led (LED. gpio
-                  active-high?)]
+  (let [led (LED. (int gpio)
+                  (boolean active-high?))]
     (Diozero/registerForShutdown (into-array LED [led]))
     (.off led)
     {:handle led :gpio gpio :name name :led-type :led}))
 
 (defn init-pwm-led! [{:keys [gpio name]}]
-  (let [led (PwmLed. gpio (float 0.0))]
+  (let [led (PwmLed. (int gpio) (float 0.0))]
     (Diozero/registerForShutdown (into-array PwmLed [led]))
     (.off led)
     {:handle led :gpio gpio :name name :led-type :pwm}))
@@ -51,10 +51,10 @@
     (when handle
       (try
         (if (= led-type :pwm)
-          (.setValue handle (float value))
+          (.setValue ^PwmLed handle (float value))
           (if (> value 0.0)
-            (.on handle)
-            (.off handle)))
+            (.on ^LED handle)
+            (.off ^LED handle)))
         (catch Exception e
           (log/error e "Error setting LED value" {:led led :value value}))))))
 
@@ -416,10 +416,12 @@
 
 (defn release-led! [{:keys [led-type handle]}]
   (condp = led-type
-    :led (do (.off handle)
-             (.close handle))
-    :pwm (do (.off handle)
-             (.close handle))))
+    :led (let [^LED handle handle]
+           (.off handle)
+           (.close handle))
+    :pwm (let [^PwmLed handle handle]
+           (.off handle)
+           (.close handle))))
 
 (defn release-leds!
   [{:keys [leds listener emitter led-loop controller

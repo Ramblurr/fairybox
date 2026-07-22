@@ -1,6 +1,7 @@
 ;; Copyright © 2025 Casey Link <casey@outskirtslabs.com>
 ;; SPDX-License-Identifier: EUPL-1.2
 (ns dev
+  (:refer-clojure :exclude [remove])
   (:require
    [clojure.tools.logging :as log]
    [clojure.core.async :as async]
