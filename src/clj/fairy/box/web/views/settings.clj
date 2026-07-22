@@ -276,8 +276,9 @@
      :data-on:click "document.getElementById('power-dialog').showModal()"}
     (icon/power {:class (css :h-5 :w-5)})]
    [:dialog#power-dialog.power-dialog
-    {:aria-labelledby  "power-dialog-title"
-     :aria-describedby "power-dialog-description"}
+    {:aria-labelledby    "power-dialog-title"
+     :aria-describedby   "power-dialog-description"
+     :data-preserve-attr "open"}
     [:div {:class "power-dialog__content"}
      [:header {:class "power-dialog__header"}
       [:h2#power-dialog-title "Power controls"]

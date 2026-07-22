@@ -440,6 +440,8 @@
            {:native-dialog
             (and (str/includes? enabled-html
                                 "<dialog id=\"power-dialog\"")
+                 (str/includes? enabled-html
+                                "data-preserve-attr=\"open\"")
                  (str/includes? enabled-html "method=\"dialog\"")
                  (str/includes? enabled-html ".showModal()"))
             :grouped-options
