@@ -2,7 +2,9 @@
   (:require
    [babashka.fs :as fs]
    [clojure.core.async :as async]
+   [clojure.string :as str]
    [clojure.test :refer [deftest is use-fixtures]]
+   [clojure.tools.logging.test :as log-test]
    [donut.system :as ds]
    [fairy.box.audio.system2 :as audio]
    [fairy.box.media-test-utils :as media]
@@ -587,3 +589,179 @@
             [:player :playback/stop]
             [:player :mixer/set-volume :level 100]]
            @dispatches_))))
+
+(deftest rejects-missing-empty-and-unsupported-sources
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-source-validation-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          emitter            (async/chan 8)
+          dispatches_        (atom [])
+          existing-queue     {:current     {:mrl "file:///already-playing.mp3"}
+                              :source-path "existing"}
+          cases              [["missing" :missing-source]
+                              ["empty" :empty-source]
+                              ["notes.txt" :unsupported-source]]]
+      (try
+        (fs/create-dirs (fs/path temp-dir "empty"))
+        (swap! audio/audio-state assoc :queue existing-queue)
+        (with-redefs [mp/dispatch (fn [& args]
+                                    (swap! dispatches_ conj args))]
+          (log-test/with-log
+            (doseq [[item-path] cases]
+              (audio/play-path!
+               {:emitter emitter :player :player :settings settings}
+               {:item-path item-path :uid "card-a"}))
+            (let [messages (->> (log-test/the-log)
+                                (filter #(= :error (:level %)))
+                                (mapv :message))]
+              (is (empty? @dispatches_))
+              (is (= existing-queue (:queue @audio/audio-state)))
+              (doseq [[item-path reason] cases]
+                (is (some #(and (str/includes? % item-path)
+                                (str/includes? % ":stage :source-validation")
+                                (str/includes? % (str ":reason " reason))
+                                (str/includes? % ":uid card-a"))
+                          messages))))))
+        (finally
+          (async/close! emitter))))))
+
+(deftest rejects-empty-announcement-expansion
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-empty-expansion-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          dispatches_        (atom [])
+          syntheses_         (atom 0)
+          existing-queue     {:current     {:mrl "file:///already-playing.mp3"}
+                              :source-path "existing"}
+          sys                {:player   :player
+                              :settings settings
+                              :db-conn
+                              (atom {:settings
+                                     {:tts {:announce-tracks? true}}})}]
+      (swap! audio/audio-state assoc :queue existing-queue)
+      (with-redefs [mp/parse-meta
+                    (fn [_ _]
+                      (doto (promise)
+                        (deliver [{:audio-tracks []
+                                   :parse-status :media-parsed-status/done}])))
+                    mp/dispatch
+                    (fn [& args]
+                      (swap! dispatches_ conj args))
+                    tts/tts
+                    (fn [& _]
+                      (swap! syntheses_ inc)
+                      "tts://unexpected")]
+        (log-test/with-log
+          (.join ^Thread
+           (audio/play-path!
+            sys
+            {:item-path "audiobooks/Author One/Book One"}))
+          (let [message (->> (log-test/the-log)
+                             (filter #(= :error (:level %)))
+                             first
+                             :message)]
+            (is (empty? @dispatches_))
+            (is (zero? @syntheses_))
+            (is (= existing-queue (:queue @audio/audio-state)))
+            (is (str/includes? message ":stage :media-expansion"))
+            (is (str/includes? message ":reason :empty-track-list"))))))))
+
+(deftest play-now-rejects-nil-and-empty-paths-before-clearing
+  (let [play-now      (some-> (ns-resolve 'fairy.box.audio.system2
+                                          'play-now)
+                              var-get)
+        dispatches_   (atom [])
+        initial-state {:playback      {:state :playing
+                                       :current-track
+                                       {:mrl "file:///already-playing.mp3"}}
+                       :mixer         {}
+                       :queue         {:current     {:mrl "file:///already-playing.mp3"}
+                                       :source-path "existing"}
+                       :card-playback nil
+                       :config        {}}]
+    (is (some? play-now))
+    (when play-now
+      (reset! audio/audio-state initial-state)
+      (with-redefs [mp/dispatch (fn [& args]
+                                  (swap! dispatches_ conj args))]
+        (let [failures (mapv (fn [paths]
+                               (try
+                                 (play-now {:player :player} paths)
+                                 nil
+                                 (catch clojure.lang.ExceptionInfo error
+                                   (select-keys (ex-data error)
+                                                [:error :stage :reason :paths]))))
+                             [nil []])]
+          (is (= [{:error  :audio/empty-playback-paths
+                   :stage  :queue-dispatch
+                   :reason :empty-path-list
+                   :paths  nil}
+                  {:error  :audio/empty-playback-paths
+                   :stage  :queue-dispatch
+                   :reason :empty-path-list
+                   :paths  []}]
+                 failures))
+          (is (empty? @dispatches_))
+          (is (= initial-state @audio/audio-state)))))))
+
+(deftest expansion-exceptions-fall-back-to-the-playable-source
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-expansion-fallback-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          selected           "audiobooks/Author One/Book One"
+          selected-path      (str (fs/canonicalize
+                                   (fs/path temp-dir selected)))
+          dispatches_        (atom [])
+          sys                {:player   :player
+                              :settings settings
+                              :db-conn
+                              (atom {:settings
+                                     {:tts {:announce-tracks? true}}})}]
+      (with-redefs [mp/parse-meta
+                    (fn [_ _]
+                      (doto (promise)
+                        (deliver (ex-info "parse failed" {}))))
+                    mp/dispatch
+                    (fn [player command & {:as options}]
+                      (swap! dispatches_ conj [player command options]))]
+        (log-test/with-log
+          (.join ^Thread (audio/play-path! sys {:item-path selected}))
+          (is (= [[:player :playback/clear-all nil]
+                  [:player :playback/append {:paths [selected-path]}]
+                  [:player :playback/advance nil]]
+                 @dispatches_))
+          (is (some #(and (= :error (:level %))
+                          (str/includes? (:message %)
+                                         ":reason :media-expansion-failed"))
+                    (log-test/the-log))))))))
+
+(deftest logs-vlc-errors-with-current-playback-context
+  (let [emitter (async/chan 1)]
+    (try
+      (reset! audio/audio-state
+              {:playback      {:state         :playing
+                               :current-track {:mrl "file:///current.mp3"}}
+               :mixer         {}
+               :queue         {:source-type :folder
+                               :source-path "audiobooks/Book"}
+               :card-playback {:request-id        :request
+                               :uid               "card-a"
+                               :started?          true
+                               :feedback-emitted? true}
+               :config        {}})
+      (log-test/with-log
+        (audio/internal-event-handler
+         {:emitter emitter}
+         {:ol.vinyl/event :vlc/error})
+        (let [message (->> (log-test/the-log)
+                           (filter #(= :error (:level %)))
+                           first
+                           :message)]
+          (doseq [fragment ["Main player received VLC error"
+                            ":stage :native-playback"
+                            ":reason :vlc-error"
+                            ":playback-state :playing"
+                            ":current-track {:mrl file:///current.mp3}"
+                            ":source-path audiobooks/Book"
+                            ":source-type :folder"
+                            ":uid card-a"]]
+            (is (str/includes? message fragment)))))
+      (finally
+        (async/close! emitter)))))

@@ -32,10 +32,26 @@
    fs/strip-ext))
 
 (defn- play-now [{:keys [player] :as _sys} paths]
-  (tap> [:playing-now paths])
-  (mp/dispatch player :playback/clear-all)
-  (mp/dispatch player :playback/append :paths paths)
-  (mp/dispatch player :playback/advance))
+  (let [paths (some-> paths vec)]
+    (if (seq paths)
+      (do
+        (tap> [:playing-now paths])
+        (mp/dispatch player :playback/clear-all)
+        (mp/dispatch player :playback/append :paths paths)
+        (mp/dispatch player :playback/advance))
+      (let [{:keys [playback queue playback-request]} @audio-state
+            context {:error          :audio/empty-playback-paths
+                     :stage          :queue-dispatch
+                     :reason         :empty-path-list
+                     :paths          paths
+                     :playback-state (:state playback)
+                     :current-track  (:current-track playback)
+                     :source-path    (:source-path queue)
+                     :source-type    (:source-type queue)
+                     :uid            (:uid playback-request)}]
+        (log/error "Refusing to replace the playback queue with no paths"
+                   context)
+        (throw (ex-info "Playback requires at least one path" context))))))
 
 (defn- expand-path [{:keys [player] :as _sys} path]
   (let [result @(mp/parse-meta player [path])]
@@ -94,23 +110,16 @@
                          :playable-type  playable-type})))
       (mapv track->metadata (expand-path sys path)))))
 
-(defn- announce-then-play [sys path]
-  (util/thread
-    (try
-      (when-let [tracks (expand-path sys path)]
-        (let [tracks        (sort-by #(or (track-number %) Long/MAX_VALUE)
-                                     tracks)
-              tts-system    (assoc sys
-                                   :tts-cache-dir
-                                   (tts/tts-cache-dir (:settings sys)))
-              announcements (mapv #(tts/tts tts-system
-                                            (announcement-for-track %))
-                                  tracks)
-              new-tracks    (interleave announcements tracks)]
-          (play-now sys new-tracks)))
-      (catch Exception e
-        (log/error e "Error generating track announcements; playing normally")
-        (play-now sys [path])))))
+(defn- tracks-with-announcements [sys tracks]
+  (let [tracks        (sort-by #(or (track-number %) Long/MAX_VALUE)
+                               tracks)
+        tts-system    (assoc sys
+                             :tts-cache-dir
+                             (tts/tts-cache-dir (:settings sys)))
+        announcements (mapv #(tts/tts tts-system
+                                      (announcement-for-track %))
+                            tracks)]
+    (vec (interleave announcements tracks))))
 
 (defn- set-queue-source! [settings path]
   (swap! audio-state update :queue merge
@@ -122,25 +131,135 @@
 (defn- clear-queue-source! []
   (swap! audio-state update :queue dissoc :source-type :source-path))
 
+(defn- play-source! [sys path paths]
+  (set-queue-source! (:settings sys) path)
+  (play-now sys paths))
+
+(defn- announced-playback-paths [sys path tracks context]
+  (try
+    (tracks-with-announcements sys tracks)
+    (catch Exception error
+      (log/error error
+                 "Error generating track announcements; playing normally"
+                 (assoc context
+                        :stage :announcement-generation
+                        :reason :announcement-generation-failed))
+      [path])))
+
+(defn- log-empty-media-expansion! [context]
+  (log/error "Media expansion produced no playable tracks"
+             (assoc context
+                    :stage :media-expansion
+                    :reason :empty-track-list)))
+
+(defn- announce-then-play [sys path context]
+  (util/thread
+    (let [{:keys [tracks error]}
+          (try
+            {:tracks (expand-path sys path)}
+            (catch Exception error
+              {:error error}))]
+      (cond
+        error
+        (do
+          (log/error error
+                     "Error expanding track announcements; playing normally"
+                     (assoc context
+                            :stage :media-expansion
+                            :reason :media-expansion-failed))
+          (play-source! sys path [path]))
+
+        (seq tracks)
+        (play-source! sys
+                      path
+                      (announced-playback-paths sys
+                                                path
+                                                tracks
+                                                context))
+
+        :else
+        (log-empty-media-expansion! context)))))
+
+(defn- playback-source [settings item-path]
+  (try
+    (let [resolved-path (when (some? item-path)
+                          (browse/canonicalize-path settings item-path))
+          file          (some-> resolved-path io/file)]
+      (cond
+        (nil? item-path)
+        {:resolved-path nil :reason :missing-source}
+
+        (nil? resolved-path)
+        {:resolved-path nil :reason :invalid-source-path}
+
+        (not (.exists file))
+        {:resolved-path resolved-path :reason :missing-source}
+
+        (or (not (.canRead file))
+            (and (.isDirectory file) (not (.canExecute file))))
+        {:resolved-path resolved-path :reason :unreadable-source}
+
+        :else
+        (if-let [playable-type (browse/playable-type settings resolved-path)]
+          {:resolved-path resolved-path :playable-type playable-type}
+          {:resolved-path resolved-path
+           :reason        (if (.isDirectory file)
+                            :empty-source
+                            :unsupported-source)})))
+    (catch SecurityException error
+      {:resolved-path    nil
+       :reason           :unreadable-source
+       :validation-error error})
+    (catch Exception error
+      {:resolved-path    nil
+       :reason           :source-validation-failed
+       :validation-error error})))
+
+(defn- playback-request-context [item-path resolved-path uid]
+  (cond-> {:requested-path item-path
+           :resolved-path  (some-> resolved-path str)}
+    (some? uid) (assoc :uid uid)))
+
 (defn play-path!
-  [{:keys [settings] :as sys} {:keys [item-path] :as _value}]
-  (assert item-path "Path must not be nil")
-  (let [path          (browse/canonicalize-path settings item-path)
-        tts-announce? (when path (db/announce-path? sys path))]
+  [{:keys [settings] :as sys} {:keys [item-path uid] :as _value}]
+  (let [{:keys [resolved-path playable-type reason validation-error]}
+        (playback-source settings item-path)
+        context (playback-request-context item-path resolved-path uid)
+        tts-result (when-not reason
+                     (try
+                       {:announce? (db/announce-path? sys resolved-path)}
+                       (catch Exception error
+                         {:error error})))
+        tts-announce? (:announce? tts-result)]
+    (swap! audio-state assoc :playback-request context)
     (log/info "Attempting media playback"
-              {:requested-path item-path
-               :resolved-path  (some-> path str)
-               :tts-announce?  tts-announce?})
-    (if path
-      (do
-        (set-queue-source! settings path)
-        (if tts-announce?
-          (announce-then-play sys path)
-          (play-now sys [path])))
-      (throw (ex-info
-              "Could not play. Requested path could not be found in media-dir"
-              {:requested-path item-path
-               :media-dir      (browse/media-dir settings)})))))
+              (assoc context
+                     :playable-type playable-type
+                     :tts-announce? tts-announce?))
+    (cond
+      reason
+      (let [failure-context (assoc context
+                                   :stage :source-validation
+                                   :reason reason)]
+        (if validation-error
+          (log/error validation-error
+                     "Playback source validation failed"
+                     failure-context)
+          (log/error "Playback source validation failed" failure-context))
+        nil)
+
+      (:error tts-result)
+      (log/error (:error tts-result)
+                 "Unable to resolve track announcement policy"
+                 (assoc context
+                        :stage :playback-preparation
+                        :reason :announcement-policy-failed))
+
+      tts-announce?
+      (announce-then-play sys resolved-path context)
+
+      :else
+      (play-source! sys resolved-path [resolved-path]))))
 
 (defn maximum-volume [policy]
   (int (playback-limits/current-limit policy :audio/max-volume)))
@@ -253,6 +372,21 @@
     (try
       (condp = event-name
         #_#_:vlc/media-changed  (tap> event)
+        :vlc/error            (let [{:keys [playback queue playback-request
+                                            card-playback]}                 @audio-state
+                                    uid (or (:uid playback-request)
+                                            (:uid card-playback))
+                                    context
+                                    (cond->
+                                     {:stage          :native-playback
+                                      :reason         :vlc-error
+                                      :playback-state (:state playback)
+                                      :current-track  (:current-track playback)
+                                      :source-path    (:source-path queue)
+                                      :source-type    (:source-type queue)}
+                                      uid (assoc :uid uid))]
+                                (log/error "Main player received VLC error"
+                                           context))
         :vlc/muted            (do
                                 (set-mixer :muted? (:muted? event))
                                 (emit-player :player/muted :muted? :muted? event))

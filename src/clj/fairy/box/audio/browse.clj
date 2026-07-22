@@ -76,12 +76,14 @@
     (let [media-base (media-dir settings)
           abs-path   (canonicalize-path settings path)]
       (when (and abs-path (.exists (fs/file abs-path)))
-        (let [{:keys [dir? file?]} (dir-item (Paths/get media-base (into-array ["/"])) (fs/file abs-path))]
+        (let [{:keys [dir? file? media-file?]}
+              (dir-item (Paths/get media-base (into-array ["/"]))
+                        (fs/file abs-path))]
           (cond
             (and dir? (not-empty (list-media-files (fs/file abs-path)))) :dir
             (m3u? abs-path) :playlist
             (str/ends-with? abs-path ".tts-cache") :tts
-            file? :file
+            (and file? media-file?) :file
             :else nil))))))
 
 (defn list-dirs
