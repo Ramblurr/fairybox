@@ -13,6 +13,10 @@
   {:max-volume               95
    :max-volume-day           80
    :max-volume-night         50
+   :startup-volume-day       90
+   :startup-volume-night     65
+   :shutdown-volume-day      70
+   :shutdown-volume-night    20
    :max-led-brightness-day   75
    :max-led-brightness-night 20
    :day-start                "08:30"
@@ -65,17 +69,22 @@
     (is (= {:schedule
             [{:id               :day
               :starts-at-minute 510
-              :limits           {:audio/max-volume   80
-                                 :led/max-brightness 0.75}}
+              :limits           {:audio/max-volume      80
+                                 :audio/startup-volume  90
+                                 :audio/shutdown-volume 70
+                                 :led/max-brightness    0.75}}
              {:id               :night
               :starts-at-minute 1170
-              :limits           {:audio/max-volume   50
-                                 :led/max-brightness 0.2}}]
+              :limits           {:audio/max-volume      50
+                                 :audio/startup-volume  65
+                                 :audio/shutdown-volume 20
+                                 :led/max-brightness    0.2}}]
             :periods              [:night :night :day :day :night]
             :next-transition      "2025-01-15T19:30+01:00[Europe/Berlin]"
             :equal-start          :night
             :legacy-starts        [420 1260]
             :capped-volumes       [40 40]
+            :capped-system-sounds [[40 40] [40 20]]
             :clamped-brightness   [1.0 0.0]
             :defaulted-brightness [1.0 1.0]}
            {:schedule        schedule
@@ -92,6 +101,11 @@
             :legacy-starts   (mapv :starts-at-minute legacy)
             :capped-volumes  (mapv #(get-in % [:limits :audio/max-volume])
                                    capped)
+            :capped-system-sounds
+            (mapv (fn [entry]
+                    ((juxt :audio/startup-volume :audio/shutdown-volume)
+                     (:limits entry)))
+                  capped)
             :clamped-brightness
             (mapv #(get-in % [:limits :led/max-brightness]) clamped)
             :defaulted-brightness
@@ -129,6 +143,9 @@
           _maximum            (swap! db-conn assoc-in
                                      [:settings :audio :max-volume-day]
                                      60)
+          _startup            (swap! db-conn assoc-in
+                                     [:settings :audio :startup-volume-day]
+                                     55)
           _boundary           (swap! db-conn assoc-in
                                      [:settings :audio :night-start]
                                      "17:45")
@@ -143,26 +160,41 @@
           _second-stop        (stop-policy! policy)]
       (is (= {:initial
               [{:active-period :day
-                :limits        {:audio/max-volume   80
-                                :led/max-brightness 0.75}}]
+                :limits        {:audio/max-volume      80
+                                :audio/startup-volume  90
+                                :audio/shutdown-volume 70
+                                :led/max-brightness    0.75}}]
               :unrelated-published? false
               :deliveries
               [{:active-period :day
-                :limits        {:audio/max-volume   80
-                                :led/max-brightness 0.75}}
+                :limits        {:audio/max-volume      80
+                                :audio/startup-volume  90
+                                :audio/shutdown-volume 70
+                                :led/max-brightness    0.75}}
                {:active-period :day
-                :limits        {:audio/max-volume   60
-                                :led/max-brightness 0.75}}
+                :limits        {:audio/max-volume      60
+                                :audio/startup-volume  90
+                                :audio/shutdown-volume 70
+                                :led/max-brightness    0.75}}
+               {:active-period :day
+                :limits        {:audio/max-volume      60
+                                :audio/startup-volume  55
+                                :audio/shutdown-volume 70
+                                :led/max-brightness    0.75}}
                {:active-period :night
-                :limits        {:audio/max-volume   50
-                                :led/max-brightness 0.2}}
+                :limits        {:audio/max-volume      50
+                                :audio/startup-volume  65
+                                :audio/shutdown-volume 20
+                                :led/max-brightness    0.2}}
                {:active-period :day
-                :limits        {:audio/max-volume   60
-                                :led/max-brightness 0.75}}]
+                :limits        {:audio/max-volume      60
+                                :audio/startup-volume  55
+                                :audio/shutdown-volume 70
+                                :led/max-brightness    0.75}}]
               :watches-before-stop  1
               :watches-after-stop   0
-              :scheduled-delays     [60000 60000 46860000 33300000]
-              :cancelled-tokens     [1 2 3 4]
+              :scheduled-delays     [60000 60000 60000 46860000 33300000]
+              :cancelled-tokens     [1 2 3 4 5]
               :shutdown-count       1}
              {:initial              initial
               :unrelated-published? (not= initial after-unrelated)

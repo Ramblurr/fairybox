@@ -145,6 +145,15 @@
 (defn maximum-volume [policy]
   (int (playback-limits/current-limit policy :audio/max-volume)))
 
+(def ^:private one-shot-volume-limit-keys
+  {:startup-sound  :audio/startup-volume
+   :shutdown-sound :audio/shutdown-volume})
+
+(defn one-shot-volume [policy id]
+  (int (playback-limits/current-limit
+        policy
+        (get one-shot-volume-limit-keys id :audio/max-volume))))
+
 (defn- player-event
   "Constructs a valid event map for a player event"
   [event]
@@ -195,12 +204,14 @@
    {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
   ;; we do this because we want to handle the events separate from the normal player
-  (let [path (browse/canonicalize-path settings item-path)]
+  (let [path   (browse/canonicalize-path settings item-path)
+        volume (one-shot-volume playback-limits id)]
     (tap> [:one-shot-play item-path id :final-path path])
     (log/info "Attempting one-shot media playback"
               {:id             id
                :requested-path item-path
-               :resolved-path  (some-> path str)})
+               :resolved-path  (some-> path str)
+               :volume         volume})
     (if path
       (util/thread
         (try
@@ -223,7 +234,7 @@
 
             (mp/dispatch one-shot-player
                          :mixer/set-volume
-                         :level (maximum-volume playback-limits))
+                         :level volume)
             (mp/dispatch one-shot-player :playback/clear-all)
             (mp/dispatch one-shot-player :playback/append :paths [path])
             (mp/dispatch one-shot-player :playback/play)

@@ -70,6 +70,10 @@
    :max_volume               :max-volume
    :max_volume_day           :max-volume-day
    :max_volume_night         :max-volume-night
+   :startup_volume_day       :startup-volume-day
+   :startup_volume_night     :startup-volume-night
+   :shutdown_volume_day      :shutdown-volume-day
+   :shutdown_volume_night    :shutdown-volume-night
    :max_led_brightness_day   :max-led-brightness-day
    :max_led_brightness_night :max-led-brightness-night})
 
@@ -515,6 +519,8 @@
 
 (defn- day-night-profile
   [{:keys [id title description start-time start-signal volume volume-signal
+           startup-volume startup-volume-signal
+           shutdown-volume shutdown-volume-signal
            brightness brightness-signal]}]
   [:section {:id              id
              :aria-labelledby (str id "-heading")
@@ -543,6 +549,18 @@
       :signal      volume-signal
       :description "This profile's cap, still limited by the overall safety maximum."})
     (settings-slider
+     {:name        (str id "-startup-volume")
+      :label       "Startup sound volume"
+      :value       startup-volume
+      :signal      startup-volume-signal
+      :description "A fixed startup sound volume, limited only by the overall safety maximum."})
+    (settings-slider
+     {:name        (str id "-shutdown-volume")
+      :label       "Shutdown sound volume"
+      :value       shutdown-volume
+      :signal      shutdown-volume-signal
+      :description "A fixed shutdown sound volume, limited only by the overall safety maximum."})
+    (settings-slider
      {:name        (str id "-led-brightness")
       :label       "LED brightness"
       :value       brightness
@@ -551,34 +569,44 @@
 
 (defn- day-night-settings
   [{:keys [max-volume-day max-volume-night
+           startup-volume-day startup-volume-night
+           shutdown-volume-day shutdown-volume-night
            max-led-brightness-day max-led-brightness-night
            day-start night-start]}]
   (settings-card
    {:id          "day-night-settings"
     :title       "Day & night profiles"
-    :description "Fairybox switches profiles at these times, changing both its volume cap and LED brightness."
+    :description "Fairybox switches profiles at these times, changing playback limits, system sound volumes, and LED brightness."
     :class       (css [:lg :col-span-12])}
    [:div {:class (css :mt-6 :grid :grid-cols-1 :gap-5 [:sm :grid-cols-2])}
     (day-night-profile
-     {:id                "day-profile"
-      :title             "Day"
-      :description       "Brighter lights and a daytime listening limit."
-      :start-time        day-start
-      :start-signal      "day_start"
-      :volume            max-volume-day
-      :volume-signal     "max_volume_day"
-      :brightness        max-led-brightness-day
-      :brightness-signal "max_led_brightness_day"})
+     {:id "day-profile"
+      :title                  "Day"
+      :description            "Brighter lights and a daytime listening limit."
+      :start-time             day-start
+      :start-signal           "day_start"
+      :volume                 max-volume-day
+      :volume-signal          "max_volume_day"
+      :startup-volume         startup-volume-day
+      :startup-volume-signal  "startup_volume_day"
+      :shutdown-volume        shutdown-volume-day
+      :shutdown-volume-signal "shutdown_volume_day"
+      :brightness             max-led-brightness-day
+      :brightness-signal      "max_led_brightness_day"})
     (day-night-profile
-     {:id                "night-profile"
-      :title             "Night"
-      :description       "Quieter playback and dimmer lights for evenings."
-      :start-time        night-start
-      :start-signal      "night_start"
-      :volume            max-volume-night
-      :volume-signal     "max_volume_night"
-      :brightness        max-led-brightness-night
-      :brightness-signal "max_led_brightness_night"})]))
+     {:id "night-profile"
+      :title                  "Night"
+      :description            "Quieter playback and dimmer lights for evenings."
+      :start-time             night-start
+      :start-signal           "night_start"
+      :volume                 max-volume-night
+      :volume-signal          "max_volume_night"
+      :startup-volume         startup-volume-night
+      :startup-volume-signal  "startup_volume_night"
+      :shutdown-volume        shutdown-volume-night
+      :shutdown-volume-signal "shutdown_volume_night"
+      :brightness             max-led-brightness-night
+      :brightness-signal      "max_led_brightness_night"})]))
 
 (defn- timer-cycle-expression [action direction]
   (str "@post('" action
@@ -729,6 +757,8 @@
 (defn device-settings-form
   [{:keys [url-for]}
    {:keys [min-volume max-volume max-volume-day max-volume-night
+           startup-volume-day startup-volume-night
+           shutdown-volume-day shutdown-volume-night
            max-led-brightness-day max-led-brightness-night
            day-start night-start card-removal-behavior
            card-return-behavior] :as audio-settings}
@@ -750,6 +780,10 @@
              :max_volume               max-volume
              :max_volume_day           max-volume-day
              :max_volume_night         max-volume-night
+             :startup_volume_day       startup-volume-day
+             :startup_volume_night     startup-volume-night
+             :shutdown_volume_day      shutdown-volume-day
+             :shutdown_volume_night    shutdown-volume-night
              :max_led_brightness_day   max-led-brightness-day
              :max_led_brightness_night max-led-brightness-night
              :day_start                day-start

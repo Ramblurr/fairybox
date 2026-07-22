@@ -516,6 +516,10 @@
                         :max-volume               90
                         :max-volume-day           80
                         :max-volume-night         50
+                        :startup-volume-day       60
+                        :startup-volume-night     25
+                        :shutdown-volume-day      70
+                        :shutdown-volume-night    20
                         :max-led-brightness-day   75
                         :max-led-brightness-night 20
                         :day-start                "08:30"
@@ -544,6 +548,8 @@
             outputs         (re-seq #"<output[^>]+>[^<]*</output>" html)
             slider-bindings ["min_volume" "max_volume"
                              "max_volume_day" "max_volume_night"
+                             "startup_volume_day" "startup_volume_night"
+                             "shutdown_volume_day" "shutdown_volume_night"
                              "max_led_brightness_day"
                              "max_led_brightness_night"]
             time-bindings   ["day_start" "night_start"]
@@ -554,8 +560,9 @@
             labels          ["Device Settings" "Overall volume"
                              "Minimum volume" "Safety maximum"
                              "Day &amp; night profiles" "Day" "Night"
-                             "Starts at" "Maximum volume" "LED brightness"
-                             "Sleep timer" "Fade-out time"
+                             "Starts at" "Maximum volume"
+                             "Startup sound volume" "Shutdown sound volume"
+                             "LED brightness" "Sleep timer" "Fade-out time"
                              "Delay before shutdown" "Auto shutdown"
                              "Idle time" "45 minutes"
                              "Disable auto shutdown"]
@@ -585,7 +592,7 @@
                  :bindings         true
                  :checked-defaults true}
                 :sliders
-                {:count          6
+                {:count          10
                  :number-inputs  1
                  :limits         true
                  :current-values true
@@ -662,14 +669,14 @@
                                (str/includes? % "step=\"1\""))
                          range-inputs)
                  :current-values
-                 (and (= 6 (count outputs))
+                 (and (= 10 (count outputs))
                       (every? (fn [binding]
                                 (some #(str/includes? % (str "$" binding))
                                       outputs))
                               slider-bindings))
                  :endpoints
-                 (and (= 6 (count (re-seq #">0%</span>" html)))
-                      (= 6 (count (re-seq #">100%</span>" html))))
+                 (and (= 10 (count (re-seq #">0%</span>" html)))
+                      (= 10 (count (re-seq #">100%</span>" html))))
                  :shutdown-delay
                  (some #(and (str/includes? % "min=\"0\"")
                              (str/includes? % "step=\"1\"")
@@ -705,6 +712,10 @@
                                    :max-volume               95
                                    :max-volume-day           80
                                    :max-volume-night         50
+                                   :startup-volume-day       80
+                                   :startup-volume-night     50
+                                   :shutdown-volume-day      80
+                                   :shutdown-volume-night    50
                                    :max-led-brightness-day   100
                                    :max-led-brightness-night 100
                                    :day-start                "08:00"
@@ -723,6 +734,10 @@
                     :max_volume               91
                     :max_volume_day           81
                     :max_volume_night         51
+                    :startup_volume_day       61
+                    :startup_volume_night     26
+                    :shutdown_volume_day      71
+                    :shutdown_volume_night    21
                     :max_led_brightness_day   75
                     :max_led_brightness_night 20
                     :day_start                "08:30"
@@ -738,6 +753,9 @@
                               (assoc valid-body :night_start "19:60")
                               (assoc valid-body
                                      :max_led_brightness_day
+                                     101)
+                              (assoc valid-body
+                                     :startup_volume_night
                                      101)]]
           (save! (assoc req :body invalid-body)))
         (remove-watch db-conn ::write-count)
@@ -747,6 +765,10 @@
                           :max-volume               91
                           :max-volume-day           81
                           :max-volume-night         51
+                          :startup-volume-day       61
+                          :startup-volume-night     26
+                          :shutdown-volume-day      71
+                          :shutdown-volume-night    21
                           :max-led-brightness-day   75
                           :max-led-brightness-night 20
                           :day-start                "08:30"
@@ -772,6 +794,10 @@
                  :max_volume                   91
                  :max_volume_day               81
                  :max_volume_night             51
+                 :startup_volume_day           61
+                 :startup_volume_night         26
+                 :shutdown_volume_day          71
+                 :shutdown_volume_night        21
                  :max_led_brightness_day       75
                  :max_led_brightness_night     20
                  :day_start                    "08:30"

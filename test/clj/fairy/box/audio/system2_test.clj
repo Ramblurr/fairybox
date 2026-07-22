@@ -437,6 +437,42 @@
             [:player :playback/set-shuffle {:shuffle? true}]]
            @dispatches))))
 
+(deftest selects-profile-specific-system-sound-volumes
+  (let [zone      (ZoneId/of "Europe/Berlin")
+        clock_    (atom (ZonedDateTime/of 2025 1 15 12 0 0 0 zone))
+        db-conn   (atom {:settings
+                         {:audio {:max-volume               95
+                                  :max-volume-day           80
+                                  :max-volume-night         50
+                                  :startup-volume-day       60
+                                  :startup-volume-night     25
+                                  :shutdown-volume-day      70
+                                  :shutdown-volume-night    20
+                                  :max-led-brightness-day   100
+                                  :max-led-brightness-night 100
+                                  :day-start                "08:00"
+                                  :night-start              "19:30"}}})
+        scheduler {:schedule! (fn [_ _] ::pending)
+                   :cancel!   (constantly nil)
+                   :shutdown! (constantly nil)}
+        policy    (limits/start-policy! {:db-conn   db-conn
+                                         :now-fn    #(deref clock_)
+                                         :scheduler scheduler})
+        volumes   (fn []
+                    {:startup  (audio/one-shot-volume policy :startup-sound)
+                     :shutdown (audio/one-shot-volume policy :shutdown-sound)
+                     :tts      (audio/one-shot-volume policy :tts)})]
+    (try
+      (let [day (volumes)]
+        (reset! clock_ (ZonedDateTime/of 2025 1 15 20 0 0 0 zone))
+        (limits/refresh! policy)
+        (is (= {:day   {:startup 60 :shutdown 70 :tts 80}
+                :night {:startup 25 :shutdown 20 :tts 50}}
+               {:day day :night (volumes)})))
+      (finally
+        ((::ds/stop limits/PlaybackLimitsComponent)
+         {::ds/instance policy})))))
+
 (deftest enforces-policy-limits-without-raising-volume
   (let [zone               (ZoneId/of "Europe/Berlin")
         clock_             (atom (ZonedDateTime/of 2025 1 15 12 0 0 0 zone))

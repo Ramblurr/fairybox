@@ -16,6 +16,10 @@
    :max-volume               95
    :max-volume-day           95
    :max-volume-night         95
+   :startup-volume-day       95
+   :startup-volume-night     95
+   :shutdown-volume-day      95
+   :shutdown-volume-night    95
    :max-led-brightness-day   100
    :max-led-brightness-night 100
    :day-start                "08:00"
@@ -95,6 +99,12 @@
       (valid-legacy-hour? legacy-value) (format "%02d:00" legacy-value)
       :else (get default-audio-settings new-key))))
 
+(defn- profile-sound-volume [audio-settings sound-key profile-key]
+  (if (contains? audio-settings sound-key)
+    (get audio-settings sound-key)
+    (get audio-settings profile-key
+         (get default-audio-settings sound-key))))
+
 (defn migrate-db [database]
   (let [audio-settings          (get-in database [:settings :audio] {})
         migrated-audio          (-> (merge (select-keys default-audio-settings
@@ -110,7 +120,27 @@
                                            :night-start
                                            (canonical-start audio-settings
                                                             :night-start
-                                                            :hour-night-start))
+                                                            :hour-night-start)
+                                           :startup-volume-day
+                                           (profile-sound-volume
+                                            audio-settings
+                                            :startup-volume-day
+                                            :max-volume-day)
+                                           :startup-volume-night
+                                           (profile-sound-volume
+                                            audio-settings
+                                            :startup-volume-night
+                                            :max-volume-night)
+                                           :shutdown-volume-day
+                                           (profile-sound-volume
+                                            audio-settings
+                                            :shutdown-volume-day
+                                            :max-volume-day)
+                                           :shutdown-volume-night
+                                           (profile-sound-volume
+                                            audio-settings
+                                            :shutdown-volume-night
+                                            :max-volume-night))
                                     (dissoc :hour-day-start :hour-night-start))
         migrated-auto-shutdown-settings
         (complete-auto-shutdown-settings

@@ -47,6 +47,10 @@
                                    :max-volume               95
                                    :max-volume-day           80
                                    :max-volume-night         50
+                                   :startup-volume-day       80
+                                   :startup-volume-night     50
+                                   :shutdown-volume-day      80
+                                   :shutdown-volume-night    50
                                    :max-led-brightness-day   100
                                    :max-led-brightness-night 100
                                    :day-start                "08:30"
@@ -81,10 +85,14 @@
               :second-write-free? (= fixed-time second-time)})))))
 
 (deftest chooses-canonical-start-values
-  (let [cases    {:new              {:settings {:audio {:day-start        "09:15"
-                                                        :night-start      "21:45"
-                                                        :hour-day-start   7
-                                                        :hour-night-start 20}}}
+  (let [cases    {:new              {:settings {:audio {:day-start             "09:15"
+                                                        :night-start           "21:45"
+                                                        :hour-day-start        7
+                                                        :hour-night-start      20
+                                                        :startup-volume-day    60
+                                                        :startup-volume-night  25
+                                                        :shutdown-volume-day   55
+                                                        :shutdown-volume-night 20}}}
                   :legacy           {:settings {:audio {:hour-day-start   8
                                                         :hour-night-start 19}}}
                   :malformed-new    {:settings {:audio {:day-start        "9:15"
@@ -101,6 +109,15 @@
              :malformed-new    {:day-start "06:00" :night-start "22:00"}
              :malformed-legacy {:day-start "08:00" :night-start "19:00"}
              :missing          {:day-start "08:00" :night-start "19:00"}}
+            :system-sound-volumes
+            {:new     {:startup-volume-day    60
+                       :startup-volume-night  25
+                       :shutdown-volume-day   55
+                       :shutdown-volume-night 20}
+             :missing {:startup-volume-day    95
+                       :startup-volume-night  95
+                       :shutdown-volume-day   95
+                       :shutdown-volume-night 95}}
             :brightness
             {:max-led-brightness-day   100
              :max-led-brightness-night 100}
@@ -111,6 +128,14 @@
            {:starts        (update-vals migrated
                                         #(select-keys (db/audio-settings %)
                                                       [:day-start :night-start]))
+            :system-sound-volumes
+            (update-vals (select-keys migrated [:new :missing])
+                         #(select-keys
+                           (db/audio-settings %)
+                           [:startup-volume-day
+                            :startup-volume-night
+                            :shutdown-volume-day
+                            :shutdown-volume-night]))
             :brightness    (select-keys
                             (db/audio-settings (:missing migrated))
                             [:max-led-brightness-day

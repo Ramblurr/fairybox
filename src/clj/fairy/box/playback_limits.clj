@@ -36,6 +36,12 @@
     (min absolute-maximum
          (numeric-setting audio-settings period-key absolute-maximum))))
 
+(defn- system-sound-volume [audio-settings setting-key profile-key]
+  (audio-limit audio-settings
+               (if (number? (get audio-settings setting-key))
+                 setting-key
+                 profile-key)))
+
 (defn- brightness-limit [audio-settings setting-key]
   (let [percentage (numeric-setting audio-settings setting-key 100)]
     (double (/ (max 0 (min 100 percentage)) 100))))
@@ -46,21 +52,37 @@
                        (configured-start audio-settings
                                          :day-start
                                          :hour-day-start))
-    :limits           {:audio/max-volume   (audio-limit audio-settings
-                                                        :max-volume-day)
-                       :led/max-brightness (brightness-limit
-                                            audio-settings
-                                            :max-led-brightness-day)}}
+    :limits           {:audio/max-volume      (audio-limit audio-settings
+                                                           :max-volume-day)
+                       :audio/startup-volume  (system-sound-volume
+                                               audio-settings
+                                               :startup-volume-day
+                                               :max-volume-day)
+                       :audio/shutdown-volume (system-sound-volume
+                                               audio-settings
+                                               :shutdown-volume-day
+                                               :max-volume-day)
+                       :led/max-brightness    (brightness-limit
+                                               audio-settings
+                                               :max-led-brightness-day)}}
    {:id               :night
     :starts-at-minute (minutes-since-midnight
                        (configured-start audio-settings
                                          :night-start
                                          :hour-night-start))
-    :limits           {:audio/max-volume   (audio-limit audio-settings
-                                                        :max-volume-night)
-                       :led/max-brightness (brightness-limit
-                                            audio-settings
-                                            :max-led-brightness-night)}}])
+    :limits           {:audio/max-volume      (audio-limit audio-settings
+                                                           :max-volume-night)
+                       :audio/startup-volume  (system-sound-volume
+                                               audio-settings
+                                               :startup-volume-night
+                                               :max-volume-night)
+                       :audio/shutdown-volume (system-sound-volume
+                                               audio-settings
+                                               :shutdown-volume-night
+                                               :max-volume-night)
+                       :led/max-brightness    (brightness-limit
+                                               audio-settings
+                                               :max-led-brightness-night)}}])
 
 (defn ordered-schedule [entries]
   (sort-by :starts-at-minute entries))
@@ -102,6 +124,10 @@
   [:max-volume
    :max-volume-day
    :max-volume-night
+   :startup-volume-day
+   :startup-volume-night
+   :shutdown-volume-day
+   :shutdown-volume-night
    :max-led-brightness-day
    :max-led-brightness-night
    :day-start
