@@ -101,6 +101,7 @@
   (let [bus        (ev/bus)
         emitter    (async/chan 2)
         observed   (async/chan 1)
+        cleared    (promise)
         component_ (atom nil)
         component  (refresh/start-refresh!
                     {:bus         bus
@@ -114,15 +115,25 @@
                             :operation :refresh
                             :provider  :google-cloud}}]
     (reset! component_ component)
+    (add-watch (:current-event_ component) ::cleared
+               (fn [_ _ previous current]
+                 (when (and (some? previous) (nil? current))
+                   (deliver cleared true))))
     (try
       (ev/emitize bus emitter)
       (emit! emitter (:path event) (:value event))
-      (is (= {:during-render event
-              :after-render  nil}
-             {:during-render (some-> (await-value observed 1000)
-                                     (select-keys [:path :value]))
-              :after-render  (refresh/current-event component)}))
+      (let [during-render (some-> (await-value observed 1000)
+                                  (select-keys [:path :value]))
+            cleared?      (deref cleared 1000 false)
+            after-render  (refresh/current-event component)]
+        (is (= {:during-render event
+                :cleared?      true
+                :after-render  nil}
+               {:during-render during-render
+                :cleared?      cleared?
+                :after-render  after-render})))
       (finally
+        (remove-watch (:current-event_ component) ::cleared)
         (refresh/stop-refresh! component)
         (async/close! emitter)
         (async/close! observed)
