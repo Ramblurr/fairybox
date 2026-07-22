@@ -326,11 +326,25 @@
         group: ramblurr
         mode: "0750"
 
+    - name: Install Fairybox startup animation
+      become: true
+      tags: [app, startup]
+      ansible.builtin.copy:
+        src: scripts/startup-pre.py
+        dest: /usr/local/bin/fairybox-startup
+        owner: root
+        group: root
+        mode: "0755"
+      notify: restart fairybox-startup
+
     - name: Create fairybox-startup.service systemd unit file
-      tags: [app]
+      tags: [app, startup]
       become: true
       ansible.builtin.copy:
         dest: /etc/systemd/system/fairybox-startup.service
+        owner: root
+        group: root
+        mode: "0644"
         content: |
           [Unit]
           Description=fairybox startup animation
@@ -340,13 +354,23 @@
           [Service]
           Type=simple
           WorkingDirectory=/var/lib/fairybox
-          ExecStart=/usr/bin/python3 /var/lib/fairybox/fairybox/scripts/startup-pre.py
+          ExecStart=/usr/local/bin/fairybox-startup
           User=ramblurr
           Environment="FAIRYBOX_API=http://localhost/api"
           Restart=no
 
           [Install]
           WantedBy=basic.target
+      notify: restart fairybox-startup
+
+    - name: Enable and start fairybox startup animation
+      become: true
+      tags: [app, startup]
+      ansible.builtin.systemd_service:
+        name: fairybox-startup.service
+        enabled: true
+        state: started
+        daemon_reload: true
 
     - name: Create fairybox.service systemd unit file
       tags: [app]
@@ -524,7 +548,7 @@
         daemon_reload: true
         enabled: true
 
-    - name: enable fairybox-startup
+    - name: restart fairybox-startup
       become: true
       ansible.builtin.systemd_service:
         name: fairybox-startup.service
