@@ -322,8 +322,8 @@
         :button/hold (handle-card-id-mode sys value)
         nil))))
 
-(defn speak-card-contents [{:keys [emitter] :as sys} item-path]
-  (let [metadata (audio/metadata-for sys item-path)
+(defn speak-card-contents [{:keys [audio-system emitter]} item-path]
+  (let [metadata (audio/metadata-for audio-system item-path)
         speech   (tts/metadata->speech metadata)]
     (tap> [:speak metadata :speech speech])
     (emit-tts! emitter {:action :tts/speak :text speech})))
@@ -597,6 +597,15 @@
                           (init-switchboard! config))
    :donut.system/stop   (fn [{:donut.system/keys [instance]}]
                           (halt-switchboard! instance))
-   :donut.system/config {:bus      [:donut.system/ref [:fairy.box/components :fairy.box.bus/bus]]
-                         :settings [:donut.system/ref [:fairy.box/components :fairy.box/settings]]
-                         :db-conn  [:donut.system/ref [:fairy.box/components :fairy.box.db/db]]}})
+   :donut.system/config {:audio-system [:donut.system/ref
+                                        [:fairy.box/components
+                                         :fairy.box.audio.system2/player]]
+                         :bus          [:donut.system/ref
+                                        [:fairy.box/components
+                                         :fairy.box.bus/bus]]
+                         :settings     [:donut.system/ref
+                                        [:fairy.box/components
+                                         :fairy.box/settings]]
+                         :db-conn      [:donut.system/ref
+                                        [:fairy.box/components
+                                         :fairy.box.db/db]]}})

@@ -5,9 +5,11 @@
    [clojure.java.shell :as shell]
    [clojure.test :refer [deftest is]]
    [clojure.tools.logging.test :as log-test]
+   [fairy.box.audio :as audio]
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.media-test-utils :as media]
    [fairy.box.switchboard :as switchboard]
+   [fairy.box.tts.speech :as speech]
    [jp.nijohando.event :as ev]))
 
 (defn- drain-events [channel]
@@ -191,6 +193,49 @@
                  :enabled  (card-identification-command true)}}))
         (finally
           (reset! state_ previous-state))))))
+
+(deftest card-identification-uses-audio-component-for-metadata
+  (let [emitter         (async/chan 1)
+        audio-component ::audio-component
+        item-path       "/srv/media/audiobooks/From Nonna"
+        metadata        [{:title  "Berenstain Bears and the Truth"
+                          :album  nil
+                          :artist nil}]]
+    (try
+      (with-redefs [audio/metadata-for
+                    (fn [actual-audio-component actual-item-path]
+                      (if (= [audio-component item-path]
+                             [actual-audio-component actual-item-path])
+                        metadata
+                        (throw (ex-info "Unexpected metadata source"
+                                        {:audio-component
+                                         actual-audio-component
+                                         :item-path
+                                         actual-item-path}))))]
+        (switchboard/speak-card-contents
+         {:audio-system audio-component
+          :emitter      emitter
+          :player       ::wrong-player}
+         item-path)
+        (is (= {:command
+                {:path  "/tts/commands"
+                 :value {:action :tts/speak
+                         :text
+                         (speech/plan
+                          [(speech/text "This one has ")
+                           (speech/pause 1000)
+                           (speech/text
+                            "\"Berenstain Bears and the Truth\"")])}}
+                :audio-ref
+                [:donut.system/ref
+                 [:fairy.box/components
+                  :fairy.box.audio.system2/player]]}
+               {:command   (async/<!! emitter)
+                :audio-ref (get-in switchboard/SwitchboardComponent
+                                   [:donut.system/config
+                                    :audio-system])})))
+      (finally
+        (async/close! emitter)))))
 
 (deftest ignores-card-removal-when-playback-is-manually-paused
   (let [state_               (var-get (ns-resolve 'fairy.box.switchboard
