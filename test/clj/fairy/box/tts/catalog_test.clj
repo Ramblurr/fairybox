@@ -6,6 +6,7 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
    [exoscale.cloak :as cloak]
+   [hato.client :as hc]
    [fairy.box.tts.catalog :as catalog]))
 
 (defn- google-credentials [secret]
@@ -67,6 +68,40 @@
           :voices (catalog/normalize-elevenlabs-voices
                    [{:voice_id "voice-2" :name "zebra"}
                     {:voice_id "voice-1" :name "Alice"}])})))
+
+(deftest decodes-json-at-default-http-boundary
+  (let [request! ((ns-resolve 'fairy.box.tts.catalog 'default-request-fn) nil)]
+    (with-redefs [hc/get (fn [_ _]
+                           {:body
+                            "{\"models\":[{\"model_id\":\"model-1\"}]}"})]
+      (is (= {:models [{:model_id "model-1"}]}
+             (request! "https://provider.invalid" {}))))))
+
+(deftest rejects-undecoded-provider-responses
+  (letfn [(error-data [request! provider]
+            (try
+              (catalog/fetch-provider-catalog request! provider "credential")
+              (catch clojure.lang.ExceptionInfo error
+                (ex-data error))))]
+    (is (= {:google            {:catalog/error :invalid-response
+                                :provider      :google-cloud
+                                :resource      :voices}
+            :elevenlabs-models {:catalog/error :invalid-response
+                                :provider      :elevenlabs
+                                :resource      :models}
+            :elevenlabs-voices {:catalog/error :invalid-response
+                                :provider      :elevenlabs
+                                :resource      :voices}}
+           {:google
+            (error-data (constantly "undecoded JSON") :google-cloud)
+            :elevenlabs-models
+            (error-data (constantly "undecoded JSON") :elevenlabs)
+            :elevenlabs-voices
+            (error-data (fn [url _]
+                          (if (= url catalog/elevenlabs-models-url)
+                            []
+                            "undecoded JSON"))
+                        :elevenlabs)}))))
 
 (deftest gates-refreshes-on-credentials
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-catalog-gate-"}]

@@ -8,6 +8,7 @@
   (:require
    [babashka.fs :as fs]
    [clojure.core.async :as async]
+   [clojure.data.json :as json]
    [clojure.edn :as edn]
    [clojure.string :as str]
    [exoscale.cloak :as cloak]
@@ -282,16 +283,28 @@
 
 (defn- default-request-fn [http-client]
   (fn [url opts]
-    (:body (hc/get url
-                   (merge {:as          :json
-                           :http-client http-client
-                           :timeout     request-timeout-ms}
-                          opts)))))
+    (-> (hc/get url
+                (merge {:as          :string
+                        :http-client http-client
+                        :timeout     request-timeout-ms}
+                       opts))
+        :body
+        (json/read-str {:key-fn keyword}))))
+
+(defn- invalid-response! [provider resource]
+  (throw (ex-info "Provider returned an invalid catalog response"
+                  {:catalog/error :invalid-response
+                   :provider      provider
+                   :resource      resource})))
 
 (defn- fetch-google-catalog [request! credential]
-  (-> (request! google-voices-url
-                {:headers {"X-Goog-Api-Key" (cloak/unmask credential)}})
-      normalize-google-voices))
+  (let [response (request! google-voices-url
+                           {:headers {"X-Goog-Api-Key"
+                                      (cloak/unmask credential)}})]
+    (when-not (and (map? response)
+                   (sequential? (:voices response)))
+      (invalid-response! :google-cloud :voices))
+    (normalize-google-voices response)))
 
 (defn- fetch-elevenlabs-voices [request! credential]
   (loop [page-token  nil
@@ -308,25 +321,31 @@
           response     (request! elevenlabs-voices-url
                                  {:headers      {"xi-api-key"
                                                  (cloak/unmask credential)}
-                                  :query-params query-params})
-          all-voices   (into voices (:voices response))]
-      (if-not (:has_more response)
-        (normalize-elevenlabs-voices all-voices)
-        (let [next-page-token (nonblank-string (:next_page_token response))]
-          (when (or (nil? next-page-token)
-                    (seen-tokens next-page-token))
-            (throw (ex-info "ElevenLabs returned invalid voice pagination"
-                            {:catalog/error :invalid-response})))
-          (recur next-page-token
-                 (conj seen-tokens next-page-token)
-                 (inc page-count)
-                 all-voices))))))
+                                  :query-params query-params})]
+      (when-not (and (map? response)
+                     (sequential? (:voices response))
+                     (boolean? (:has_more response)))
+        (invalid-response! :elevenlabs :voices))
+      (let [all-voices (into voices (:voices response))]
+        (if-not (:has_more response)
+          (normalize-elevenlabs-voices all-voices)
+          (let [next-page-token (nonblank-string (:next_page_token response))]
+            (when (or (nil? next-page-token)
+                      (seen-tokens next-page-token))
+              (throw (ex-info "ElevenLabs returned invalid voice pagination"
+                              {:catalog/error :invalid-response})))
+            (recur next-page-token
+                   (conj seen-tokens next-page-token)
+                   (inc page-count)
+                   all-voices)))))))
 
 (defn- fetch-elevenlabs-catalog [request! credential]
-  {:models (-> (request! elevenlabs-models-url
-                         {:headers {"xi-api-key" (cloak/unmask credential)}})
-               normalize-elevenlabs-models)
-   :voices (fetch-elevenlabs-voices request! credential)})
+  (let [models (request! elevenlabs-models-url
+                         {:headers {"xi-api-key" (cloak/unmask credential)}})]
+    (when-not (sequential? models)
+      (invalid-response! :elevenlabs :models))
+    {:models (normalize-elevenlabs-models models)
+     :voices (fetch-elevenlabs-voices request! credential)}))
 
 (defn fetch-provider-catalog
   "Fetches and normalizes one remote provider catalog through `request!`."
