@@ -37,12 +37,20 @@
 
 (defn change-mode! [sys new-mode]
   (emit-player! (:emitter sys) {:action :audio/clear})
-  (swap! state (fn [s]
-                 (-> s
-                     (assoc :system-mode new-mode)
-                     (assoc :rfid nil)
-                     (assoc :active-card-uid nil)
-                     (assoc :removed-card nil)))))
+  (let [[before after] (swap-vals! state
+                                   (fn [s]
+                                     (-> s
+                                         (assoc :system-mode new-mode)
+                                         (assoc :rfid nil)
+                                         (assoc :active-card-uid nil)
+                                         (assoc :removed-card nil))))
+        previous-mode  (:system-mode before)
+        current-mode   (:system-mode after)]
+    (when-not (= previous-mode current-mode)
+      (log/info "System mode changed"
+                {:from previous-mode
+                 :to   current-mode}))
+    current-mode))
 
 (defn exit-card-id-mode [{:keys [emitter] :as sys}]
   (change-mode! sys :system-mode/normal)
@@ -220,26 +228,38 @@
     (log/warn "Ignoring system control request"
               {:operation operation :reason :disabled-for-profile})))
 
+(defn- set-system-state! [new-state & kvs]
+  (let [[before after] (apply swap-vals! state assoc
+                              :system-state new-state
+                              kvs)
+        previous-state (:system-state before)
+        current-state  (:system-state after)]
+    (when-not (= previous-state current-state)
+      (log/info "System state changed"
+                {:from previous-state
+                 :to   current-state}))
+    current-state))
+
 (defn system-handler [{:keys [emitter settings]} {:keys [value] :as _ev}]
   ;; (tap> {:system ev})
   (let [{:keys [event reason]} value]
     (condp contains? event
       #{:system/initialized}      (do
-                                    (swap! state assoc :system-state :system-state/initialized)
+                                    (set-system-state! :system-state/initialized)
                                     (emit-system! emitter {:event :system/warming-up}))
       #{:system/warming-up}       (do
-                                    (swap! state assoc :system-state :system-state/warming-up)
+                                    (set-system-state! :system-state/warming-up)
                                     (emit-led! emitter {:action :led/set :groups [:all] :value 1.0})
                                     (when-let [sfx (browse/sfx-path settings :startup)]
                                       (emit-player! emitter {:action :audio/play-one-shot :id :startup-sound :item-path sfx})))
       #{:system/warmed-up}        (when (= :system-state/warming-up (system-state!))
-                                    (swap! state assoc :system-state :system-state/ready)
+                                    (set-system-state! :system-state/ready)
                                     (emit-system! emitter {:event :system/ready}))
       #{:system/poweroff :system/reboot :system/restart-fairybox}
       (request-system-control! emitter settings event)
       #{:system/cooling-down}     (when (and (= :system-state/ready (system-state!))
                                              (:pending-system-operation @state))
-                                    (swap! state assoc :system-state :system-state/cooling-down)
+                                    (set-system-state! :system-state/cooling-down)
                                     (emit-player! emitter {:action :audio/stop})
                                     (emit-led! emitter {:action :led/fade :groups [:all] :duration 3000 :from 1.0 :to 0.0 :after-set 0.0 :start-delay 14000})
                                     (if-let [sfx (browse/sfx-path settings :shutdown)]
@@ -250,9 +270,8 @@
       #{:system/shutdown}         (when (= :system-state/cooling-down (system-state!))
                                     (let [operation (:pending-system-operation @state)]
                                       (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
-                                      (swap! state assoc
-                                             :system-state :system-state/shutdown
-                                             :pending-system-operation nil)
+                                      (set-system-state! :system-state/shutdown
+                                                         :pending-system-operation nil)
                                       (when operation
                                         (execute-system-control! settings operation))))
       #{:system/poweroff-now}     (do
@@ -260,9 +279,8 @@
                                     (emit-led! emitter {:action :led/set :groups [:all] :value 0.0})
                                     (if (poweroff-enabled? settings)
                                       (do
-                                        (swap! state assoc
-                                               :system-state :system-state/shutdown
-                                               :pending-system-operation nil)
+                                        (set-system-state! :system-state/shutdown
+                                                           :pending-system-operation nil)
                                         (execute-system-control! settings :system/poweroff))
                                       (log/warn "Ignoring immediate host poweroff" {:reason reason})))
       nil)))

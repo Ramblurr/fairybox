@@ -253,6 +253,68 @@
         (async/close! emitter)
         (reset! state_ previous-state)))))
 
+(deftest logs-system-state-and-mode-transitions
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 32)
+        settings       {:shutdown {:poweroff-enabled? true}}
+        system         {:emitter emitter :settings settings}]
+    (try
+      (with-redefs [shell/sh (constantly {:exit 0 :out "" :err ""})]
+        (reset! state_ {:system-state             :system-state/booting
+                        :system-mode              :system-mode/normal
+                        :rfid nil
+                        :active-card-uid          nil
+                        :removed-card             nil
+                        :pending-system-operation nil})
+        (log-test/with-log
+          (doseq [event [:system/initialized
+                         :system/warming-up
+                         :system/warmed-up
+                         :system/poweroff
+                         :system/cooling-down
+                         :system/shutdown]]
+            (switchboard/system-handler system {:value {:event event}}))
+          (switchboard/change-mode!
+           system :system-mode/card-identification)
+          (switchboard/change-mode! system :system-mode/normal)
+          (switchboard/change-mode! system :system-mode/normal)
+          (is (= [{:level :info
+                   :message
+                   (str "System state changed {:from :system-state/booting, "
+                        ":to :system-state/initialized}")}
+                  {:level :info
+                   :message
+                   (str "System state changed {:from :system-state/initialized, "
+                        ":to :system-state/warming-up}")}
+                  {:level :info
+                   :message
+                   (str "System state changed {:from :system-state/warming-up, "
+                        ":to :system-state/ready}")}
+                  {:level :info
+                   :message
+                   (str "System state changed {:from :system-state/ready, "
+                        ":to :system-state/cooling-down}")}
+                  {:level :info
+                   :message
+                   (str "System state changed {:from :system-state/cooling-down, "
+                        ":to :system-state/shutdown}")}
+                  {:level :info
+                   :message
+                   (str "System mode changed {:from :system-mode/normal, "
+                        ":to :system-mode/card-identification}")}
+                  {:level :info
+                   :message
+                   (str "System mode changed {:from :system-mode/card-identification, "
+                        ":to :system-mode/normal}")}]
+                 (->> (log-test/the-log)
+                      (filter #(re-find #"^System (?:state|mode) changed"
+                                        (:message %)))
+                      (mapv #(select-keys % [:level :message])))))))
+      (finally
+        (async/close! emitter)
+        (reset! state_ previous-state)))))
+
 (deftest resets-card-state-when-switchboard-starts
   (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
         previous-state @state_
