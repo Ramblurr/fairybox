@@ -122,6 +122,16 @@
 (def tts-http-client
   (hc/build-http-client {:connect-timeout 10000}))
 (def tts-request-timeout-ms 30000)
+(def ^:private tts-log-text-limit 300)
+
+(defn- tts-log-text [input]
+  (let [text (-> (speech/prepared-input input :unknown {})
+                 :speech-input/value
+                 (str/replace #"\s+" " ")
+                 str/trim)]
+    (if (<= (count text) tts-log-text-limit)
+      text
+      (str (subs text 0 (- tts-log-text-limit 3)) "..."))))
 
 (defn- nonblank-string [value]
   (let [value (cloak/unmask value)]
@@ -526,14 +536,23 @@
         (throw error)
         (:value result)))))
 
+(defn- log-tts-audio-ready! [provider synthesis-mode source text path]
+  (when path
+    (log/info "TTS audio ready"
+              (cond-> {:provider provider
+                       :mode     synthesis-mode
+                       :source   source}
+                (seq text) (assoc :text text))))
+  path)
+
 (defn caching-home-assistant-tts
-  [{:keys [prepared-input tts-cache-dir] :as sys}]
+  [{:keys [log-text prepared-input tts-cache-dir] :as sys}]
   (let [cache-key [::home-assistant (speech/cache-identity prepared-input)]]
     (if-let [local-url (cache-get tts-cache-dir cache-key)]
-      local-url
+      (log-tts-audio-ready! :ha :normal :cache log-text local-url)
       (let [remote-url (home-assistant-tts sys)]
         (future (cache-file tts-cache-dir cache-key remote-url))
-        remote-url))))
+        (log-tts-audio-ready! :ha :normal :synthesized log-text remote-url)))))
 
 (defn mimic3-tts [{:keys [prepared-input]}]
   (->
@@ -548,12 +567,17 @@
             :as           :stream})
    :body))
 
-(defn caching-mimic3-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
+(defn caching-mimic3-tts
+  [{:keys [log-text prepared-input tts-cache-dir] :as sys}]
   (let [cache-key [::mimic3 (speech/cache-identity prepared-input)]]
     (if-let [local-url (cache-get tts-cache-dir cache-key)]
-      local-url
+      (log-tts-audio-ready! :mimic3 :normal :cache log-text local-url)
       (let [in (mimic3-tts sys)]
-        (cache-input-stream tts-cache-dir cache-key in)))))
+        (log-tts-audio-ready! :mimic3
+                              :normal
+                              :synthesized
+                              log-text
+                              (cache-input-stream tts-cache-dir cache-key in))))))
 
 (defn google-cloud-tts [{:keys [prepared-input] :as sys}]
   (let [{:keys [language-code voice audio-encoding]} (google-cloud-request-options sys)
@@ -577,18 +601,24 @@
         b64->input-stream)))
 
 (defn caching-google-cloud-tts
-  [{:keys [prepared-input tts-cache-dir] :as sys}]
-  (let [options   (google-cloud-request-options sys)
-        cache-key [::google-cloud options (speech/cache-identity prepared-input)]
-        suffix    (cache-suffix sys)]
+  [{:keys [log-text prepared-input tts-cache-dir] :as sys}]
+  (let [options        (google-cloud-request-options sys)
+        cache-key      [::google-cloud options (speech/cache-identity prepared-input)]
+        suffix         (cache-suffix sys)
+        synthesis-mode (or (:synthesis-mode sys) :normal)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
-      local-url
-      (cache-input-stream-with-timeout
-       tts-cache-dir
-       cache-key
-       suffix
-       (google-cloud-tts sys)
-       tts-cache-timeout-ms))))
+      (log-tts-audio-ready! :google-cloud synthesis-mode :cache log-text local-url)
+      (log-tts-audio-ready!
+       :google-cloud
+       synthesis-mode
+       :synthesized
+       log-text
+       (cache-input-stream-with-timeout
+        tts-cache-dir
+        cache-key
+        suffix
+        (google-cloud-tts sys)
+        tts-cache-timeout-ms)))))
 
 (defn openai-tts [{:keys [prepared-input] :as sys}]
   (let [{:keys [model voice instructions speed response-format]}
@@ -613,18 +643,25 @@
                   :timeout      tts-request-timeout-ms})
         :body)))
 
-(defn caching-openai-tts [{:keys [prepared-input tts-cache-dir] :as sys}]
-  (let [options   (openai-request-options sys)
-        cache-key [::openai options (speech/cache-identity prepared-input)]
-        suffix    (cache-suffix sys)]
+(defn caching-openai-tts
+  [{:keys [log-text prepared-input tts-cache-dir] :as sys}]
+  (let [options        (openai-request-options sys)
+        cache-key      [::openai options (speech/cache-identity prepared-input)]
+        suffix         (cache-suffix sys)
+        synthesis-mode (or (:synthesis-mode sys) :normal)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
-      local-url
-      (cache-input-stream-with-timeout
-       tts-cache-dir
-       cache-key
-       suffix
-       (openai-tts sys)
-       tts-cache-timeout-ms))))
+      (log-tts-audio-ready! :openai synthesis-mode :cache log-text local-url)
+      (log-tts-audio-ready!
+       :openai
+       synthesis-mode
+       :synthesized
+       log-text
+       (cache-input-stream-with-timeout
+        tts-cache-dir
+        cache-key
+        suffix
+        (openai-tts sys)
+        tts-cache-timeout-ms)))))
 
 (defn- elevenlabs-voice-settings-body [voice-settings]
   (into {}
@@ -657,18 +694,24 @@
         :body)))
 
 (defn caching-elevenlabs-tts
-  [{:keys [prepared-input tts-cache-dir] :as sys}]
-  (let [options   (elevenlabs-options sys)
-        cache-key [::elevenlabs options (speech/cache-identity prepared-input)]
-        suffix    (cache-suffix sys)]
+  [{:keys [log-text prepared-input tts-cache-dir] :as sys}]
+  (let [options        (elevenlabs-options sys)
+        cache-key      [::elevenlabs options (speech/cache-identity prepared-input)]
+        suffix         (cache-suffix sys)
+        synthesis-mode (or (:synthesis-mode sys) :normal)]
     (if-let [local-url (cache-get tts-cache-dir cache-key suffix)]
-      local-url
-      (cache-input-stream-with-timeout
-       tts-cache-dir
-       cache-key
-       suffix
-       (elevenlabs-tts sys)
-       tts-cache-timeout-ms))))
+      (log-tts-audio-ready! :elevenlabs synthesis-mode :cache log-text local-url)
+      (log-tts-audio-ready!
+       :elevenlabs
+       synthesis-mode
+       :synthesized
+       log-text
+       (cache-input-stream-with-timeout
+        tts-cache-dir
+        cache-key
+        suffix
+        (elevenlabs-tts sys)
+        tts-cache-timeout-ms)))))
 
 (defn with-db [sys]
   (assoc sys :db (database sys)))
@@ -735,7 +778,7 @@
 (defn tts
   "Returns the local path to synthesized `input` using normal output settings."
   [sys input]
-  (let [sys      (with-db sys)
+  (let [sys      (assoc (with-db sys) :log-text (tts-log-text input))
         provider (db/tts-engine (:db sys))]
     (case provider
       :mimic3
@@ -757,7 +800,7 @@
 (defn browser-preview-tts
   "Synthesizes `text` as Opus and returns its cache file plus safe response metadata."
   [sys text]
-  (let [sys      (with-db sys)
+  (let [sys      (assoc (with-db sys) :log-text (tts-log-text text))
         provider (db/tts-engine (:db sys))]
     (when-not (some #{provider} configurable-providers)
       (throw (ex-info "The selected TTS engine does not support browser previews"

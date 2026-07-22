@@ -125,16 +125,22 @@
 (defn play-path!
   [{:keys [settings] :as sys} {:keys [item-path] :as _value}]
   (assert item-path "Path must not be nil")
-  (if-let [path (browse/canonicalize-path settings item-path)]
-    (do
-      (set-queue-source! settings path)
-      (if (db/announce-path? sys path)
-        (announce-then-play sys path)
-        (play-now sys [path])))
-    (throw (ex-info
-            "Could not play. Requested path could not be found in media-dir"
-            {:requested-path item-path
-             :media-dir      (browse/media-dir settings)}))))
+  (let [path          (browse/canonicalize-path settings item-path)
+        tts-announce? (when path (db/announce-path? sys path))]
+    (log/info "Attempting media playback"
+              {:requested-path item-path
+               :resolved-path  (some-> path str)
+               :tts-announce?  tts-announce?})
+    (if path
+      (do
+        (set-queue-source! settings path)
+        (if tts-announce?
+          (announce-then-play sys path)
+          (play-now sys [path])))
+      (throw (ex-info
+              "Could not play. Requested path could not be found in media-dir"
+              {:requested-path item-path
+               :media-dir      (browse/media-dir settings)})))))
 
 (defn maximum-volume [policy]
   (int (playback-limits/current-limit policy :audio/max-volume)))
@@ -189,39 +195,45 @@
    {:keys [item-path id]}]
   ;; this one-shot function creates a new player, plays the item, and then releases the player
   ;; we do this because we want to handle the events separate from the normal player
-  (tap> [:one-shot-play item-path id :final-path (browse/canonicalize-path settings item-path)])
-  (if-let [path (browse/canonicalize-path settings item-path)]
-    (util/thread
-      (try
-        (let [unsubscribe_    (promise)
-              handler         (fn [{:ol.vinyl/keys [event]}]
-                                (try
-                                  (case event
-                                    :vlc/finished
-                                    (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
+  (let [path (browse/canonicalize-path settings item-path)]
+    (tap> [:one-shot-play item-path id :final-path path])
+    (log/info "Attempting one-shot media playback"
+              {:id             id
+               :requested-path item-path
+               :resolved-path  (some-> path str)})
+    (if path
+      (util/thread
+        (try
+          (let [unsubscribe_    (promise)
+                handler         (fn [{:ol.vinyl/keys [event]}]
+                                  (try
+                                    (case event
+                                      :vlc/finished
+                                      (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))
 
-                                    :vlc/error
-                                    (do
-                                      (log/error "one-shot received vlc error event")
-                                      (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))))
+                                      :vlc/error
+                                      (do
+                                        (log/error "one-shot received vlc error event")
+                                        (async/put! emitter (player-event {:event :player/one-shot-finished :id id}))))
 
-                                  (catch Exception e
-                                    (log/error e "one-shot event error"))
-                                  (finally (deliver unsubscribe_ true))))
-              subscription-id (mp/subscribe! one-shot-player handler #{:vlc/finished :vlc/error})]
+                                    (catch Exception e
+                                      (log/error e "one-shot event error"))
+                                    (finally (deliver unsubscribe_ true))))
+                subscription-id (mp/subscribe! one-shot-player handler #{:vlc/finished :vlc/error})]
 
-          (mp/dispatch one-shot-player
-                       :mixer/set-volume
-                       :level (maximum-volume playback-limits))
-          (mp/dispatch one-shot-player :playback/clear-all)
-          (mp/dispatch one-shot-player :playback/append :paths [path])
-          (mp/dispatch one-shot-player :playback/play)
-          (deref unsubscribe_)
-          (mp/unsubscribe! one-shot-player subscription-id))
-        (catch Throwable e
-          (log/error e "one-shot player error"))))
-    (throw (ex-info "Could not play. Requested path could not be found in media-dir" {:requested-path item-path
-                                                                                      :media-dir      (browse/media-dir settings)}))))
+            (mp/dispatch one-shot-player
+                         :mixer/set-volume
+                         :level (maximum-volume playback-limits))
+            (mp/dispatch one-shot-player :playback/clear-all)
+            (mp/dispatch one-shot-player :playback/append :paths [path])
+            (mp/dispatch one-shot-player :playback/play)
+            (deref unsubscribe_)
+            (mp/unsubscribe! one-shot-player subscription-id))
+          (catch Throwable e
+            (log/error e "one-shot player error"))))
+      (throw (ex-info "Could not play. Requested path could not be found in media-dir"
+                      {:requested-path item-path
+                       :media-dir      (browse/media-dir settings)})))))
 
 (defn internal-event-handler [{:keys [emitter]} event]
   (let [event-name  (or (:ol.vinyl/event event) (:event event))

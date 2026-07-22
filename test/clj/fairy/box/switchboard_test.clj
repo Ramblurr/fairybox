@@ -4,6 +4,7 @@
    [clojure.core.async :as async]
    [clojure.java.shell :as shell]
    [clojure.test :refer [deftest is]]
+   [clojure.tools.logging.test :as log-test]
    [fairy.box.audio.system2 :as audio-system]
    [fairy.box.media-test-utils :as media]
    [fairy.box.switchboard :as switchboard]
@@ -220,6 +221,37 @@
         (async/close! emitter)
         (reset! state_ previous-state)
         (reset! audio-system/audio-state previous-audio-state)))))
+
+(deftest logs-rfid-card-transitions
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 16)
+        system         {:emitter  emitter
+                        :db-conn  (atom {})
+                        :settings {}}]
+    (try
+      (reset! state_ {:system-state             :system-state/booting
+                      :system-mode              :system-mode/normal
+                      :rfid nil
+                      :active-card-uid          nil
+                      :removed-card             nil
+                      :pending-system-operation nil})
+      (log-test/with-log
+        (switchboard/rfid-handler
+         system
+         {:value {:action :placed :uid "card-a"}})
+        (switchboard/rfid-handler
+         system
+         {:value {:action :removed :uid "card-a"}})
+        (is (= [{:level   :info
+                 :message "RFID card placed {:uid card-a}"}
+                {:level   :info
+                 :message "RFID card removed {:uid card-a}"}]
+               (mapv #(select-keys % [:level :message])
+                     (log-test/the-log)))))
+      (finally
+        (async/close! emitter)
+        (reset! state_ previous-state)))))
 
 (deftest resets-card-state-when-switchboard-starts
   (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))

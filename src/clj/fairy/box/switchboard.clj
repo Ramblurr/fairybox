@@ -160,18 +160,23 @@
                        :value {:action :audio/adjust-volume :delta 0}}))
 
 (defn rfid-handler [{:keys [emitter] :as sys} {:keys [value]}]
-  (when (= :system-state/ready (system-state!))
-    (swap! state assoc :rfid value)
-    (cap-volume! emitter)
-    (condp = (:action value)
-      :placed (condp = (:system-mode @state)
-                :system-mode/normal (rfid-placed-play-mode sys value)
-                :system-mode/card-identification (rfid-placed-card-id-mode sys value))
-      :removed (when (= :system-mode/normal (:system-mode @state))
-                 (rfid-removed-play-mode sys value))
-      :error (do
-               (log/error "RFID error" (:error value))
-               (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9})))))
+  (let [{:keys [action uid]} value]
+    (case action
+      :placed (log/info "RFID card placed" {:uid uid})
+      :removed (log/info "RFID card removed" {:uid uid})
+      nil)
+    (when (= :system-state/ready (system-state!))
+      (swap! state assoc :rfid value)
+      (cap-volume! emitter)
+      (condp = action
+        :placed (condp = (:system-mode @state)
+                  :system-mode/normal (rfid-placed-play-mode sys value)
+                  :system-mode/card-identification (rfid-placed-card-id-mode sys value))
+        :removed (when (= :system-mode/normal (:system-mode @state))
+                   (rfid-removed-play-mode sys value))
+        :error (do
+                 (log/error "RFID error" (:error value))
+                 (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9}))))))
 
 (def ^:private system-control-commands
   {:system/poweroff         ["systemctl" "poweroff"]

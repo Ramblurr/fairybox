@@ -6,6 +6,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer [deftest is]]
+   [clojure.tools.logging.test :as log-test]
    [exoscale.cloak :as cloak]
    [fairy.box.db :as db]
    [fairy.box.tts :as tts]
@@ -249,6 +250,31 @@
                       (throw (ex-info "Cache miss unexpectedly reached OpenAI" {})))]
         (is (= (.getAbsolutePath cache-file)
                (tts/tts sys text)))))))
+
+(deftest logs-readable-tts-cache-outcomes
+  (fs/with-temp-dir [cache-dir {:prefix "fairybox-tts-log-"}]
+    (let [input  (speech/plan [(speech/text "Hello")
+                               (speech/pause 1000)
+                               (speech/text "again")])
+          system {:db-conn       (atom {:settings {:tts {:engine :openai}}})
+                  :tts-cache-dir (str cache-dir)}]
+      (log-test/with-log
+        (with-redefs [tts/openai-tts
+                      (fn [_]
+                        (java.io.ByteArrayInputStream.
+                         (.getBytes "audio")))]
+          (tts/tts system input)
+          (tts/tts system input))
+        (is (= [{:level :info
+                 :message
+                 (str "TTS audio ready {:provider :openai, :mode :normal, "
+                      ":source :synthesized, :text Hello... again}")}
+                {:level :info
+                 :message
+                 (str "TTS audio ready {:provider :openai, :mode :normal, "
+                      ":source :cache, :text Hello... again}")}]
+               (mapv #(select-keys % [:level :message])
+                     (log-test/the-log))))))))
 
 (deftest renderer-identity-misses-legacy-openai-cache-entry
   (fs/with-temp-dir [cache-dir {:prefix "fairybox-openai-legacy-cache-"}]
