@@ -278,9 +278,12 @@
                :parses     0
                :syntheses  0}
               :unmarked
-              {:dispatches direct-dispatches
-               :parses     0
-               :syntheses  0}
+              {:dispatches [[:player :playback/clear-all nil]
+                            [:player :playback/append
+                             {:paths ["tts://track" track]}]
+                            [:player :playback/advance nil]]
+               :parses     1
+               :syntheses  1}
               :inherited-true
               {:dispatches [[:player :playback/clear-all nil]
                             [:player :playback/append

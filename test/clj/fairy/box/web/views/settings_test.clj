@@ -221,7 +221,7 @@
                 {:announce        true
                  :do-not-announce true
                  :inherit-enabled true
-                 :inherit-quiet   true}
+                 :inherit-default true}
                 :relative-announcement-paths  true
                 :button-types                 true
                 :settings-placeholder-removed true
@@ -277,11 +277,8 @@
                  (labeled? nav-html "Do not announce tracks for this path")
                  :inherit-enabled
                  (labeled? nav-html inherit-enabled-title)
-                 :inherit-quiet
-                 (labeled?
-                  playlist-html
-                  (str "Inherit track announcement setting; currently "
-                       "does not announce"))}
+                 :inherit-default
+                 (labeled? playlist-html inherit-enabled-title)}
                 :relative-announcement-paths
                 (and (str/includes?
                       nav-html

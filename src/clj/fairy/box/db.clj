@@ -289,7 +289,7 @@
   (when (mm/metadata-path settings path)
     (let [local-metadata  (or (mm/get-exact-metadata sys path) {})
           state           (announcement-state local-metadata)
-          path-announce?  (true? (:announce? (mm/get-metadata sys path)))
+          path-announce?  (not= false (:announce? (mm/get-metadata sys path)))
           global-enabled? (true? (announce-tracks? @db-conn))]
       {:state          state
        :path-announce? path-announce?

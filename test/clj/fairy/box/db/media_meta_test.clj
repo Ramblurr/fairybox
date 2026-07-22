@@ -41,8 +41,8 @@
         (remove-watch database ::writes)
         (is (= {:cycle
                 [{:state          :inherit
-                  :path-announce? false
-                  :announce?      false}
+                  :path-announce? true
+                  :announce?      true}
                  {:state          :announce
                   :path-announce? true
                   :announce?      true}
@@ -50,8 +50,8 @@
                   :path-announce? false
                   :announce?      false}
                  {:state          :inherit
-                  :path-announce? false
-                  :announce?      false}]
+                  :path-announce? true
+                  :announce?      true}]
                 :absolute-status
                 {:state          :announce
                  :path-announce? true
