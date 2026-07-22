@@ -48,6 +48,7 @@ printf 'fairybox-launch: release=%s aot=%s jar=%s\n' \
 exec "$authbind" --deep "$java" \
   -XX:-OmitStackTraceInFastThrow \
   -DPIGPIOD_HOST=127.0.0.1 \
+  -Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory \
   --enable-native-access=ALL-UNNAMED \
   "${aot_args[@]}" \
   -jar "$jar"

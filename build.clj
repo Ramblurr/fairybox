@@ -87,7 +87,8 @@
   (b/compile-clj {:basis     basis
                   :src-dirs  source-dirs
                   :class-dir class-dir
-                  :java-opts ["--enable-native-access=ALL-UNNAMED"]})
+                  :java-opts ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory"
+                              "--enable-native-access=ALL-UNNAMED"]})
   (println (str "Making " uber-file "..."))
   (b/uber {:class-dir class-dir
            :uber-file uber-file

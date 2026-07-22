@@ -319,6 +319,7 @@ if ((needs_training)); then
     "$authbind" --deep "$java" \
       -XX:-OmitStackTraceInFastThrow \
       -DPIGPIOD_HOST=127.0.0.1 \
+      -Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory \
       --enable-native-access=ALL-UNNAMED \
       -XX:AOTMode=record \
       "-XX:AOTCacheOutput=$release_cache_part" \

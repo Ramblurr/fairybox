@@ -37,10 +37,10 @@
            :diagnostic {:extra-deps  {djblue/portal {:mvn/version "0.67.0"}}
                         :extra-paths ["env/prod/clj"]}
            :dev        {:extra-deps  {dev.weavejester/hashp {:mvn/version "0.5.1"}
-                                      djblue/portal         {:mvn/version "0.67.0"}
-                                      org.slf4j/slf4j-nop   {:mvn/version "2.0.17"}}
+                                      djblue/portal         {:mvn/version "0.67.0"}}
                         :extra-paths ["env/dev/clj" "env/dev/resources" "test/clj"]
-                        :jvm-opts    ["-XX:-OmitStackTraceInFastThrow"
+                        :jvm-opts    ["-Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory"
+                                      "-XX:-OmitStackTraceInFastThrow"
                                       "-Djdk.attach.allowAttachSelf" ;; https://nrepl.org/nrepl/installation.html#jvmti
                                       "-DPIGPIOD_HOST=127.0.0.1"
                                       "-XX:+UseZGC"

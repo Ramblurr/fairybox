@@ -58,6 +58,7 @@ EOF
     fail "launcher enabled ZGC, which disables AOT-linked classes on the target JDK"
   fi
   grep -Fxq -- --enable-native-access=ALL-UNNAMED "$arguments"
+  grep -Fxq -- -Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory "$arguments"
 
   rm -- "$release/box-standalone.aot"
   if FAIRYBOX_ROOT="$root" \
@@ -295,6 +296,8 @@ successful_active_deploy() {
     fail "training enabled ZGC, which disables AOT-linked classes on the target JDK"
   fi
   grep -Fxq -- --enable-native-access=ALL-UNNAMED "$fixture/state/training-arguments"
+  grep -Fxq -- -Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory \
+    "$fixture/state/training-arguments"
   [[ -s "$fixture/root/releases/$sha/box-standalone.aot" ]]
   [[ -f "$fixture/root/releases/$sha/release.env" ]]
   [[ -f "$fixture/root/releases/$sha/.complete" ]]
