@@ -284,6 +284,7 @@
 (defn update-tween [t {:keys [from to duration delay orig-delay orig-deltas deltas current-iteration total-times] :as tween}]
   (let [v         (first deltas)
         direction (if (< from to) 1 -1)
+        distance  (Math/abs (double (- to from)))
         closed?   (nil? v)
         finished? (and closed? (>= current-iteration total-times))
         started?  (>= t delay)]
@@ -299,7 +300,7 @@
               (assoc :deltas orig-deltas)
               (assoc :delay (next-delay duration orig-delay total-times (inc current-iteration))))
           (-> tween
-              (update :value (fnil + from) (* direction v))
+              (update :value (fnil + from) (* direction distance v))
               (assoc :deltas (rest deltas))))
         tween))))
 
@@ -326,35 +327,61 @@
 (defn animate!
   "Executes an animation in a go-loop.
 
-    - apply-fn! - a 1-arity function that receives a single tween for side-effects
-    - tweens      - a list of tweens. (see fairy.box.animation/tween)
-    - optional keyword arguments:
-       - :finished-ch - (default: nil) a channel that :finished will be written to upon termination
-       - :cancel-ch - (default: nil) a channel that can cancel or shorten the animation. if :finish-current is taken from the channel then the
-                     animation will terminate after the current iteration is complete. any other value taken will
-                     immediately terminate the animation
-       - :repeat-times  - (default 1) the number of times to run the animation
-  Returns a channel that will be closed when the animation is finished or canceled."
-  ([apply-fn! tweens & {:keys [repeat-times finished-ch cancel-ch]
-                        :or   {repeat-times 1
-                               cancel-ch    nil
-                               finished-ch  nil}}]
-   (let [orig-tweens tweens]
-     (async/go-loop [state {:tweens orig-tweens :step 1 :t 0 :iteration 1}]
-       (let [new-tweens (update-tweens state)
-             closed?    (empty? new-tweens)
-             repeat?    (< (:iteration state) repeat-times)
-             finished?  (and closed? (not repeat?))]
-         (doseq [tween new-tweens]
-           (apply-fn! tween))
-         (cond
-           finished?             (when finished-ch (async/put! finished-ch :finished) nil)
-           (and closed? repeat?) (recur {:tweens orig-tweens :step 1 :t 0 :iteration (inc (:iteration state))})
-           :else                 (let [timeout   (async/timeout DT)
-                                       ports     (concat [timeout] (when cancel-ch [cancel-ch]))
-                                       [op port] (async/alts! ports)]
-                                   (cond
-                                     (= port timeout) (recur {:tweens new-tweens :step (inc (:step state)) :t (+ (:t state) DT) :iteration (:iteration state)})
-                                     (= op :finish-current) (recur {:tweens new-tweens :step (inc (:step state)) :t (+ (:t state) DT) :iteration repeat-times})
-                                     :else
-                                     (when finished-ch (async/put! finished-ch :cancelled))))))))))
+  Options:
+
+  | key | description |
+  |-----|-------------|
+  | `:finished-ch` | Channel that receives `:finished` or `:cancelled` |
+  | `:cancel-ch` | Channel that immediately cancels unless it receives `:finish-current` |
+  | `:repeat-times` | Positive iteration count or `:forever` (default `1`) |
+
+  Returns a channel that closes when the animation terminates."
+  [apply-fn! tweens & {:keys [repeat-times finished-ch cancel-ch]
+                       :or   {repeat-times 1
+                              cancel-ch    nil
+                              finished-ch  nil}}]
+  (let [orig-tweens tweens]
+    (async/go-loop [state {:tweens          orig-tweens
+                           :step            1
+                           :t               0
+                           :iteration       1
+                           :finish-current? false}]
+      (let [new-tweens (update-tweens state)
+            closed?    (empty? new-tweens)
+            repeat?    (and (not (:finish-current? state))
+                            (or (= :forever repeat-times)
+                                (< (:iteration state) repeat-times)))
+            finished?  (and closed? (not repeat?))]
+        (doseq [tween new-tweens]
+          (apply-fn! tween))
+        (cond
+          finished?
+          (when finished-ch
+            (async/put! finished-ch :finished)
+            nil)
+
+          (and closed? repeat?)
+          (recur (assoc state
+                        :tweens orig-tweens
+                        :step 1
+                        :t 0
+                        :iteration (inc (:iteration state))))
+
+          :else
+          (let [timeout    (async/timeout DT)
+                ports      (concat [timeout] (when cancel-ch [cancel-ch]))
+                [op port]  (async/alts! ports)
+                next-state (assoc state
+                                  :tweens new-tweens
+                                  :step (inc (:step state))
+                                  :t (+ (:t state) DT))]
+            (cond
+              (= port timeout)
+              (recur next-state)
+
+              (= op :finish-current)
+              (recur (assoc next-state :finish-current? true))
+
+              :else
+              (when finished-ch
+                (async/put! finished-ch :cancelled)))))))))

@@ -736,16 +736,18 @@
   (let [emitter (async/chan 1)]
     (try
       (reset! audio/audio-state
-              {:playback      {:state         :playing
-                               :current-track {:mrl "file:///current.mp3"}}
-               :mixer         {}
-               :queue         {:source-type :folder
-                               :source-path "audiobooks/Book"}
-               :card-playback {:request-id        :request
-                               :uid               "card-a"
-                               :started?          true
-                               :feedback-emitted? true}
-               :config        {}})
+              {:playback             {:state         :playing
+                                      :current-track {:mrl "file:///current.mp3"}}
+               :mixer                {}
+               :queue                {:source-type :folder
+                                      :source-path "audiobooks/Book"}
+               :card-playback        {:request-id        :request
+                                      :uid               "card-a"
+                                      :started?          true
+                                      :problem-reported? true}
+               :active-card-playback {:request-id :request
+                                      :uid        "card-a"}
+               :config               {}})
       (log-test/with-log
         (audio/internal-event-handler
          {:emitter emitter}
@@ -763,5 +765,111 @@
                             ":source-type :folder"
                             ":uid card-a"]]
             (is (str/includes? message fragment)))))
+      (finally
+        (async/close! emitter)))))
+
+(deftest state-events-use-the-installed-card-request
+  (let [emitter (async/chan 4)]
+    (try
+      (reset! audio/audio-state
+              {:playback             {:state :playing}
+               :mixer                {}
+               :queue                {:source-path "card-a"}
+               :card-playback        {:request-id        :request-b
+                                      :uid               "card-b"
+                                      :started?          false
+                                      :problem-reported? false}
+               :active-card-playback {:request-id :request-b
+                                      :uid        "card-b"}
+               :config               {}})
+      (audio/internal-event-handler
+       {:emitter emitter}
+       {:ol.vinyl/event :vlc/opening
+        :fairy.box.audio.system2/active-card-playback
+        {:request-id :request-a :uid "card-a"}})
+      (audio/internal-event-handler
+       {:emitter emitter}
+       {:ol.vinyl/event :vlc/opening})
+      (is (= [{:path  "/player/events"
+               :value {:event      :player/state-changed
+                       :state      :opening
+                       :request-id :request-a
+                       :uid        "card-a"}}
+              {:path  "/player/events"
+               :value {:event      :player/state-changed
+                       :state      :opening
+                       :request-id :request-b
+                       :uid        "card-b"}}]
+             [(async/<!! emitter) (async/<!! emitter)]))
+      (finally
+        (async/close! emitter)))))
+
+(deftest supplied-card-request-publishes-categorized-problem
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-card-problem-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          emitter            (async/chan 4)]
+      (try
+        (audio/play-path!
+         {:emitter emitter :settings settings}
+         {:item-path  "missing"
+          :uid        "card-a"
+          :request-id :request-a})
+        (is (= {:command
+                {:path  "/tts/commands"
+                 :value {:action              :tts/speak
+                         :feedback/type       :card-playback-problem
+                         :request-id          :request-a
+                         :uid                 "card-a"
+                         :problem             :missing-media
+                         :audio/play-one-shot true
+                         :text
+                         "Uh-oh. I know this card, but I cannot find what it should play."}}
+                :request {:request-id        :request-a
+                          :uid               "card-a"
+                          :started?          false
+                          :problem-reported? true}}
+               {:command (async/<!! emitter)
+                :request (:card-playback @audio/audio-state)}))
+        (finally
+          (async/close! emitter))))))
+
+(deftest repeated-vlc-errors-publish-one-current-card-problem
+  (let [emitter (async/chan 4)]
+    (try
+      (reset! audio/audio-state
+              {:playback             {:state :playing}
+               :mixer                {}
+               :queue                {:source-path "card-a"}
+               :card-playback        {:request-id        :request-a
+                                      :uid               "card-a"
+                                      :started?          true
+                                      :problem-reported? false}
+               :active-card-playback {:request-id :request-a
+                                      :uid        "card-a"}
+               :config               {}})
+      (audio/internal-event-handler
+       {:emitter emitter}
+       {:ol.vinyl/event :vlc/error})
+      (audio/internal-event-handler
+       {:emitter emitter}
+       {:ol.vinyl/event :vlc/error})
+      (is (= {:commands
+              [{:path  "/tts/commands"
+                :value {:action              :tts/speak
+                        :feedback/type       :card-playback-problem
+                        :request-id          :request-a
+                        :uid                 "card-a"
+                        :problem             :unreadable-media
+                        :audio/play-one-shot true
+                        :text
+                        "Uh-oh. I found what this card should play, but I am having trouble playing it."}}]
+              :problem-reported? true}
+             {:commands (loop [commands []]
+                          (if-let [command (async/poll! emitter)]
+                            (recur (conj commands command))
+                            commands))
+              :problem-reported?
+              (get-in @audio/audio-state
+                      [:card-playback :problem-reported?])}))
       (finally
         (async/close! emitter)))))

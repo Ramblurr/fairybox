@@ -725,3 +725,35 @@
                             {:homeassistant
                              {:ha-bearer-token "ha-probe-token"}}}))
                   "ha-probe-token"))}))))
+
+(deftest gates-only-categorized-card-error-speech
+  (let [spoken_ (atom [])
+        handle! (fn [enabled? value]
+                  (tts/events-handler!
+                   {:db-conn
+                    (atom {:settings
+                           {:tts-error-messages? enabled?}})}
+                   {:value value}))]
+    (with-redefs [tts/tts-speak (fn [_ value]
+                                  (swap! spoken_ conj value))]
+      (handle! false
+               {:action              :tts/speak
+                :feedback/type       :card-playback-problem
+                :audio/play-one-shot true
+                :text                "disabled problem"})
+      (handle! false
+               {:action        :tts/speak
+                :feedback/type :unknown-card
+                :text          "disabled unknown"})
+      (handle! false
+               {:action :tts/speak
+                :text   "ordinary speech"})
+      (handle! true
+               {:action              :tts/speak
+                :feedback/type       :card-playback-problem
+                :audio/play-one-shot true
+                :text                "enabled problem"}))
+    (is (= [{:text "ordinary speech"}
+            {:text                "enabled problem"
+             :audio/play-one-shot true}]
+           @spoken_))))

@@ -14,6 +14,12 @@
     (when (= port channel)
       value)))
 
+(defn- drain-values [channel]
+  (loop [values []]
+    (if-let [event (async/poll! channel)]
+      (recur (conj values (get-in event [:value :values])))
+      values)))
+
 (deftest routes-direct-and-animated-values-through-limit
   (let [writes_ (atom [])
         handles {:status {:name :status :handle ::fake :led-type :pwm}}
@@ -242,3 +248,83 @@
         (stop-policy! policy)
         (async/close! changes)
         (ev/close! bus)))))
+
+(deftest declarative-animation-scales-frames-relative-to-limit
+  (let [emitter    (async/chan 64)
+        handles    (led/virtual-handles
+                    [{:name :status :led-type :pwm}
+                     {:name :steady :led-type :pwm}])
+        controller (led/output-controller handles emitter)
+        system     {:controller controller
+                    :groups     {:all [:status :steady]}}]
+    (try
+      (led/refresh-limit! controller 0.2)
+      (led/set-led! controller :status 1.0)
+      (led/set-led! controller :steady 1.0)
+      (drain-values emitter)
+      (async/<!!
+       (led/events-handler!
+        system
+        {:value {:action             :led/animate
+                 :animation-id       :relative-probe
+                 :relative-to-limit? true
+                 :after-set          1.0
+                 :tweens             [{:names    [:status]
+                                       :from     1.0
+                                       :to       0.25
+                                       :duration 100
+                                       :easing   :in-out-sine}]}}))
+      (let [frames  (drain-values emitter)
+            minimum (reduce min 1.0 (keep :status frames))]
+        (is (= {:minimum 0.05
+                :final   {:status 0.2 :steady 0.2}
+                :limit   0.2}
+               {:minimum (/ (Math/round (double (* minimum 100))) 100.0)
+                :final   (led/current-values controller)
+                :limit   (led/current-limit controller)})))
+      (finally
+        (led/stop-controller! controller)
+        (async/close! emitter)))))
+
+(deftest replacing-forever-animation-cancels-the-old-writer
+  (let [emitter    (async/chan 64)
+        controller (led/output-controller
+                    (led/virtual-handles
+                     [{:name :status :led-type :pwm}])
+                    emitter)
+        system     {:controller controller :groups {}}
+        forever    {:action       :led/animate
+                    :animation-id :shared
+                    :repeat-times :forever
+                    :tweens       [{:names    [:status]
+                                    :from     1.0
+                                    :to       0.25
+                                    :duration 100}
+                                   {:names    [:status]
+                                    :from     0.25
+                                    :to       1.0
+                                    :duration 100
+                                    :delay    100}]}
+        finite     {:action       :led/animate
+                    :animation-id :shared
+                    :after-set    1.0
+                    :tweens       [{:names    [:status]
+                                    :from     1.0
+                                    :to       0.5
+                                    :duration 40}]}]
+    (try
+      (led/set-led! controller :status 1.0)
+      (let [old-run      (led/events-handler! system {:value forever})
+            _            (Thread/sleep 50)
+            new-run      (led/events-handler! system {:value finite})
+            [_ old-port] (async/alts!! [old-run (async/timeout 1000)])
+            [_ new-port] (async/alts!! [new-run (async/timeout 1000)])]
+        (is (= {:old-cancelled? true
+                :new-finished?  true
+                :final          {:status 1.0}}
+               {:old-cancelled? (= old-port old-run)
+                :new-finished?  (= new-port new-run)
+                :final          (led/current-values controller)})))
+      (finally
+        (led/stop-controller! controller)
+        (async/close! emitter)))))

@@ -43,25 +43,27 @@
           expected       {:_version       1
                           :linked-tags    {"tag" {:folder "kept"}}
                           :settings
-                          {:audio {:min-volume               2
-                                   :max-volume               95
-                                   :max-volume-day           80
-                                   :max-volume-night         50
-                                   :startup-volume-day       80
-                                   :startup-volume-night     50
-                                   :shutdown-volume-day      80
-                                   :shutdown-volume-night    50
-                                   :max-led-brightness-day   100
-                                   :max-led-brightness-night 100
-                                   :day-start                "08:30"
-                                   :night-start              "20:00"
-                                   :card-removal-behavior    :pause
-                                   :card-return-behavior     :restart
-                                   :unknown                  :kept}
+                          {:audio               {:min-volume               2
+                                                 :max-volume               95
+                                                 :max-volume-day           80
+                                                 :max-volume-night         50
+                                                 :startup-volume-day       80
+                                                 :startup-volume-night     50
+                                                 :shutdown-volume-day      80
+                                                 :shutdown-volume-night    50
+                                                 :max-led-brightness-day   100
+                                                 :max-led-brightness-night 100
+                                                 :day-start                "08:30"
+                                                 :night-start              "20:00"
+                                                 :card-removal-behavior    :pause
+                                                 :card-return-behavior     :restart
+                                                 :unknown                  :kept}
+                           :led-language?       true
+                           :tts-error-messages? true
                            :auto-shutdown
                            db/default-auto-shutdown-settings
-                           :sleep db/default-sleep-settings
-                           :tts   db/default-tts-settings}
+                           :sleep               db/default-sleep-settings
+                           :tts                 db/default-tts-settings}
                           :media-metadata {}}
           _              (ds/stop first-running)
           fixed-time     (FileTime/fromMillis 946684800000)
@@ -267,3 +269,40 @@
                                 (cloak/reveal token))
             :print-redacted? (not (str/includes? (pr-str token)
                                                  "home-assistant-probe-token"))}))))
+
+(deftest migrates-top-level-card-feedback-settings
+  (let [cases    {:missing   {:settings  {:unknown :kept}
+                              :unrelated :kept}
+                  :partial   {:settings {:led-language? false}}
+                  :malformed {:settings {:led-language?       "yes"
+                                         :tts-error-messages? nil}}}
+        migrated (update-vals cases db/migrate-db)]
+    (is (= {:settings
+            {:missing   {:led-language?       true
+                         :tts-error-messages? true
+                         :unknown             :kept}
+             :partial   {:led-language?       false
+                         :tts-error-messages? true}
+             :malformed {:led-language?       "yes"
+                         :tts-error-messages? nil}}
+            :accessors   {:missing   [true true]
+                          :partial   [false true]
+                          :malformed [false false]}
+            :unrelated   :kept
+            :idempotent? true}
+           {:settings
+            (update-vals migrated
+                         #(select-keys (:settings %)
+                                       [:led-language?
+                                        :tts-error-messages?
+                                        :unknown]))
+            :accessors
+            (update-vals migrated
+                         (fn [database]
+                           [(db/led-language? database)
+                            (db/tts-error-messages? database)]))
+            :unrelated (:unrelated (:missing migrated))
+            :idempotent?
+            (every? (fn [[_ database]]
+                      (= database (db/migrate-db database)))
+                    migrated)}))))

@@ -954,10 +954,19 @@
       (log/error "TTS track synthesis failed")
       nil)))
 
+(def ^:private error-feedback-types
+  #{:card-playback-problem :unknown-card})
+
+(defn- speech-command-enabled? [{:keys [db-conn]} value]
+  (or (not (contains? error-feedback-types (:feedback/type value)))
+      (db/tts-error-messages? (some-> db-conn deref))))
+
 (defn events-handler! [sys {:keys [value] :as _ev}]
   (condp = (:action value)
-    :tts/speak (tts-speak sys
-                          (select-keys value [:text :audio/play-one-shot]))))
+    :tts/speak (when (speech-command-enabled? sys value)
+                 (tts-speak sys
+                            (select-keys value
+                                         [:text :audio/play-one-shot])))))
 
 (defn start-tts-loop! [sys listener]
   (async/go-loop []

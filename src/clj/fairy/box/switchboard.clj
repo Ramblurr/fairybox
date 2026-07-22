@@ -17,8 +17,115 @@
                            :rfid nil
                            :active-card-uid          nil
                            :removed-card             nil
+                           :card-feedback            nil
                            :pending-system-operation nil})
 (defonce ^:private state (atom init-state))
+
+(def ^:private card-feedback-animation-id
+  :card-playback-feedback)
+
+(def ^:private preparation-delay-ms 500)
+
+(def ^:private known-card-pattern
+  {:action             :led/animate
+   :animation-id       card-feedback-animation-id
+   :repeat-times       2
+   :relative-to-limit? true
+   :after-set          1.0
+   :tweens             [{:names    [:audio/volume-up :audio/volume-down]
+                         :from     1.0
+                         :to       0.15
+                         :duration 80
+                         :easing   :out-sine}
+                        {:names    [:audio/volume-up :audio/volume-down]
+                         :from     0.15
+                         :to       1.0
+                         :duration 120
+                         :delay    80
+                         :easing   :out-sine}]})
+
+(def ^:private preparation-pattern
+  {:action             :led/animate
+   :animation-id       card-feedback-animation-id
+   :repeat-times       :forever
+   :relative-to-limit? true
+   :after-set          1.0
+   :tweens             [{:names    [:audio/play-pause]
+                         :from     1.0
+                         :to       0.25
+                         :duration 700
+                         :easing   :in-out-sine}
+                        {:names    [:audio/play-pause]
+                         :from     0.25
+                         :to       1.0
+                         :duration 700
+                         :delay    700
+                         :easing   :in-out-sine}]})
+
+(def ^:private here-we-go-pattern
+  {:action             :led/animate
+   :animation-id       card-feedback-animation-id
+   :relative-to-limit? true
+   :after-set          1.0
+   :tweens             [{:groups   [:all]
+                         :from     1.0
+                         :to       0.15
+                         :duration 100
+                         :easing   :out-sine}
+                        {:groups   [:all]
+                         :from     0.15
+                         :to       1.0
+                         :duration 200
+                         :delay    150
+                         :easing   :out-sine}]})
+
+(def ^:private unknown-card-pattern
+  {:action             :led/animate
+   :animation-id       card-feedback-animation-id
+   :repeat-times       3
+   :relative-to-limit? true
+   :after-set          1.0
+   :tweens             [{:names    [:audio/prev]
+                         :from     1.0
+                         :to       0.15
+                         :duration 100
+                         :easing   :out-sine}
+                        {:names    [:audio/prev]
+                         :from     0.15
+                         :to       1.0
+                         :duration 100
+                         :delay    100
+                         :easing   :out-sine}
+                        {:names    [:audio/next]
+                         :from     1.0
+                         :to       0.15
+                         :duration 100
+                         :delay    100
+                         :easing   :out-sine}
+                        {:names    [:audio/next]
+                         :from     0.15
+                         :to       1.0
+                         :duration 100
+                         :delay    200
+                         :easing   :out-sine}]})
+
+(def ^:private playback-problem-pattern
+  {:action             :led/animate
+   :animation-id       card-feedback-animation-id
+   :repeat-times       3
+   :relative-to-limit? true
+   :after-set          1.0
+   :tweens             [{:groups   [:all]
+                         :from     1.0
+                         :to       0.05
+                         :duration 80
+                         :easing   :out-sine}
+                        {:groups   [:all]
+                         :from     0.05
+                         :to       1.0
+                         :duration 100
+                         :delay    80
+                         :easing   :out-sine}]})
 
 (defn system-state! []
   (:system-state @state))
@@ -26,7 +133,15 @@
 (defn emit-system! [emitter event]
   (async/put! emitter {:path "/system" :value event}))
 
+(declare invalidate-card-feedback!)
+
+(defn- invalidates-card-feedback? [{:keys [action uid]}]
+  (or (#{:audio/clear :audio/stop} action)
+      (and (= :audio/play-path action) (nil? uid))))
+
 (defn emit-player! [emitter event]
+  (when (invalidates-card-feedback? event)
+    (invalidate-card-feedback! emitter true))
   (async/put! emitter {:path "/player/commands" :value event}))
 
 (defn emit-tts! [emitter event]
@@ -34,6 +149,116 @@
 
 (defn emit-led! [emitter event]
   (async/put! emitter {:path "/hardware/output/leds" :value event}))
+
+(defn- invalidate-card-feedback! [emitter restore?]
+  (locking state
+    (when (:card-feedback @state)
+      (swap! state assoc :card-feedback nil)
+      (emit-led! emitter {:action       :led/animation-cancel
+                          :animation-id card-feedback-animation-id})
+      (when (and restore?
+                 (= :system-mode/normal (:system-mode @state)))
+        (emit-led! emitter {:action :led/set
+                            :groups [:all]
+                            :value  1.0})))))
+
+(defn disable-card-feedback! [{:keys [emitter]}]
+  (locking state
+    (swap! state update :card-feedback
+           #(when % (assoc %
+                           :led-eligible? false
+                           :preparation-token nil)))
+    (when (= :system-mode/normal (:system-mode @state))
+      (emit-led! emitter {:action       :led/animation-cancel
+                          :animation-id card-feedback-animation-id})
+      (emit-led! emitter {:action :led/set
+                          :groups [:all]
+                          :value  1.0}))))
+
+(defn- feedback-led-enabled? [db-conn feedback]
+  (and (:led-eligible? feedback)
+       (db/led-language? (some-> db-conn deref))))
+
+(defn- schedule-preparation!
+  [{:keys [emitter db-conn]} request-id preparation-token]
+  (async/go
+    (async/<! (async/timeout preparation-delay-ms))
+    (locking state
+      (let [feedback (:card-feedback @state)]
+        (when (and (= request-id (:request-id feedback))
+                   (= preparation-token (:preparation-token feedback))
+                   (:awaiting-start? feedback)
+                   (= :system-state/ready (:system-state @state))
+                   (= :system-mode/normal (:system-mode @state))
+                   (feedback-led-enabled? db-conn feedback))
+          (swap! state assoc-in
+                 [:card-feedback :preparation-visible?]
+                 true)
+          (emit-led! emitter preparation-pattern))))))
+
+(defn- begin-card-feedback!
+  [{:keys [emitter db-conn] :as sys} uid request-id]
+  (let [preparation-token (random-uuid)
+        led-eligible?     (db/led-language? @db-conn)]
+    (locking state
+      (swap! state assoc
+             :card-feedback {:request-id           request-id
+                             :uid                  uid
+                             :awaiting-start?      true
+                             :problem-handled?     false
+                             :led-eligible?        led-eligible?
+                             :preparation-token    preparation-token
+                             :preparation-visible? false})
+      (when led-eligible?
+        (emit-led! emitter known-card-pattern)))
+    (schedule-preparation! sys request-id preparation-token)))
+
+(defn- acknowledge-known-card! [emitter database]
+  (when (db/led-language? database)
+    (emit-led! emitter known-card-pattern)))
+
+(defn- claim-card-start! [request-id]
+  (locking state
+    (let [feedback (:card-feedback @state)]
+      (when (and (= request-id (:request-id feedback))
+                 (:awaiting-start? feedback))
+        (swap! state update :card-feedback
+               assoc
+               :awaiting-start? false
+               :preparation-token nil)
+        feedback))))
+
+(defn- handle-card-opening! [{:keys [emitter db-conn]} request-id]
+  (if-let [feedback (claim-card-start! request-id)]
+    (do
+      (emit-led! emitter {:action       :led/animation-cancel
+                          :animation-id card-feedback-animation-id})
+      (when (feedback-led-enabled? db-conn feedback)
+        (emit-led! emitter here-we-go-pattern)))
+    (when (and (nil? request-id)
+               (:card-feedback @state))
+      (invalidate-card-feedback! emitter true))))
+
+(defn- claim-card-problem! [request-id]
+  (locking state
+    (let [feedback (:card-feedback @state)]
+      (when (and (= request-id (:request-id feedback))
+                 (not (:problem-handled? feedback)))
+        (swap! state update :card-feedback
+               assoc
+               :awaiting-start? false
+               :problem-handled? true
+               :preparation-token nil)
+        feedback))))
+
+(defn tts-command-handler
+  [{:keys [emitter db-conn]} {:keys [value] :as _event}]
+  (when (= :card-playback-problem (:feedback/type value))
+    (when-let [feedback (claim-card-problem! (:request-id value))]
+      (emit-led! emitter {:action       :led/animation-cancel
+                          :animation-id card-feedback-animation-id})
+      (when (feedback-led-enabled? db-conn feedback)
+        (emit-led! emitter playback-problem-pattern)))))
 
 (defn change-mode! [sys new-mode]
   (emit-player! (:emitter sys) {:action :audio/clear})
@@ -111,31 +336,37 @@
                         :audio/play-one-shot false
                         :text                "This one is empty."})))
 
+(def ^:private unknown-card-message
+  "Uh-oh. This card is new to me.")
+
 (defn rfid-placed-play-mode
-  [{:keys [emitter db-conn settings]} {:keys [uid]}]
+  [{:keys [emitter db-conn settings] :as sys} {:keys [uid]}]
   (let [database  @db-conn
-        item-path (browse/absoluteify settings (db/linked-folder database uid))]
+        item-path (browse/absoluteify settings
+                                      (db/linked-folder database uid))]
     (if item-path
       (let [{removed-uid      :uid
              removal-behavior :removal-behavior} (:removed-card @state)
             returning-card? (= uid removed-uid)]
-        (emit-led! emitter {:action       :led/pulse
-                            :names        [:audio/volume-up :audio/volume-down]
-                            :after-set    1.0
-                            :repeat-times 2})
         (cond
           (and returning-card?
                (= :keep-playing removal-behavior))
-          nil
+          (acknowledge-known-card! emitter database)
 
           (and returning-card?
                (= :resume (db/card-return-behavior database)))
-          (emit-player! emitter {:action :audio/play})
+          (do
+            (acknowledge-known-card! emitter database)
+            (emit-player! emitter {:action :audio/play}))
 
           :else
-          (emit-player! emitter {:action    :audio/play-path
-                                 :item-path item-path
-                                 :uid       uid}))
+          (let [request-id (random-uuid)]
+            (invalidate-card-feedback! emitter true)
+            (begin-card-feedback! sys uid request-id)
+            (emit-player! emitter {:action     :audio/play-path
+                                   :item-path  item-path
+                                   :uid        uid
+                                   :request-id request-id})))
         (swap! state assoc
                :active-card-uid uid
                :removed-card nil))
@@ -143,10 +374,17 @@
         (swap! state assoc
                :active-card-uid nil
                :removed-card nil)
-        (emit-led! emitter {:action       :led/pulse
-                            :names        [:audio/prev :audio/next]
-                            :after-set    1.0
-                            :repeat-times 2})))))
+        (emit-player! emitter {:action :audio/clear})
+        (emit-tts! emitter {:action              :tts/speak
+                            :feedback/type       :unknown-card
+                            :audio/play-one-shot true
+                            :text                unknown-card-message})
+        (when (db/led-language? database)
+          (locking state
+            (swap! state assoc
+                   :card-feedback {:kind          :unknown-card
+                                   :led-eligible? true})
+            (emit-led! emitter unknown-card-pattern)))))))
 
 (defn rfid-removed-play-mode
   [{:keys [emitter db-conn]} {:keys [uid]}]
@@ -184,7 +422,16 @@
                    (rfid-removed-play-mode sys value))
         :error (do
                  (log/error "RFID error" (:error value))
-                 (emit-led! emitter {:action :led/pulse :names [:audio/play-pause :audio/prev :audio/next :audio/volume-up :audio/volume-down] :after-set 0.0 :repeat-times 9}))))))
+                 (invalidate-card-feedback! emitter true)
+                 (emit-led! emitter
+                            {:action       :led/pulse
+                             :names        [:audio/play-pause
+                                            :audio/prev
+                                            :audio/next
+                                            :audio/volume-up
+                                            :audio/volume-down]
+                             :after-set    0.0
+                             :repeat-times 9}))))))
 
 (def ^:private system-control-commands
   {:system/poweroff         ["systemctl" "poweroff"]
@@ -285,26 +532,33 @@
                                       (log/warn "Ignoring immediate host poweroff" {:reason reason})))
       nil)))
 
-(defn player-handler [{:keys [emitter]} {:keys [value] :as _ev}]
-  (when (#{:system-state/warming-up :system-state/cooling-down} (system-state!))
-    ;; (prn "player-handler " ev)
+(defn player-handler [{:keys [emitter] :as sys} {:keys [value] :as _ev}]
+  (when (and (= :player/state-changed (:event value))
+             (= :opening (:state value)))
+    (handle-card-opening! sys (:request-id value)))
+  (when (#{:system-state/warming-up :system-state/cooling-down}
+         (system-state!))
     (when (= :player/one-shot-finished (:event value))
       (condp = (:id value)
         :startup-sound  (emit-system! emitter {:event :system/warmed-up})
         :shutdown-sound (emit-system! emitter {:event :system/shutdown})))))
 
-(def ^:private patch-ports {:rfid    {:handler #'rfid-handler
-                                      :name    :rfid
-                                      :path    "/hardware/input/rfid"}
-                            :buttons {:handler #'button-handler
-                                      :name    :buttons
-                                      :path    "/hardware/input/buttons"}
-                            :system  {:handler #'system-handler
-                                      :name    :system
-                                      :path    "/system"}
-                            :player  {:handler #'player-handler
-                                      :name    :player
-                                      :path    "/player/events"}})
+(def ^:private patch-ports
+  {:rfid    {:handler #'rfid-handler
+             :name    :rfid
+             :path    "/hardware/input/rfid"}
+   :buttons {:handler #'button-handler
+             :name    :buttons
+             :path    "/hardware/input/buttons"}
+   :system  {:handler #'system-handler
+             :name    :system
+             :path    "/system"}
+   :player  {:handler #'player-handler
+             :name    :player
+             :path    "/player/events"}
+   :tts     {:handler #'tts-command-handler
+             :name    :tts
+             :path    "/tts/commands"}})
 
 (defn init-switchboard! [{:keys [bus] :as opts}]
   (reset! state init-state)
@@ -332,9 +586,11 @@
      :exit-ch  exit-ch}))
 
 (defn halt-switchboard! [{:keys [channels exit-ch emitter]}]
+  (invalidate-card-feedback! emitter false)
   (async/put! exit-ch true)
   (async/close! emitter)
-  (doseq [channel (keys channels)] (async/close! channel)))
+  (doseq [channel (keys channels)]
+    (async/close! channel)))
 
 (def SwitchboardComponent
   {:donut.system/start  (fn [{config :donut.system/config}]

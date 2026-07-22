@@ -150,6 +150,10 @@
         migrated-sleep-settings (complete-sleep-settings
                                  (get-in database [:settings :sleep]))]
     (-> database
+        (update :settings
+                #(merge {:led-language?       true
+                         :tts-error-messages? true}
+                        (when (map? %) %)))
         (assoc-in [:settings :audio] migrated-audio)
         (assoc-in [:settings :auto-shutdown]
                   migrated-auto-shutdown-settings)
@@ -172,7 +176,11 @@
                                                                (pp/pprint data))))}
                                    :init {:_version       1
                                           :linked-tags    {}
-                                          :settings       {:audio
+                                          :settings       {:led-language?
+                                                           true
+                                                           :tts-error-messages?
+                                                           true
+                                                           :audio
                                                            default-audio-settings
                                                            :auto-shutdown
                                                            default-auto-shutdown-settings
@@ -202,6 +210,12 @@
 
 (defn settings [db]
   (get-in db [:settings]))
+
+(defn led-language? [db]
+  (true? (get (settings db) :led-language? true)))
+
+(defn tts-error-messages? [db]
+  (true? (get (settings db) :tts-error-messages? true)))
 
 (defn audio-settings [db]
   (get-in db [:settings :audio]))

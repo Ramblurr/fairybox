@@ -88,6 +88,8 @@
         night-start           (:night_start body)
         card-removal-behavior (keyword (:card_removal_behavior body))
         card-return-behavior  (keyword (:card_return_behavior body))
+        led-language?         (:card_feedback_led_language body)
+        tts-error-messages?   (:card_feedback_tts_errors body)
         sleep-keys-present?   (or (contains? body :sleep_shutdown)
                                   (contains? body
                                              :sleep_shutdown_delay_minutes))
@@ -102,25 +104,47 @@
                        numbers)
                (util/valid-wall-clock-time? day-start)
                (util/valid-wall-clock-time? night-start)
+               (boolean? led-language?)
+               (boolean? tts-error-messages?)
                (or (not sleep-keys-present?)
                    (and (boolean? (:shutdown? sleep-update))
                         (integer? (:shutdown-delay-minutes sleep-update))
                         (<= 0 (:shutdown-delay-minutes sleep-update)))))
-      {:audio (assoc numbers
-                     :day-start day-start
-                     :night-start night-start
-                     :card-removal-behavior card-removal-behavior
-                     :card-return-behavior card-return-behavior)
-       :sleep sleep-update})))
+      {:audio               (assoc numbers
+                                   :day-start day-start
+                                   :night-start night-start
+                                   :card-removal-behavior
+                                   card-removal-behavior
+                                   :card-return-behavior
+                                   card-return-behavior)
+       :led-language?       led-language?
+       :tts-error-messages? tts-error-messages?
+       :sleep               sleep-update})))
 
 (defaction save-device-settings
   [{:fairy.box/keys [component] :as request}]
-  (when-let [{:keys [audio sleep]}
+  (when-let [{:keys [audio sleep led-language? tts-error-messages?]}
              (device-settings-update (:body request))]
-    (swap! (component :fairy.box.db/db)
-           (fn [database]
-             (cond-> (update-in database [:settings :audio] merge audio)
-               sleep (update-in [:settings :sleep] merge sleep)))))
+    (let [db-conn        (component :fairy.box.db/db)
+          [before after] (swap-vals!
+                          db-conn
+                          (fn [database]
+                            (cond-> (-> database
+                                        (update-in [:settings :audio]
+                                                   merge
+                                                   audio)
+                                        (assoc-in [:settings :led-language?]
+                                                  led-language?)
+                                        (assoc-in
+                                         [:settings :tts-error-messages?]
+                                         tts-error-messages?))
+                              sleep
+                              (update-in [:settings :sleep] merge sleep))))]
+      (when (and (db/led-language? before)
+                 (not (db/led-language? after)))
+        (when-let [controller
+                   (component :fairy.box.switchboard/switchboard)]
+          (switchboard/disable-card-feedback! controller)))))
   nil)
 
 (def ^:private system-control-events
@@ -440,6 +464,31 @@
                         {:value       "restart"
                          :label       "Restart the playlist"
                          :description "Start again from the beginning of the playlist."}]})]]))
+
+(defn- card-feedback-card [led-language? tts-error-messages?]
+  (settings-card
+   {:id          "card-feedback-settings"
+    :title       "Card feedback"
+    :description "Choose how Fairybox responds while recognizing and starting cards."
+    :class       (css [:lg :col-span-4])}
+   [:div {:class (css :mt-6 :space-y-5)}
+    (ui/checkbox-input
+     :name "card-feedback-led-language"
+     :label "Use card feedback lights"
+     :checked? led-language?
+     :data-bind "card_feedback_led_language"
+     :description
+     (str "Use button-light patterns to acknowledge cards, show preparation "
+          "and playback start, and signal card problems. Card identification "
+          "mode is unaffected."))
+    (ui/checkbox-input
+     :name "card-feedback-tts-errors"
+     :label "Speak card playback problems"
+     :checked? tts-error-messages?
+     :data-bind "card_feedback_tts_errors"
+     :description
+     (str "Speak messages for unknown cards and RFID playback failures. "
+          "This is independent of track announcements."))]))
 
 (defn- settings-slider
   [{:keys [name label value signal description]}]
@@ -763,6 +812,8 @@
            max-led-brightness-day max-led-brightness-night
            day-start night-start card-removal-behavior
            card-return-behavior] :as audio-settings}
+   led-language?
+   tts-error-messages?
    sleep-settings
    sleep-timer
    auto-shutdown-timer]
@@ -777,21 +828,23 @@
    [:form {:id             "device-settings"
            :data-signals__ifmissing
            (h/edn->json
-            {:min_volume               min-volume
-             :max_volume               max-volume
-             :max_volume_day           max-volume-day
-             :max_volume_night         max-volume-night
-             :startup_volume_day       startup-volume-day
-             :startup_volume_night     startup-volume-night
-             :shutdown_volume_day      shutdown-volume-day
-             :shutdown_volume_night    shutdown-volume-night
-             :max_led_brightness_day   max-led-brightness-day
-             :max_led_brightness_night max-led-brightness-night
-             :day_start                day-start
-             :night_start              night-start
-             :card_removal_behavior    (name card-removal-behavior)
-             :card_return_behavior     (name card-return-behavior)
-             :sleep_shutdown           (:shutdown? sleep-settings)
+            {:min_volume                 min-volume
+             :max_volume                 max-volume
+             :max_volume_day             max-volume-day
+             :max_volume_night           max-volume-night
+             :startup_volume_day         startup-volume-day
+             :startup_volume_night       startup-volume-night
+             :shutdown_volume_day        shutdown-volume-day
+             :shutdown_volume_night      shutdown-volume-night
+             :max_led_brightness_day     max-led-brightness-day
+             :max_led_brightness_night   max-led-brightness-night
+             :day_start                  day-start
+             :night_start                night-start
+             :card_removal_behavior      (name card-removal-behavior)
+             :card_return_behavior       (name card-return-behavior)
+             :card_feedback_led_language led-language?
+             :card_feedback_tts_errors   tts-error-messages?
+             :sleep_shutdown             (:shutdown? sleep-settings)
              :sleep_shutdown_delay_minutes
              (:shutdown-delay-minutes sleep-settings)})
            :data-on:change (str "@post('" save-device-settings "')")}
@@ -801,6 +854,7 @@
      (card-behavior-settings
       {:card-removal-behavior card-removal-behavior
        :card-return-behavior  card-return-behavior})
+     (card-feedback-card led-language? tts-error-messages?)
      (day-night-settings audio-settings)
      (sleep-timer-settings sleep-timer sleep-settings)
      (auto-shutdown-settings auto-shutdown-timer)]
@@ -816,6 +870,8 @@
      (device-settings-form
       req
       (db/audio-settings database)
+      (db/led-language? database)
+      (db/tts-error-messages? database)
       (db/sleep-settings database)
       (component :fairy.box.sleep/timer)
       (component :fairy.box.auto-shutdown/timer))]))

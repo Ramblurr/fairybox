@@ -67,6 +67,9 @@
 (defn refresh-limit! [controller limit]
   ((::refresh-limit! controller) limit))
 
+(defn current-limit [controller]
+  ((::current-limit controller)))
+
 (defn cancel-animation! [controller animation-id]
   ((::cancel-animation! controller) animation-id))
 
@@ -155,22 +158,26 @@
      (fn []
        (locking lock
          (:applied-values @state_)))
+     ::current-limit
+     (fn []
+       (locking lock
+         (:applied-limit @state_)))
      ::register-animation!
      (fn [animation-id run-id run]
        (locking lock
          (when-not (:closed? @state_)
-           (when-let [old-run-id (get-in @state_
-                                         [:animation-runs animation-id])]
-             (when-let [cancel-ch (get-in
-                                   @state_
-                                   [:animations old-run-id :cancel-ch])]
-               (async/put! cancel-ch :cancel)))
-           (swap! state_
-                  (fn [state]
-                    (-> state
-                        (assoc-in [:animations run-id] run)
-                        (assoc-in [:animation-runs animation-id] run-id))))
-           true)))
+           (let [old-run-id (get-in @state_
+                                    [:animation-runs animation-id])
+                 old-run    (get-in @state_
+                                    [:animations old-run-id])]
+             (when-let [cancel-ch (:cancel-ch old-run)]
+               (async/put! cancel-ch :cancel))
+             (swap! state_
+                    (fn [state]
+                      (-> state
+                          (assoc-in [:animations run-id] run)
+                          (assoc-in [:animation-runs animation-id] run-id))))
+             {:previous-finished-ch (:finished-ch old-run)}))))
      ::finish-animation!
      (fn [animation-id run-id]
        (locking lock
@@ -203,27 +210,95 @@
 
 (defn apply-tween! [controller {:keys [value data]}]
   (when value
-    (doseq [led-name data]
-      (set-led! controller led-name value))))
+    (let [{:keys [led-names relative-to-limit?]}
+          (if (map? data)
+            data
+            {:led-names data})
+          value (if relative-to-limit?
+                  (* value (current-limit controller))
+                  value)]
+      (doseq [led-name led-names]
+        (set-led! controller led-name value)))))
 
 (defn- animate-leds! [controller animation-id tweens repeat-times]
   (let [animation-id (or animation-id (random-uuid))
         run-id       (random-uuid)
-        cancel-ch    (async/chan)
+        cancel-ch    (async/chan 1)
         finished-ch  (async/promise-chan)
         run          {:cancel-ch cancel-ch :finished-ch finished-ch}]
-    (if ((::register-animation! controller) animation-id run-id run)
+    (if-let [{:keys [previous-finished-ch]}
+             ((::register-animation! controller)
+              animation-id
+              run-id
+              run)]
       (do
-        (anim/animate! (partial apply-tween! controller)
-                       tweens
-                       :repeat-times repeat-times
-                       :cancel-ch cancel-ch
-                       :finished-ch finished-ch)
+        (async/go
+          (when previous-finished-ch
+            (async/<! previous-finished-ch))
+          (anim/animate! (partial apply-tween! controller)
+                         tweens
+                         :repeat-times repeat-times
+                         :cancel-ch cancel-ch
+                         :finished-ch finished-ch))
         (async/go
           (async/<! finished-ch)
           ((::finish-animation! controller) animation-id run-id)))
       (async/put! finished-ch :cancelled))
     finished-ch))
+
+(def ^:private easing-functions
+  {:linear      anim/ease-linear
+   :in-out-sine anim/ease-in-out-sine
+   :out-sine    anim/ease-out-sine})
+
+(defn- resolved-led-names [group-defs {:keys [names groups]}]
+  (into (set names) (mapcat group-defs groups)))
+
+(defn- declarative-tween
+  [group-defs relative-to-limit? {:keys [from to duration delay easing]
+                                  :or   {from     0.0
+                                         to       1.0
+                                         duration 500
+                                         delay    0
+                                         easing   :linear}
+                                  :as   definition}]
+  (let [led-names (resolved-led-names group-defs definition)
+        easing-fn (get easing-functions easing)]
+    (when (empty? led-names)
+      (throw (ex-info "LED animation tween has no targets"
+                      {:tween definition})))
+    (when-not (and (pos-int? duration) (nat-int? delay))
+      (throw (ex-info "LED animation timing must use positive duration and non-negative delay"
+                      {:tween definition})))
+    (when-not easing-fn
+      (throw (ex-info "Unknown LED animation easing"
+                      {:easing easing})))
+    (anim/tween {:led-names          led-names
+                 :relative-to-limit? relative-to-limit?}
+                :from (clamp from)
+                :to (clamp to)
+                :duration duration
+                :delay delay
+                :easing-fn easing-fn)))
+
+(defn- declarative-animation
+  [controller group-defs {:keys [animation-id repeat-times
+                                 relative-to-limit? tweens]
+                          :or   {repeat-times       1
+                                 relative-to-limit? false}}]
+  (when-not (seq tweens)
+    (throw (ex-info "LED animation requires at least one tween" {})))
+  (when-not (or (= :forever repeat-times)
+                (pos-int? repeat-times))
+    (throw (ex-info "LED animation repeat count must be positive or :forever"
+                    {:repeat-times repeat-times})))
+  (animate-leds! controller
+                 animation-id
+                 (mapv (partial declarative-tween
+                                group-defs
+                                relative-to-limit?)
+                       tweens)
+                 repeat-times))
 
 (defn pulse
   ([controller leds repeat-times on-time off-time animation-id]
@@ -317,46 +392,60 @@
     (set (distinct (reduce into names (map groups affected-groups))))))
 
 (defn events-handler! [{:keys [controller groups]} {:keys [value] :as _ev}]
-  (let [led-names (set (distinct (reduce into
-                                         (:names value)
-                                         (map groups (:groups value)))))]
+  (let [led-names (resolved-led-names groups value)]
     (condp = (:action value)
-      :led/animation-cancel (cancel-animation! controller
-                                               (:animation-id value))
-      :led/pulse (let [{:keys [after-set repeat-times animation-id]
-                        :or   {repeat-times 1
-                               after-set    1.0}}                   value
-                       result-ch (pulse controller
-                                        led-names
-                                        repeat-times
-                                        animation-id)]
-                   (async/go
-                     (when (= :finished (async/<! result-ch))
-                       (doseq [led-name led-names]
-                         (set-led! controller led-name after-set)))))
+      :led/animation-cancel
+      (cancel-animation! controller (:animation-id value))
 
-      :led/fade (let [{:keys [after-set repeat-times animation-id
-                              from to duration start-delay]
-                       :or   {repeat-times 1
-                              from         1.0
-                              to           0.0
-                              duration     1000
-                              start-delay  0
-                              after-set    0.0}}                  value
-                      result-ch (fade controller
-                                      led-names
-                                      repeat-times
-                                      from
-                                      to
-                                      duration
-                                      start-delay
-                                      animation-id)]
-                  (async/go
-                    (when (= :finished (async/<! result-ch))
-                      (doseq [led-name led-names]
-                        (set-led! controller led-name after-set)))))
-      :led/set (doseq [led-name led-names]
-                 (set-led! controller led-name (:value value))))))
+      :led/animate
+      (let [{:keys [after-set]
+             :or   {after-set 1.0}} value
+            affected-led-names      (set (mapcat (partial resolved-led-names groups)
+                                                 (:tweens value)))
+            result-ch               (declarative-animation controller groups value)]
+        (async/go
+          (when (= :finished (async/<! result-ch))
+            (doseq [led-name affected-led-names]
+              (set-led! controller led-name after-set)))))
+
+      :led/pulse
+      (let [{:keys [after-set repeat-times animation-id]
+             :or   {repeat-times 1
+                    after-set    1.0}}                   value
+            result-ch (pulse controller
+                             led-names
+                             repeat-times
+                             animation-id)]
+        (async/go
+          (when (= :finished (async/<! result-ch))
+            (doseq [led-name led-names]
+              (set-led! controller led-name after-set)))))
+
+      :led/fade
+      (let [{:keys [after-set repeat-times animation-id
+                    from to duration start-delay]
+             :or   {repeat-times 1
+                    from         1.0
+                    to           0.0
+                    duration     1000
+                    start-delay  0
+                    after-set    0.0}}                  value
+            result-ch (fade controller
+                            led-names
+                            repeat-times
+                            from
+                            to
+                            duration
+                            start-delay
+                            animation-id)]
+        (async/go
+          (when (= :finished (async/<! result-ch))
+            (doseq [led-name led-names]
+              (set-led! controller led-name after-set)))))
+
+      :led/set
+      (doseq [led-name led-names]
+        (set-led! controller led-name (:value value))))))
 
 (defn start-led-loop! [opts listener]
   (async/go-loop []

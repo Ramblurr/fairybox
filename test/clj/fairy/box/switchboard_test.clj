@@ -108,9 +108,12 @@
     (let [command (->> (drain-events emitter)
                        (filter #(= "/player/commands" (:path %)))
                        first
-                       :value)]
+                       :value)
+          result  (assoc (dissoc command :request-id)
+                         :request-id?
+                         (uuid? (:request-id command)))]
       (async/close! emitter)
-      command)))
+      result)))
 
 (defn- card-identification-command [announce?]
   (let [emitter (async/chan 4)
@@ -162,12 +165,13 @@
           state_             (var-get (ns-resolve 'fairy.box.switchboard
                                                   'state))
           previous-state     @state_
-          expected-playback  {:action    :audio/play-path
-                              :item-path (str (fs/canonicalize
-                                               (fs/path
-                                                temp-dir
-                                                "audiobooks/Author One/Book One")))
-                              :uid       "card-a"}]
+          expected-playback  {:action      :audio/play-path
+                              :item-path   (str (fs/canonicalize
+                                                 (fs/path
+                                                  temp-dir
+                                                  "audiobooks/Author One/Book One")))
+                              :uid         "card-a"
+                              :request-id? true}]
       (try
         (is (= {:normal-playback
                 {:disabled expected-playback
@@ -334,6 +338,7 @@
                   :rfid nil
                   :active-card-uid          nil
                   :removed-card             nil
+                  :card-feedback            nil
                   :pending-system-operation nil}
                  @state_))
           (finally
@@ -545,3 +550,403 @@
                   :commands        @commands_}))))
       (async/close! emitter)
       (reset! state_ previous-state))))
+
+(deftest first-matching-opening-shows-here-we-go-once
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        emitter        (async/chan 16)
+        db-conn        (atom {:settings {:led-language? true}})
+        system         {:emitter emitter :db-conn db-conn}
+        here-we-go     (var-get (ns-resolve 'fairy.box.switchboard
+                                            'here-we-go-pattern))]
+    (try
+      (reset! state_ {:system-state  :system-state/ready
+                      :system-mode   :system-mode/normal
+                      :card-feedback {:request-id       :request-b
+                                      :uid              "card-b"
+                                      :awaiting-start?  true
+                                      :problem-handled? false
+                                      :led-eligible?    true}})
+      (switchboard/player-handler
+       system
+       {:value {:event      :player/state-changed
+                :state      :opening
+                :request-id :request-a}})
+      (let [old-opening (drain-events emitter)]
+        (switchboard/player-handler
+         system
+         {:value {:event      :player/state-changed
+                  :state      :opening
+                  :request-id :request-b}})
+        (let [first-opening (drain-events emitter)]
+          (switchboard/player-handler
+           system
+           {:value {:event      :player/state-changed
+                    :state      :opening
+                    :request-id :request-b}})
+          (is (= {:old-opening     []
+                  :first-opening
+                  [{:path  "/hardware/output/leds"
+                    :value {:action       :led/animation-cancel
+                            :animation-id :card-playback-feedback}}
+                   {:path  "/hardware/output/leds"
+                    :value here-we-go}]
+                  :later-opening   []
+                  :awaiting-start? false}
+                 {:old-opening   old-opening
+                  :first-opening first-opening
+                  :later-opening (drain-events emitter)
+                  :awaiting-start?
+                  (get-in @state_ [:card-feedback :awaiting-start?])}))))
+      (finally
+        (async/close! emitter)
+        (reset! state_ previous-state)))))
+
+(deftest linked-card-breathes-after-acknowledgement-delay
+  (fs/with-temp-dir [temp-dir {:prefix "fairybox-feedback-delay-"}]
+    (let [{:keys [settings]} (media/populate-media-tree! temp-dir)
+          state_             (var-get (ns-resolve 'fairy.box.switchboard
+                                                  'state))
+          previous-state     @state_
+          emitter            (async/chan 16)
+          db-conn            (atom {:linked-tags
+                                    {"card-a"
+                                     {:folder
+                                      "audiobooks/Author One/Book One"}}
+                                    :settings    {:led-language? true
+                                                  :audio
+                                                  {:card-return-behavior
+                                                   :restart}}})
+          system             {:emitter  emitter
+                              :db-conn  db-conn
+                              :settings settings}
+          known-pattern      (var-get
+                              (ns-resolve 'fairy.box.switchboard
+                                          'known-card-pattern))
+          preparation-pattern
+          (var-get (ns-resolve 'fairy.box.switchboard
+                               'preparation-pattern))]
+      (try
+        (reset! state_ {:system-state  :system-state/ready
+                        :system-mode   :system-mode/normal
+                        :card-feedback nil
+                        :removed-card  nil})
+        (switchboard/rfid-placed-play-mode system {:uid "card-a"})
+        (let [initial    (drain-events emitter)
+              command    (->> initial
+                              (filter #(= "/player/commands" (:path %)))
+                              first
+                              :value)
+              request-id (:request-id command)]
+          (Thread/sleep 550)
+          (is (= {:initial-led known-pattern
+                  :command     {:action      :audio/play-path
+                                :item-path   (str (fs/canonicalize
+                                                   (fs/path
+                                                    temp-dir
+                                                    "audiobooks/Author One/Book One")))
+                                :uid         "card-a"
+                                :request-id? true}
+                  :delayed     [{:path  "/hardware/output/leds"
+                                 :value preparation-pattern}]
+                  :state       {:request-id           request-id
+                                :awaiting-start?      true
+                                :preparation-visible? true}}
+                 {:initial-led (->> initial
+                                    (filter #(= "/hardware/output/leds"
+                                                (:path %)))
+                                    first
+                                    :value)
+                  :command     (assoc (dissoc command :request-id)
+                                      :request-id?
+                                      (uuid? request-id))
+                  :delayed     (drain-events emitter)
+                  :state       (select-keys (:card-feedback @state_)
+                                            [:request-id
+                                             :awaiting-start?
+                                             :preparation-visible?])})))
+        (finally
+          (async/close! emitter)
+          (reset! state_ previous-state))))))
+
+(deftest unknown-card-speech-and-led-language-are-independent
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        unknown-pattern
+        (var-get (ns-resolve 'fairy.box.switchboard
+                             'unknown-card-pattern))
+        run-case
+        (fn [led-language?]
+          (let [emitter (async/chan 8)
+                system  {:emitter  emitter
+                         :db-conn  (atom {:linked-tags {}
+                                          :settings
+                                          {:led-language? led-language?}})
+                         :settings {}}]
+            (try
+              (reset! state_ {:system-state  :system-state/ready
+                              :system-mode   :system-mode/normal
+                              :card-feedback nil})
+              (switchboard/rfid-placed-play-mode system {:uid "unknown"})
+              (drain-events emitter)
+              (finally
+                (async/close! emitter)))))]
+    (try
+      (is (= {:enabled
+              [{:path  "/player/commands"
+                :value {:action :audio/clear}}
+               {:path  "/tts/commands"
+                :value {:action              :tts/speak
+                        :feedback/type       :unknown-card
+                        :audio/play-one-shot true
+                        :text                "Uh-oh. This card is new to me."}}
+               {:path  "/hardware/output/leds"
+                :value unknown-pattern}]
+              :disabled
+              [{:path  "/player/commands"
+                :value {:action :audio/clear}}
+               {:path  "/tts/commands"
+                :value {:action              :tts/speak
+                        :feedback/type       :unknown-card
+                        :audio/play-one-shot true
+                        :text                "Uh-oh. This card is new to me."}}]}
+             {:enabled  (run-case true)
+              :disabled (run-case false)}))
+      (finally
+        (reset! state_ previous-state)))))
+
+(deftest playback-problem-leds-are-independently-gated
+  (let [state_         (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state @state_
+        problem-pattern
+        (var-get (ns-resolve 'fairy.box.switchboard
+                             'playback-problem-pattern))
+        run-case
+        (fn [led-language?]
+          (let [emitter (async/chan 8)
+                system  {:emitter emitter
+                         :db-conn (atom {:settings
+                                         {:led-language? led-language?}})}
+                command {:value {:action        :tts/speak
+                                 :feedback/type :card-playback-problem
+                                 :request-id    :request-a
+                                 :problem       :missing-media}}]
+            (try
+              (reset! state_
+                      {:system-state  :system-state/ready
+                       :system-mode   :system-mode/normal
+                       :card-feedback {:request-id       :request-a
+                                       :awaiting-start?  true
+                                       :problem-handled? false
+                                       :led-eligible?    true}})
+              (switchboard/tts-command-handler system command)
+              (switchboard/tts-command-handler system command)
+              {:events   (drain-events emitter)
+               :feedback (select-keys (:card-feedback @state_)
+                                      [:awaiting-start?
+                                       :problem-handled?])}
+              (finally
+                (async/close! emitter)))))]
+    (try
+      (is (= {:enabled
+              {:events
+               [{:path  "/hardware/output/leds"
+                 :value {:action       :led/animation-cancel
+                         :animation-id :card-playback-feedback}}
+                {:path  "/hardware/output/leds"
+                 :value problem-pattern}]
+               :feedback {:awaiting-start?  false
+                          :problem-handled? true}}
+              :disabled
+              {:events
+               [{:path  "/hardware/output/leds"
+                 :value {:action       :led/animation-cancel
+                         :animation-id :card-playback-feedback}}]
+               :feedback {:awaiting-start?  false
+                          :problem-handled? true}}}
+             {:enabled  (run-case true)
+              :disabled (run-case false)}))
+      (finally
+        (reset! state_ previous-state)))))
+
+(deftest existing-bus-events-drive-one-card-start-and-problem
+  (let [state_          (var-get (ns-resolve 'fairy.box.switchboard 'state))
+        previous-state  @state_
+        bus             (ev/bus)
+        source          (async/chan 8)
+        led-events      (async/chan 8)
+        db-conn         (atom {:settings {:led-language? true}})
+        here-we-go      (var-get (ns-resolve 'fairy.box.switchboard
+                                             'here-we-go-pattern))
+        problem-pattern (var-get (ns-resolve 'fairy.box.switchboard
+                                             'playback-problem-pattern))
+        take-event      (fn []
+                          (let [[event port]
+                                (async/alts!! [led-events
+                                               (async/timeout 1000)])]
+                            (when (= port led-events)
+                              (select-keys event [:path :value]))))
+        instance        (switchboard/init-switchboard!
+                         {:bus bus :db-conn db-conn})]
+    (try
+      (ev/emitize bus source)
+      (ev/listen bus "/hardware/output/leds" led-events)
+      (reset! state_ {:system-state  :system-state/ready
+                      :system-mode   :system-mode/normal
+                      :card-feedback {:request-id       :request-a
+                                      :awaiting-start?  true
+                                      :problem-handled? false
+                                      :led-eligible?    true}})
+      (async/>!! source
+                 {:path  "/player/events"
+                  :value {:event      :player/state-changed
+                          :state      :opening
+                          :request-id :request-a}})
+      (let [start-events [(take-event) (take-event)]]
+        (async/>!! source
+                   {:path  "/player/events"
+                    :value {:event      :player/state-changed
+                            :state      :opening
+                            :request-id :request-a}})
+        (let [[later-opening port]
+              (async/alts!! [led-events (async/timeout 50)])]
+          (async/>!! source
+                     {:path  "/tts/commands"
+                      :value {:action        :tts/speak
+                              :feedback/type :card-playback-problem
+                              :request-id    :request-a
+                              :problem       :missing-media}})
+          (is (= {:start
+                  [{:path  "/hardware/output/leds"
+                    :value {:action       :led/animation-cancel
+                            :animation-id :card-playback-feedback}}
+                   {:path  "/hardware/output/leds"
+                    :value here-we-go}]
+                  :later-opening            nil
+                  :later-opening-timed-out? true
+                  :problem
+                  [{:path  "/hardware/output/leds"
+                    :value {:action       :led/animation-cancel
+                            :animation-id :card-playback-feedback}}
+                   {:path  "/hardware/output/leds"
+                    :value problem-pattern}]}
+                 {:start                    start-events
+                  :later-opening            later-opening
+                  :later-opening-timed-out? (not= port led-events)
+                  :problem                  [(take-event) (take-event)]}))))
+      (finally
+        (switchboard/halt-switchboard! instance)
+        (async/close! source)
+        (async/close! led-events)
+        (ev/close! bus)
+        (reset! state_ previous-state)))))
+
+(deftest card-feedback-patterns-preserve-the-visual-vocabulary
+  (let [summary
+        (fn [symbol]
+          (let [pattern (var-get (ns-resolve 'fairy.box.switchboard symbol))]
+            {:repeat-times       (get pattern :repeat-times 1)
+             :relative-to-limit? (:relative-to-limit? pattern)
+             :after-set          (:after-set pattern)
+             :tweens
+             (mapv #(select-keys %
+                                 [:names :groups :from :to
+                                  :duration :delay :easing])
+                   (:tweens pattern))}))]
+    (is (= {:known
+            {:repeat-times       2
+             :relative-to-limit? true
+             :after-set          1.0
+             :tweens
+             [{:names    [:audio/volume-up :audio/volume-down]
+               :from     1.0
+               :to       0.15
+               :duration 80
+               :easing   :out-sine}
+              {:names    [:audio/volume-up :audio/volume-down]
+               :from     0.15
+               :to       1.0
+               :duration 120
+               :delay    80
+               :easing   :out-sine}]}
+            :preparation
+            {:repeat-times       :forever
+             :relative-to-limit? true
+             :after-set          1.0
+             :tweens
+             [{:names    [:audio/play-pause]
+               :from     1.0
+               :to       0.25
+               :duration 700
+               :easing   :in-out-sine}
+              {:names    [:audio/play-pause]
+               :from     0.25
+               :to       1.0
+               :duration 700
+               :delay    700
+               :easing   :in-out-sine}]}
+            :here-we-go
+            {:repeat-times       1
+             :relative-to-limit? true
+             :after-set          1.0
+             :tweens
+             [{:groups   [:all]
+               :from     1.0
+               :to       0.15
+               :duration 100
+               :easing   :out-sine}
+              {:groups   [:all]
+               :from     0.15
+               :to       1.0
+               :duration 200
+               :delay    150
+               :easing   :out-sine}]}
+            :unknown
+            {:repeat-times       3
+             :relative-to-limit? true
+             :after-set          1.0
+             :tweens
+             [{:names    [:audio/prev]
+               :from     1.0
+               :to       0.15
+               :duration 100
+               :easing   :out-sine}
+              {:names    [:audio/prev]
+               :from     0.15
+               :to       1.0
+               :duration 100
+               :delay    100
+               :easing   :out-sine}
+              {:names    [:audio/next]
+               :from     1.0
+               :to       0.15
+               :duration 100
+               :delay    100
+               :easing   :out-sine}
+              {:names    [:audio/next]
+               :from     0.15
+               :to       1.0
+               :duration 100
+               :delay    200
+               :easing   :out-sine}]}
+            :problem
+            {:repeat-times       3
+             :relative-to-limit? true
+             :after-set          1.0
+             :tweens
+             [{:groups   [:all]
+               :from     1.0
+               :to       0.05
+               :duration 80
+               :easing   :out-sine}
+              {:groups   [:all]
+               :from     0.05
+               :to       1.0
+               :duration 100
+               :delay    80
+               :easing   :out-sine}]}}
+           {:known       (summary 'known-card-pattern)
+            :preparation (summary 'preparation-pattern)
+            :here-we-go  (summary 'here-we-go-pattern)
+            :unknown     (summary 'unknown-card-pattern)
+            :problem     (summary 'playback-problem-pattern)}))))

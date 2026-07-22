@@ -360,7 +360,7 @@
 (deftest plays-canonical-media-path-and-redirects-home
   (fs/with-temp-dir [temp-dir {:prefix "fairybox-audio-action-"}]
     (let [tree     (media/populate-media-tree! temp-dir)
-          commands (async/chan 1)
+          commands (async/chan 8)
           req      (-> (browse-request tree "audiobooks/Author Two")
                        (assoc-in [:query-params "path"]
                                  "audiobooks/Author Two/Story.mp3")
@@ -370,13 +370,18 @@
           play!    (play-action-fn)]
       (is (some? play!))
       (when play!
-        (let [response       (play! req)
-              [command port] (async/alts!! [commands (async/timeout 1000)])
-              result         {:command   command
-                              :received? (= port commands)
-                              :redirect? (str/includes?
-                                          (h/html->str response)
-                                          "window.location.assign(&apos;/&apos;)")}]
+        (let [response (play! req)
+              events   (loop [events []]
+                         (if-let [event (async/poll! commands)]
+                           (recur (conj events event))
+                           events))
+              command  (some #(when (= "/player/commands" (:path %)) %)
+                             events)
+              result   {:command   command
+                        :received? (some? command)
+                        :redirect? (str/includes?
+                                    (h/html->str response)
+                                    "window.location.assign(&apos;/&apos;")}]
           (async/close! commands)
           (is (= {:command
                   {:path "/player/commands"
@@ -514,20 +519,22 @@
 (deftest device-settings-use-responsive-cards-and-sliders
   (let [db-conn
         (atom {:settings
-               {:audio {:min-volume               1
-                        :max-volume               90
-                        :max-volume-day           80
-                        :max-volume-night         50
-                        :startup-volume-day       60
-                        :startup-volume-night     25
-                        :shutdown-volume-day      70
-                        :shutdown-volume-night    20
-                        :max-led-brightness-day   75
-                        :max-led-brightness-night 20
-                        :day-start                "08:30"
-                        :night-start              "19:45"
-                        :card-removal-behavior    :pause
-                        :card-return-behavior     :restart}}})
+               {:led-language?       true
+                :tts-error-messages? false
+                :audio               {:min-volume               1
+                                      :max-volume               90
+                                      :max-volume-day           80
+                                      :max-volume-night         50
+                                      :startup-volume-day       60
+                                      :startup-volume-night     25
+                                      :shutdown-volume-day      70
+                                      :shutdown-volume-night    20
+                                      :max-led-brightness-day   75
+                                      :max-led-brightness-night 20
+                                      :day-start                "08:30"
+                                      :night-start              "19:45"
+                                      :card-removal-behavior    :pause
+                                      :card-return-behavior     :restart}}})
         req         (device-request db-conn)
         action-path (ns-resolve 'fairy.box.web.views.settings
                                 'save-device-settings)
@@ -556,11 +563,15 @@
                              "max_led_brightness_night"]
             time-bindings   ["day_start" "night_start"]
             card-bindings   ["card_removal_behavior"
-                             "card_return_behavior"]
+                             "card_return_behavior"
+                             "card_feedback_led_language"
+                             "card_feedback_tts_errors"]
             sleep-bindings  ["sleep_shutdown"
                              "sleep_shutdown_delay_minutes"]
             labels          ["Device Settings" "Overall volume"
                              "Minimum volume" "Safety maximum"
+                             "Card feedback" "Use card feedback lights"
+                             "Speak card playback problems"
                              "Day &amp; night profiles" "Day" "Night"
                              "Starts at" "Maximum volume"
                              "Startup sound volume" "Shutdown sound volume"
@@ -573,6 +584,7 @@
                              "Restart the playlist"]
             card-ids        ["overall-volume-settings"
                              "card-behavior-settings"
+                             "card-feedback-settings"
                              "day-night-settings"
                              "day-profile" "night-profile"
                              "sleep-timer-settings"
@@ -589,10 +601,11 @@
                 :sleep-chevron-icons    true
                 :auto-shutdown-controls true
                 :card-controls
-                {:labels           true
-                 :radio-count      4
-                 :bindings         true
-                 :checked-defaults true}
+                {:labels            true
+                 :radio-count       4
+                 :bindings          true
+                 :checked-defaults  true
+                 :feedback-defaults true}
                 :sliders
                 {:count          10
                  :number-inputs  1
@@ -661,7 +674,20 @@
                            (some #(and (str/includes? % (str "value=\"" value "\""))
                                        (str/includes? % "checked"))
                                  radio-inputs))
-                         ["pause" "restart"])}
+                         ["pause" "restart"])
+                 :feedback-defaults
+                 (let [led-input (some #(when (str/includes?
+                                               %
+                                               "name=\"card-feedback-led-language\"")
+                                          %)
+                                       inputs)
+                       tts-input (some #(when (str/includes?
+                                               %
+                                               "name=\"card-feedback-tts-errors\"")
+                                          %)
+                                       inputs)]
+                   (and (str/includes? led-input "checked")
+                        (not (str/includes? tts-input "checked"))))}
                 :sliders
                 {:count         (count range-inputs)
                  :number-inputs (count number-inputs)
@@ -710,47 +736,60 @@
 
 (deftest saves-one-complete-device-update
   (let [db-conn    (atom {:settings
-                          {:audio {:min-volume               1
-                                   :max-volume               95
-                                   :max-volume-day           80
-                                   :max-volume-night         50
-                                   :startup-volume-day       80
-                                   :startup-volume-night     50
-                                   :shutdown-volume-day      80
-                                   :shutdown-volume-night    50
-                                   :max-led-brightness-day   100
-                                   :max-led-brightness-night 100
-                                   :day-start                "08:00"
-                                   :night-start              "19:00"
-                                   :card-removal-behavior    :pause
-                                   :card-return-behavior     :restart
-                                   :unknown                  :preserved}}
+                          {:led-language?       true
+                           :tts-error-messages? true
+                           :audio               {:min-volume               1
+                                                 :max-volume               95
+                                                 :max-volume-day           80
+                                                 :max-volume-night         50
+                                                 :startup-volume-day       80
+                                                 :startup-volume-night     50
+                                                 :shutdown-volume-day      80
+                                                 :shutdown-volume-night    50
+                                                 :max-led-brightness-day   100
+                                                 :max-led-brightness-night 100
+                                                 :day-start                "08:00"
+                                                 :night-start              "19:00"
+                                                 :card-removal-behavior    :pause
+                                                 :card-return-behavior     :restart
+                                                 :unknown                  :preserved}}
                           :unrelated :preserved})
         writes_    (atom 0)
         _          (add-watch db-conn ::write-count
                               (fn [_ _ _ _]
                                 (swap! writes_ inc)))
-        req        (device-request db-conn)
+        emitter    (async/chan 8)
+        req        (assoc-in
+                    (device-request db-conn)
+                    [:fairy.box/component
+                     :fairy.box.switchboard/switchboard]
+                    {:emitter emitter})
         save!      (save-device-action-fn)
-        valid-body {:min_volume               2
-                    :max_volume               91
-                    :max_volume_day           81
-                    :max_volume_night         51
-                    :startup_volume_day       61
-                    :startup_volume_night     26
-                    :shutdown_volume_day      71
-                    :shutdown_volume_night    21
-                    :max_led_brightness_day   75
-                    :max_led_brightness_night 20
-                    :day_start                "08:30"
-                    :night_start              "19:45"
-                    :card_removal_behavior    "keep-playing"
-                    :card_return_behavior     "resume"}]
+        valid-body {:min_volume                 2
+                    :max_volume                 91
+                    :max_volume_day             81
+                    :max_volume_night           51
+                    :startup_volume_day         61
+                    :startup_volume_night       26
+                    :shutdown_volume_day        71
+                    :shutdown_volume_night      21
+                    :max_led_brightness_day     75
+                    :max_led_brightness_night   20
+                    :day_start                  "08:30"
+                    :night_start                "19:45"
+                    :card_removal_behavior      "keep-playing"
+                    :card_return_behavior       "resume"
+                    :card_feedback_led_language false
+                    :card_feedback_tts_errors   false}]
     (is (some? save!))
     (when save!
       (save! (assoc req :body valid-body))
       (let [after-valid        @db-conn
-            writes-after-valid @writes_]
+            writes-after-valid @writes_
+            feedback-events    (loop [events []]
+                                 (if-let [event (async/poll! emitter)]
+                                   (recur (conj events event))
+                                   events))]
         (doseq [invalid-body [(assoc valid-body :day_start "")
                               (assoc valid-body :night_start "19:60")
                               (assoc valid-body
@@ -758,31 +797,46 @@
                                      101)
                               (assoc valid-body
                                      :startup_volume_night
-                                     101)]]
+                                     101)
+                              (assoc valid-body
+                                     :card_feedback_led_language
+                                     "false")]]
           (save! (assoc req :body invalid-body)))
         (remove-watch db-conn ::write-count)
+        (async/close! emitter)
         (is (= {:database
                 {:settings
-                 {:audio {:min-volume               2
-                          :max-volume               91
-                          :max-volume-day           81
-                          :max-volume-night         51
-                          :startup-volume-day       61
-                          :startup-volume-night     26
-                          :shutdown-volume-day      71
-                          :shutdown-volume-night    21
-                          :max-led-brightness-day   75
-                          :max-led-brightness-night 20
-                          :day-start                "08:30"
-                          :night-start              "19:45"
-                          :card-removal-behavior    :keep-playing
-                          :card-return-behavior     :resume
-                          :unknown                  :preserved}}
+                 {:led-language?       false
+                  :tts-error-messages? false
+                  :audio               {:min-volume               2
+                                        :max-volume               91
+                                        :max-volume-day           81
+                                        :max-volume-night         51
+                                        :startup-volume-day       61
+                                        :startup-volume-night     26
+                                        :shutdown-volume-day      71
+                                        :shutdown-volume-night    21
+                                        :max-led-brightness-day   75
+                                        :max-led-brightness-night 20
+                                        :day-start                "08:30"
+                                        :night-start              "19:45"
+                                        :card-removal-behavior    :keep-playing
+                                        :card-return-behavior     :resume
+                                        :unknown                  :preserved}}
                  :unrelated :preserved}
+                :feedback-events
+                [{:path  "/hardware/output/leds"
+                  :value {:action       :led/animation-cancel
+                          :animation-id :card-playback-feedback}}
+                 {:path  "/hardware/output/leds"
+                  :value {:action :led/set
+                          :groups [:all]
+                          :value  1.0}}]
                 :writes-after-valid  1
                 :invalid-write-count 0
                 :invalid-changed?    false}
                {:database            after-valid
+                :feedback-events     feedback-events
                 :writes-after-valid  writes-after-valid
                 :invalid-write-count (- @writes_ writes-after-valid)
                 :invalid-changed?    (not= after-valid @db-conn)}))))))
@@ -806,6 +860,8 @@
                  :night_start                  "19:45"
                  :card_removal_behavior        "pause"
                  :card_return_behavior         "restart"
+                 :card_feedback_led_language   true
+                 :card_feedback_tts_errors     true
                  :sleep_shutdown               false
                  :sleep_shutdown_delay_minutes 0}]
     (save! (assoc request :body body))
