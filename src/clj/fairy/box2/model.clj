@@ -227,16 +227,16 @@
                                                     [:request-id ::request-id]])}
 
              :player.ev/state-changed  {:description "Vinyl observed a state change for a concrete playback context."
-                                       :payload     (payload
-                                                     [:map
-                                                      [:playback-context {:optional true} ::playback-context]
-                                                      [:state ::player-state]])}
+                                        :payload     (payload
+                                                      [:map
+                                                       [:playback-context {:optional true} ::playback-context]
+                                                       [:state ::player-state]])}
              :player.ev/stop-requested {:description "User or system behavior requested terminal main-player stop."}
              :player.ev/time-changed   {:description "Vinyl observed playback time for a concrete playback context."
-                                       :payload     (payload
-                                                     [:map
-                                                      [:playback-context {:optional true} ::playback-context]
-                                                      [:time-ms [:int {:min 0}]]])}
+                                        :payload     (payload
+                                                      [:map
+                                                       [:playback-context {:optional true} ::playback-context]
+                                                       [:time-ms [:int {:min 0}]]])}
 
              :rfid.ev/presence-observed {:description "The RFID adapter reported a changed card-presence level."
                                          :payload     (payload
@@ -356,16 +356,16 @@
 
               :player.fx/adjust-volume {:description "Adjust main-player volume within the current operational limit."
                                         :payload     (payload [:map [:delta :int]])}
-              :player.fx/next       {:description "Advance the long-lived player to its next queue item."}
-              :player.fx/pause      {:description "Pause the long-lived player without discarding its queue."}
-              :player.fx/play-queue {:description "Replace the queue and start it with immutable playback context."
-                                     :payload     (payload
-                                                   [:map
-                                                    [:paths [:vector [:string {:min 1}]]]
-                                                    [:playback-context ::playback-context]])}
-              :player.fx/previous   {:description "Move the long-lived player to its previous queue item."}
-              :player.fx/resume     {:description "Resume the retained long-lived player queue."}
-              :player.fx/stop       {:description "Stop main playback and invalidate pending preparation authority."}
+              :player.fx/next          {:description "Advance the long-lived player to its next queue item."}
+              :player.fx/pause         {:description "Pause the long-lived player without discarding its queue."}
+              :player.fx/play-queue    {:description "Replace the queue and start it with immutable playback context."
+                                        :payload     (payload
+                                                      [:map
+                                                       [:paths [:vector [:string {:min 1}]]]
+                                                       [:playback-context ::playback-context]])}
+              :player.fx/previous      {:description "Move the long-lived player to its previous queue item."}
+              :player.fx/resume        {:description "Resume the retained long-lived player queue."}
+              :player.fx/stop          {:description "Stop main playback and invalidate pending preparation authority."}
               :player.fx/toggle        {:description "Toggle the long-lived player between playing and paused."}
 
               :runtime.fx/release-resources {:description "Release Box2 component resources outside the chart processing thread."
@@ -473,10 +473,10 @@
         request {:announce-tracks?
                  (true? (get-in data
                                 [:settings :values :tts :announce-tracks?]))
-                 :item-path      item-path
-                 :presence-epoch presence-epoch
-                 :request-id     request-id
-                 :uid            uid}]
+                 :item-path        item-path
+                 :presence-epoch   presence-epoch
+                 :request-id       request-id
+                 :uid              uid}]
     [(ops/assign [:audio :pending-request] request)]))
 
 (defn- clear-pending-request [_ _]
@@ -657,7 +657,6 @@
 (defn- new-linked-card-request? [env data]
   (and (linked-card? env data)
        (not (resume-returning-card? env data))))
-
 
 (defn- button? [button-id]
   (event-value? :button-id button-id))

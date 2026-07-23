@@ -99,30 +99,30 @@
          database_      (atom database)
          media_         (atom nil)
          player_        (atom nil)
-         run             (runtime/start! #(dispatch-effect! media_ player_ %))
-         submit!         #(runtime/submit! run %)
-         player-adapter  (player/start!
-                          {:submit!        submit!
-                           :submit-latest! #(runtime/submit-latest! run %)})
-         _               (reset! player_ player-adapter)
-         media-adapter   (media/start! {:media-dir media-dir
-                                        :player    (:player player-adapter)
-                                        :submit!   submit!})
-         _               (reset! media_ media-adapter)
-         rfid-reader     (fake/reader)
-         rfid-adapter    (rfid/start! {:reader            rfid-reader
-                                       :resolve-item-path #(db/linked-folder
-                                                            @database_
-                                                            %)
-                                       :submit!           submit!})
-         stack           {:database_      database_
-                          :db-path        db-path
-                          :media-adapter  media-adapter
-                          :media-dir      media-dir
-                          :player-adapter player-adapter
-                          :rfid-adapter   rfid-adapter
-                          :rfid-reader    rfid-reader
-                          :runtime        run}]
+         run            (runtime/start! #(dispatch-effect! media_ player_ %))
+         submit!        #(runtime/submit! run %)
+         player-adapter (player/start!
+                         {:submit!        submit!
+                          :submit-latest! #(runtime/submit-latest! run %)})
+         _              (reset! player_ player-adapter)
+         media-adapter  (media/start! {:media-dir media-dir
+                                       :player    (:player player-adapter)
+                                       :submit!   submit!})
+         _              (reset! media_ media-adapter)
+         rfid-reader    (fake/reader)
+         rfid-adapter   (rfid/start! {:reader            rfid-reader
+                                      :resolve-item-path #(db/linked-folder
+                                                           @database_
+                                                           %)
+                                      :submit!           submit!})
+         stack          {:database_      database_
+                         :db-path        db-path
+                         :media-adapter  media-adapter
+                         :media-dir      media-dir
+                         :player-adapter player-adapter
+                         :rfid-adapter   rfid-adapter
+                         :rfid-reader    rfid-reader
+                         :runtime        run}]
      (reset! stack_ stack)
      (runtime/submit-and-await!
       run

@@ -177,14 +177,13 @@
 
   Vinyl or filesystem calls already in progress may be uninterruptible. In that
   case this function reports timeout; it does not claim the call was terminated."
-  [adapter]
-  (locking (:completion-lock adapter)
-    (reset! (:accepting?_ adapter) false)
-    (async/close! (:cancel adapter))
-    (async/close! (:jobs adapter)))
+  [{:keys [accepting?_ cancel completion-lock done jobs]}]
+  (locking completion-lock
+    (reset! accepting?_ false)
+    (async/close! cancel)
+    (async/close! jobs))
   (let [timeout        (async/timeout stop-timeout-ms)
-        [_result port] (async/alts!! [(:done adapter) timeout]
-                                     :priority true)]
+        [_result port] (async/alts!! [done timeout] :priority true)]
     (when (= port timeout)
       (throw (ex-info "Timed out stopping Box2 media adapter; a library call may still be running"
                       {:timeout-ms stop-timeout-ms}))))

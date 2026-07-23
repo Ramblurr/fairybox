@@ -151,8 +151,8 @@
           true)))
     (catch Exception error
       (record-error! runtime
-                     {:error error
-                      :event event
+                     {:error  error
+                      :event  event
                       :reason :event-processing-failed})
       (trove/log! {:level :error
                    :id    ::event-processing-failed
@@ -218,7 +218,7 @@
                                env
                                chart-key
                                {::sc/session-id session-id})
-        runtime     {:accepting?_     accepting?_
+        runtime     {:accepting?_      accepting?_
                      :dispatch-effect! dispatch-effect!
                      :effects_         effects_
                      :errors_          errors_
