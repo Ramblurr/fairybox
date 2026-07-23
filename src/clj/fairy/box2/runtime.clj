@@ -12,6 +12,9 @@
 
 (def ^:private default-await-timeout-ms 5000)
 (def ^:private default-shutdown-timeout-ms 5000)
+(def ^:private effects-limit 128)
+(def ^:private errors-limit 64)
+(def ^:private history-limit 256)
 (def ^:private required-inbox-size 64)
 (def ^:private outbox-key ::outbox)
 
@@ -27,6 +30,12 @@
   (cancel! [_ _ _ _] true)
   (receive-events! [_ _ _] nil)
   (receive-events! [_ _ _ _] nil))
+
+(defn- append-recent [limit entries entry]
+  (let [entries (conj entries entry)]
+    (if (> (count entries) limit)
+      (subvec entries (- (count entries) limit))
+      entries)))
 
 (defn- snapshot* [memory]
   {:configuration (->> (::sc/configuration memory) sort vec)
@@ -67,8 +76,12 @@
                        :snapshot next-snapshot}]
     (reset! memory_ memory)
     (reset! snapshot_ next-snapshot)
-    (swap! effects_ into emitted)
-    (swap! history_ conj receipt)
+    (swap! effects_
+           (fn [entries]
+             (reduce #(append-recent effects-limit %1 %2)
+                     entries
+                     emitted)))
+    (swap! history_ #(append-recent history-limit % receipt))
     receipt))
 
 (defn- complete! [completion result]
@@ -124,7 +137,8 @@
           (complete! completion receipt)
           true)))
     (catch Exception error
-      (swap! (:errors_ runtime) conj {:error error :event event})
+      (swap! (:errors_ runtime)
+             #(append-recent errors-limit % {:error error :event event}))
       (complete! completion {:error error})
       true)))
 
