@@ -1,10 +1,9 @@
 (ns fairy.box2.rfid.mfrc522
   "Diozero-backed MFRC522 reader adapter for Box2."
   (:require
-   [taoensso.trove :as trove]
    [clojure.core.async :as async]
-   [clojure.tools.logging :as log]
-   [fairy.box2.rfid :as rfid])
+   [fairy.box2.rfid :as rfid]
+   [taoensso.trove :as trove])
   (:import
    [com.diozero.devices MFRC522]
    [com.diozero.util Diozero Hex]))
@@ -63,8 +62,13 @@
                 (report! {:error test-result :status :faulted})
                 (recur absent-poll-delay-ms)))))))
     (catch Throwable error
-      (trove/log! {:level :error :id ::failed :msg "Box2 MFRC522 poller failed"})
-      (throw error))
+      (trove/log! {:level :error
+                   :id    ::failed
+                   :msg   "Box2 MFRC522 poller failed"
+                   :data  {:error error}})
+      (report! {:error  {:category :rfid/reader
+                         :message  (ex-message error)}
+                :status :faulted}))
     (finally
       (async/offer! done :stopped)
       (compare-and-set! control_ control nil)

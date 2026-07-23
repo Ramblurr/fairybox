@@ -8,7 +8,8 @@
    [com.fulcrologic.statecharts.events :as events]
    [com.fulcrologic.statecharts.protocols :as sp]
    [com.fulcrologic.statecharts.simple :as simple]
-   [fairy.box2.model :as model]))
+   [fairy.box2.model :as model]
+   [taoensso.trove :as trove]))
 
 (def ^:private default-await-timeout-ms 5000)
 (def ^:private default-shutdown-timeout-ms 5000)
@@ -47,6 +48,9 @@
 (defn effects [runtime] @(:effects_ runtime))
 (defn errors [runtime] @(:errors_ runtime))
 (defn fatal [runtime] @(:fatal_ runtime))
+
+(defn- record-error! [runtime error]
+  (swap! (:errors_ runtime) #(append-recent errors-limit % error)))
 
 (defn- validate-event! [{:keys [data name] :as event}]
   (when-not (contains? model/events name)
@@ -100,6 +104,15 @@
    :failure   @fatal_
    :reason    :runtime-failed})
 
+(defn- log-fatal! [{:keys [fatal-logged?_ fatal_] :as runtime}]
+  (when-let [failure @fatal_]
+    (when (compare-and-set! fatal-logged?_ false true)
+      (record-error! runtime failure)
+      (trove/log! {:level :error
+                   :id    ::runtime-failed
+                   :msg   "Box2 runtime failed"
+                   :data  failure}))))
+
 (defn- accepted-routing? [result]
   (or (true? result)
       (true? (:accepted? result))))
@@ -137,8 +150,14 @@
           (complete! completion receipt)
           true)))
     (catch Exception error
-      (swap! (:errors_ runtime)
-             #(append-recent errors-limit % {:error error :event event}))
+      (record-error! runtime
+                     {:error error
+                      :event event
+                      :reason :event-processing-failed})
+      (trove/log! {:level :error
+                   :id    ::event-processing-failed
+                   :msg   "Box2 event processing failed"
+                   :data  {:error error :event event}})
       (complete! completion {:error error})
       true)))
 
@@ -169,7 +188,8 @@
         (reset! accepting?_ false)
         (close-ingress! runtime)
         (when-let [failure @(:fatal_ runtime)]
-          (reject-buffered! [required-in progress-in] failure))))
+          (reject-buffered! [required-in progress-in] failure))
+        (log-fatal! runtime)))
     :stopped))
 
 (defn- validate-options!
@@ -220,6 +240,7 @@
                       :errors_             errors_
                       :env                 env
                       :fatal_              fatal_
+                      :fatal-logged?_       (atom false)
                       :history_            history_
                       :memory_             (atom memory)
                       :progress-in         progress-in
