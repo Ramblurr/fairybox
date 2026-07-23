@@ -2,7 +2,7 @@
   "Shared RFID reader port and chart-ingress adapter.
 
   Reader implementations report raw presence levels through [[start-reader!]].
-  The ingress owns observation ordering and presence epochs, enriches present
+  The ingress suppresses unchanged levels, owns presence epochs, enriches present
   readings with the safe linked-media path, and submits immutable events through
   the chart runtime's non-blocking submission function.")
 
@@ -16,11 +16,43 @@
   (stop-reader! [reader]
     "Stops `reader` and releases its resources."))
 
+(defn- changed-observation [state status uid]
+  (let [present? (= :present status)
+        level    [status (when present? uid)]]
+    (when-not (= level [(:status state) (:uid state)])
+      {:presence-epoch (cond-> (:presence-epoch state)
+                         (and present?
+                              (or (not= :present (:status state))
+                                  (not= uid (:uid state))))
+                         inc)
+       :status         status
+       :uid            (when present? uid)})))
+
+(defn- observation-event [resolve-item-path {:keys [presence-epoch status uid]}]
+  (let [present?  (= :present status)
+        item-path (when present? (resolve-item-path uid))]
+    {:name :rfid.ev/presence-observed
+     :data (cond-> {:presence-epoch presence-epoch
+                    :status         status}
+             present?
+             (assoc :request-id (random-uuid)
+                    :uid        uid)
+
+             item-path
+             (assoc :item-path item-path))}))
+
+(defn- submit-observation! [state_ submit! resolve-item-path observation]
+  (let [ticket (submit! (observation-event resolve-item-path observation))]
+    (when (:accepted? ticket)
+      (reset! state_ observation))
+    ticket))
+
 (defn- report! [state_ submit! resolve-item-path {:keys [error status uid]}]
   (let [state @state_]
     (case status
       :faulted
-      (when-not (= :faulted (:status state))
+      (if (= :faulted (:status state))
+        {:accepted? false :reason :unchanged}
         (let [ticket (submit! {:name :rfid.ev/faulted
                                :data {:error error}})]
           (when (:accepted? ticket)
@@ -28,33 +60,16 @@
           ticket))
 
       (:absent :present)
-      (let [recovery (when (= :faulted (:status state))
-                       (submit! {:name :rfid.ev/recovered}))]
-        (if (and recovery (not (:accepted? recovery)))
-          recovery
-          (let [present?      (= :present status)
-                new-presence? (and present?
-                                   (or (not= :present (:status state))
-                                       (not= uid (:uid state))))
-                observation   {:observation-seq (inc (:observation-seq state))
-                               :presence-epoch  (cond-> (:presence-epoch state)
-                                                  new-presence? inc)
-                               :status          status
-                               :uid             (when present? uid)}
-                item-path     (when present?
-                                (resolve-item-path uid))
-                event         {:name :rfid.ev/presence-observed
-                               :data (cond-> {:observation-seq (:observation-seq observation)
-                                              :presence-epoch  (:presence-epoch observation)
-                                              :status          status}
-                                       present?
-                                       (assoc :request-id (random-uuid)
-                                              :uid        uid)
-
-                                       item-path
-                                       (assoc :item-path item-path))}]
-            (reset! state_ observation)
-            (submit! event)))))))
+      (if-let [observation (changed-observation state status uid)]
+        (let [recovery (when (= :faulted (:status state))
+                         (submit! {:name :rfid.ev/recovered}))]
+          (if (and recovery (not (:accepted? recovery)))
+            recovery
+            (submit-observation! state_
+                                 submit!
+                                 resolve-item-path
+                                 observation)))
+        {:accepted? false :reason :unchanged}))))
 
 (defn start!
   "Starts an RFID `reader` connected to chart ingress.
@@ -70,10 +85,9 @@
   Returns an adapter handle for [[snapshot]] and [[stop!]]."
   [{:keys [reader resolve-item-path submit!]
     :or   {resolve-item-path (constantly nil)}}]
-  (let [state_  (atom {:observation-seq 0
-                       :presence-epoch  0
-                       :status          :absent
-                       :uid             nil})
+  (let [state_  (atom {:presence-epoch 0
+                       :status         :absent
+                       :uid            nil})
         report! #(report! state_ submit! resolve-item-path %)]
     (start-reader! reader report!)
     {:reader reader

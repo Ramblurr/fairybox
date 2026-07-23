@@ -80,9 +80,8 @@
                  :identification nil}
    :power       {:auto-shutdown-token nil
                  :sleep-token         nil}
-   :rfid        {:observation-seq 0
-                 :presence-epoch  0
-                 :present-uid     nil}
+   :rfid        {:presence-epoch 0
+                 :present-uid    nil}
    :settings    {:revision 0
                  :values   {}}
    :system      {:operation nil}})
@@ -236,6 +235,7 @@
                                                     [:request-id ::request-id]])}
 
              :player.ev/queue-install-failed {:description "Vinyl failed to install a correlated prepared queue."
+             :rfid.ev/presence-observed {:description "The RFID adapter reported a changed card-presence level."
                                               :payload     (payload
                                                             [:map
                                                              [:error ::error]
@@ -256,18 +256,15 @@
                                                              [:playback-context {:optional true} ::playback-context]
                                                              [:time-ms [:int {:min 0}]]])}
 
-             :rfid.ev/presence-observed {:description "The RFID adapter reported its latest ordered card-presence observation."
                                          :payload     (payload
                                                        [:multi {:dispatch :status}
                                                         [:absent
                                                          [:map
-                                                          [:observation-seq [:int {:min 1}]]
                                                           [:presence-epoch [:int {:min 0}]]
                                                           [:status [:enum :absent]]]]
                                                         [:present
                                                          [:map
                                                           [:item-path {:optional true} [:string {:min 1}]]
-                                                          [:observation-seq [:int {:min 1}]]
                                                           [:presence-epoch [:int {:min 1}]]
                                                           [:request-id ::request-id]
                                                           [:status [:enum :present]]
@@ -580,14 +577,9 @@
     [(ops/assign [:audio :active-request] request)
      (ops/assign [:audio :pending-request] nil)]))
 
-(defn- newer-rfid-observation? [_ data]
-  (< (get-in data [:rfid :observation-seq] 0)
-     (:observation-seq (event-data data))))
-
 (defn- observed-status? [status]
-  (fn [env data]
-    (and (newer-rfid-observation? env data)
-         (= status (:status (event-data data))))))
+  (fn [_ data]
+    (= status (:status (event-data data)))))
 
 (defn- present-observation? [env data]
   ((observed-status? :present) env data))
@@ -596,18 +588,15 @@
   ((observed-status? :absent) env data))
 
 (defn- new-presence? [env data]
-  (let [event (event-data data)]
-    (and (present-observation? env data)
-         (or (not= (get-in data [:rfid :present-uid]) (:uid event))
-             (< (get-in data [:rfid :presence-epoch] 0)
-                (:presence-epoch event))))))
+  (and (present-observation? env data)
+       (< (get-in data [:rfid :presence-epoch] 0)
+          (:presence-epoch (event-data data)))))
 
 (defn- store-rfid-observation [_ data]
-  (let [{:keys [observation-seq presence-epoch status uid]} (event-data data)]
+  (let [{:keys [presence-epoch status uid]} (event-data data)]
     [(ops/assign [:rfid]
-                 {:observation-seq observation-seq
-                  :presence-epoch  presence-epoch
-                  :present-uid     (when (= :present status) uid)})]))
+                 {:presence-epoch presence-epoch
+                  :present-uid    (when (= :present status) uid)})]))
 
 (defn- clear-present-card [_ _]
   [(ops/assign [:rfid :present-uid] nil)])
@@ -801,23 +790,23 @@
                      (script {:expr clear-present-card}))
          (state {:id :rfid.st/absent}
                 (transition {:cond              present-observation?
-                             :diagram/condition "newer present observation"
+                             :diagram/condition "present observation"
                              :event             :rfid.ev/presence-observed
                              :target            :rfid.st/present}
                             (script {:expr store-rfid-observation}))
                 (transition {:cond              absent-observation?
-                             :diagram/condition "newer absent observation"
+                             :diagram/condition "absent observation"
                              :event             :rfid.ev/presence-observed}
                             (script {:expr store-rfid-observation})))
          (state {:id :rfid.st/present}
                 (transition {:cond              present-observation?
-                             :diagram/condition "newer present observation"
+                             :diagram/condition "present observation"
                              :event             :rfid.ev/presence-observed
                              :target            :rfid.st/present
                              :type              :internal}
                             (script {:expr store-rfid-observation}))
                 (transition {:cond              absent-observation?
-                             :diagram/condition "newer absent observation"
+                             :diagram/condition "absent observation"
                              :event             :rfid.ev/presence-observed
                              :target            :rfid.st/absent}
                             (script {:expr store-rfid-observation})))
@@ -1337,11 +1326,10 @@
   (valid-payload?
    :events
    :rfid.ev/presence-observed
-   {:item-path       "/media/synthetic-card"
-    :observation-seq 1
-    :presence-epoch  1
-    :request-id      (random-uuid)
-    :status          :present
-    :uid             "SYNTHETIC-CARD"})
+   {:item-path      "/media/synthetic-card"
+    :presence-epoch 1
+    :request-id     (random-uuid)
+    :status         :present
+    :uid            "SYNTHETIC-CARD"})
 
   :rcf)
