@@ -1,10 +1,14 @@
 (ns fairy.box2.dev
   "REPL control surface for the real local Box2 playable-card stack."
   (:require
+   [donut.system :as ds]
+   [donut.system.repl :as dsr]
+   [donut.system.repl.state :as dsrs]
    [fairy.box2.db :as db]
    [fairy.box2.media :as media]
    [fairy.box2.player :as player]
-   [fairy.box2.runtime :as runtime]))
+   [fairy.box2.runtime :as runtime]
+   [fairy.box2.system :as system]))
 
 (defonce ^:private stack_ (atom nil))
 
@@ -136,8 +140,20 @@
     (runtime/dispatch! (:runtime (stack))
                        {:name :rfid.ev/card-removed
                         :data {:uid uid}})))
+(defmethod ds/named-system :donut.system/repl
+  [_]
+  (ds/system system/base-system
+             {[:config] (system/read-config :dev-no-rpi)
+              [:fairy.box/components :fairy.box.hardware/rfid] (fake/reader)}))
 
 (comment
+  ;; System Control
+  (dsr/start)
+  (dsr/stop)
+  (dsr/restart)
+
+  ;; Access the system's state
+  dsrs/system
   (start!)
   (place-card! "dev-card-001")
   (status)
