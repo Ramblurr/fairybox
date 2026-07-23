@@ -34,9 +34,8 @@
                        :system/restart-fairybox]
    ::playback-context [:map
                        [:presence-epoch [:int {:min 1}]]
-                       [:queue-generation [:int {:min 0}]]
-                       [:request-id {:optional true} :uuid]
-                       [:uid {:optional true} :string]]
+                       [:request-id :uuid]
+                       [:uid [:string {:min 1}]]]
    ::player-state     [:enum
                        :error
                        :finished
@@ -66,16 +65,12 @@
   The complete `db.edn` value and credentials never enter this data model. The
   database adapter projects only operational settings into chart data. Present
   observations attach only the safe linked-media projection needed by the chart."
-  {:audio       {:active-request           nil
-                 :next-generation          0
-                 :next-queue-generation    0
-                 :one-shot                 nil
-                 :pending-playback-context nil
-                 :pending-request          nil
-                 :playback-authorized?     false
-                 :playback-context         nil
-                 :playback-state           :stopped
-                 :playback-time-ms         0}
+  {:audio       {:active-request   nil
+                 :one-shot         nil
+                 :pending-request  nil
+                 :playback-context nil
+                 :playback-state   :stopped
+                 :playback-time-ms 0}
    :interaction {:feedback       nil
                  :identification nil}
    :power       {:auto-shutdown-token nil
@@ -101,11 +96,10 @@
    :card-request.st/active               {:description "The current card owns the installed queue and playback has started."}
    :card-request.st/failed               {:description "The current card request failed and its child-facing problem was reported."}
    :card-request.st/idle                 {:description "No card request is being resolved, prepared, or activated."}
-   :card-request.st/installing           {:description "Prepared media is being installed into the long-lived player queue."}
    :card-request.st/preparing            {:description "Media expansion and optional track-announcement generation are running."}
    :card-request.st/suspended            {:description "Card-owned playback was paused after removal and may resume on return."}
    :card-request.st/unlinked             {:description "The presented RFID UID has no linked media path in `db.edn`."}
-   :card-request.st/waiting-for-playback {:description "The queue is installed and the request awaits a correlated opening event."}
+   :card-request.st/waiting-for-playback {:description "The prepared queue was dispatched and awaits a correlated opening event."}
 
    :cooling.st/releasing            {:description "The shutdown sound has ended and application resources are being released."}
    :cooling.st/waiting-for-one-shot {:description "Main playback is stopped while the shutdown one-shot finishes."}
@@ -187,16 +181,14 @@
                                            :payload     (payload
                                                          [:map
                                                           [:error ::error]
-                                                          [:generation [:int {:min 1}]]
-                                                          [:request-id ::request-id]
-                                                          [:settings-revision [:int {:min 0}]]])}
+                                                          [:presence-epoch [:int {:min 1}]]
+                                                          [:request-id ::request-id]])}
              :media.ev/prepared           {:description "A correlated media-preparation job produced playable paths."
                                            :payload     (payload
                                                          [:map
-                                                          [:generation [:int {:min 1}]]
                                                           [:paths [:vector [:string {:min 1}]]]
-                                                          [:request-id ::request-id]
-                                                          [:settings-revision [:int {:min 0}]]])}
+                                                          [:presence-epoch [:int {:min 1}]]
+                                                          [:request-id ::request-id]])}
 
              :metadata.ev/read-failed   {:description "Metadata reading failed for a card-identification request."
                                          :payload     (payload
@@ -234,28 +226,19 @@
                                                     [:purpose :keyword]
                                                     [:request-id ::request-id]])}
 
-             :player.ev/queue-install-failed {:description "Vinyl failed to install a correlated prepared queue."
-             :rfid.ev/presence-observed {:description "The RFID adapter reported a changed card-presence level."
-                                              :payload     (payload
-                                                            [:map
-                                                             [:error ::error]
-                                                             [:playback-context ::playback-context]])}
-             :player.ev/queue-installed      {:description "Vinyl acknowledged installation of a correlated queue."
-                                              :payload     (payload
-                                                            [:map
-                                                             [:playback-context ::playback-context]])}
-             :player.ev/state-changed        {:description "Vinyl observed a state change for a concrete playback context."
-                                              :payload     (payload
-                                                            [:map
-                                                             [:playback-context {:optional true} ::playback-context]
-                                                             [:state ::player-state]])}
-             :player.ev/stop-requested       {:description "User or system behavior requested terminal main-player stop."}
-             :player.ev/time-changed         {:description "Vinyl observed playback time for a concrete playback context."
-                                              :payload     (payload
-                                                            [:map
-                                                             [:playback-context {:optional true} ::playback-context]
-                                                             [:time-ms [:int {:min 0}]]])}
+             :player.ev/state-changed  {:description "Vinyl observed a state change for a concrete playback context."
+                                       :payload     (payload
+                                                     [:map
+                                                      [:playback-context {:optional true} ::playback-context]
+                                                      [:state ::player-state]])}
+             :player.ev/stop-requested {:description "User or system behavior requested terminal main-player stop."}
+             :player.ev/time-changed   {:description "Vinyl observed playback time for a concrete playback context."
+                                       :payload     (payload
+                                                     [:map
+                                                      [:playback-context {:optional true} ::playback-context]
+                                                      [:time-ms [:int {:min 0}]]])}
 
+             :rfid.ev/presence-observed {:description "The RFID adapter reported a changed card-presence level."
                                          :payload     (payload
                                                        [:multi {:dispatch :status}
                                                         [:absent
@@ -343,17 +326,15 @@
               :media.fx/cancel-preparation {:description "Request cancellation of the state-owned preparation job."
                                             :payload     (payload
                                                           [:map
-                                                           [:generation [:int {:min 1}]]
+                                                           [:presence-epoch [:int {:min 1}]]
                                                            [:request-id ::request-id]])}
               :media.fx/prepare            {:description "Prepare playable paths without blocking the serialized chart runtime."
                                             :payload     (payload
                                                           [:map
                                                            [:announce-tracks? :boolean]
-                                                           [:generation [:int {:min 1}]]
                                                            [:item-path [:string {:min 1}]]
                                                            [:presence-epoch [:int {:min 1}]]
                                                            [:request-id ::request-id]
-                                                           [:settings-revision [:int {:min 0}]]
                                                            [:uid :string]])}
 
               :metadata.fx/read {:description "Read media metadata asynchronously for card-identification speech."
@@ -375,20 +356,16 @@
 
               :player.fx/adjust-volume {:description "Adjust main-player volume within the current operational limit."
                                         :payload     (payload [:map [:delta :int]])}
-              :player.fx/install-queue {:description "Atomically install prepared paths with immutable playback context."
-                                        :payload     (payload
-                                                      [:map
-                                                       [:paths [:vector [:string {:min 1}]]]
-                                                       [:playback-context ::playback-context]])}
-              :player.fx/next          {:description "Advance the long-lived player to its next queue item."}
-              :player.fx/pause         {:description "Pause the long-lived player without discarding its queue."}
-              :player.fx/previous      {:description "Move the long-lived player to its previous queue item."}
-              :player.fx/resume        {:description "Resume the retained long-lived player queue."}
-              :player.fx/start         {:description "Start the newly installed long-lived player queue."
-                                        :payload     (payload
-                                                      [:map
-                                                       [:playback-context ::playback-context]])}
-              :player.fx/stop          {:description "Stop main playback and invalidate pending preparation authority."}
+              :player.fx/next       {:description "Advance the long-lived player to its next queue item."}
+              :player.fx/pause      {:description "Pause the long-lived player without discarding its queue."}
+              :player.fx/play-queue {:description "Replace the queue and start it with immutable playback context."
+                                     :payload     (payload
+                                                   [:map
+                                                    [:paths [:vector [:string {:min 1}]]]
+                                                    [:playback-context ::playback-context]])}
+              :player.fx/previous   {:description "Move the long-lived player to its previous queue item."}
+              :player.fx/resume     {:description "Resume the retained long-lived player queue."}
+              :player.fx/stop       {:description "Stop main playback and invalidate pending preparation authority."}
               :player.fx/toggle        {:description "Toggle the long-lived player between playing and paused."}
 
               :runtime.fx/release-resources {:description "Release Box2 component resources outside the chart processing thread."
@@ -492,89 +469,60 @@
                   :values   settings})]))
 
 (defn- begin-card-request [_ data]
-  (let [{:keys [item-path request-id uid]} (event-data data)
-        generation (inc (get-in data [:audio :next-generation] 0))
+  (let [{:keys [item-path presence-epoch request-id uid]} (event-data data)
         request {:announce-tracks?
                  (true? (get-in data
                                 [:settings :values :tts :announce-tracks?]))
-                 :generation        generation
-                 :item-path         item-path
-                 :presence-epoch    (:presence-epoch (event-data data))
-                 :request-id        request-id
-                 :settings-revision (get-in data [:settings :revision])
-                 :uid               uid}]
-    [(ops/assign [:audio :next-generation] generation)
-     (ops/assign [:audio :pending-playback-context] nil)
-     (ops/assign [:audio :pending-request] request)]))
+                 :item-path      item-path
+                 :presence-epoch presence-epoch
+                 :request-id     request-id
+                 :uid            uid}]
+    [(ops/assign [:audio :pending-request] request)]))
 
 (defn- clear-pending-request [_ _]
-  [(ops/assign [:audio :pending-playback-context] nil)
-   (ops/assign [:audio :pending-request] nil)])
+  [(ops/assign [:audio :pending-request] nil)])
 
 (defn- clear-card-request [_ _]
   [(ops/assign [:audio :active-request] nil)
-   (ops/assign [:audio :pending-playback-context] nil)
-   (ops/assign [:audio :pending-request] nil)
-   (ops/assign [:audio :playback-authorized?] false)])
+   (ops/assign [:audio :pending-request] nil)])
+
+(defn- request-playback-context [request]
+  (select-keys request [:presence-epoch :request-id :uid]))
 
 (defn- preparation-effect-data [_ data]
   (select-keys (get-in data [:audio :pending-request])
                [:announce-tracks?
-                :generation
                 :item-path
                 :presence-epoch
                 :request-id
-                :settings-revision
                 :uid]))
 
 (defn- accept-preparation [_ data]
   (let [{:keys [paths]} (event-data data)
-        pending         (get-in data [:audio :pending-request])
-        queue-generation
-        (inc (get-in data [:audio :next-queue-generation] 0))
-        playback-context
-        {:presence-epoch   (:presence-epoch pending)
-         :queue-generation queue-generation
-         :request-id       (:request-id pending)
-         :uid              (:uid pending)}]
-    [(ops/assign [:audio :next-queue-generation] queue-generation)
-     (ops/assign [:audio :pending-playback-context] playback-context)
+        pending         (get-in data [:audio :pending-request])]
+    [(ops/assign [:audio :playback-context]
+                 (request-playback-context pending))
      (ops/assign [:audio :pending-request] (assoc pending :paths paths))]))
 
 (defn- cancel-preparation-effect-data [_ data]
   (select-keys (get-in data [:audio :pending-request])
-               [:generation :request-id]))
+               [:presence-epoch :request-id]))
 
-(defn- install-queue-effect-data [_ data]
-  {:paths            (get-in data [:audio :pending-request :paths])
-   :playback-context (get-in data [:audio :pending-playback-context])})
-
-(defn- accept-installation [_ data]
-  [(ops/assign [:audio :playback-authorized?] true)
-   (ops/assign [:audio :playback-context]
-               (get-in data [:audio :pending-playback-context]))
-   (ops/assign [:audio :pending-playback-context] nil)])
-
-(defn- abort-installation [_ data]
-  [(ops/assign [:audio :active-request] nil)
-   (ops/assign [:audio :playback-authorized?] false)
-   (ops/assign [:audio :playback-context]
-               (get-in data [:audio :pending-playback-context]))
-   (ops/assign [:audio :pending-playback-context] nil)
-   (ops/assign [:audio :pending-request] nil)])
-
-(defn- start-playback-effect-data [_ data]
-  {:playback-context (get-in data [:audio :playback-context])})
+(defn- play-queue-effect-data [_ data]
+  (let [pending (get-in data [:audio :pending-request])]
+    {:paths            (:paths pending)
+     :playback-context (request-playback-context pending)}))
 
 (defn- activate-card-request [_ data]
-  (let [request (select-keys (get-in data [:audio :pending-request])
-                             [:generation
-                              :item-path
+  (let [pending (get-in data [:audio :pending-request])
+        request (select-keys pending
+                             [:item-path
                               :presence-epoch
                               :request-id
-                              :settings-revision
                               :uid])]
     [(ops/assign [:audio :active-request] request)
+     (ops/assign [:audio :playback-context]
+                 (request-playback-context request))
      (ops/assign [:audio :pending-request] nil)]))
 
 (defn- observed-status? [status]
@@ -627,30 +575,33 @@
 (defn- current-preparation? [_ data]
   (let [pending (get-in data [:audio :pending-request])
         event   (event-data data)]
-    (and (= (:generation pending) (:generation event))
-         (= (:request-id pending) (:request-id event))
-         (= (:settings-revision pending) (:settings-revision event)))))
+    (and (= (:presence-epoch pending) (:presence-epoch event))
+         (= (:request-id pending) (:request-id event)))))
 
-(defn- current-installation? [_ data]
-  (= (get-in data [:audio :pending-playback-context])
-     (:playback-context (event-data data))))
+(defn- event-playback-context [data]
+  (:playback-context (event-data data)))
 
-(defn- current-playback-context? [_ data]
-  (= (get-in data [:audio :playback-context])
-     (:playback-context (event-data data))))
+(defn- current-pending-playback? [data]
+  (= (request-playback-context (get-in data [:audio :pending-request]))
+     (event-playback-context data)))
 
-(defn- current-playback? [env data]
-  (and (true? (get-in data [:audio :playback-authorized?]))
-       (current-playback-context? env data)))
+(defn- current-active-playback? [data]
+  (= (request-playback-context (get-in data [:audio :active-request]))
+     (event-playback-context data)))
+
+(defn- current-playback? [_ data]
+  (current-active-playback? data))
 
 (defn- current-player-state? [player-state]
-  (fn [env data]
-    (and (current-playback? env data)
+  (fn [_ data]
+    (and (or (current-pending-playback? data)
+             (current-active-playback? data))
          (= player-state (:state (event-data data))))))
 
 (defn- current-terminal-player-state? [player-state]
-  (fn [env data]
-    (and (current-playback-context? env data)
+  (fn [_ data]
+    (and (= (get-in data [:audio :playback-context])
+            (event-playback-context data))
          (= player-state (:state (event-data data))))))
 
 (defn- current-feedback-timer? [_ data]
@@ -707,9 +658,6 @@
   (and (linked-card? env data)
        (not (resume-returning-card? env data))))
 
-(defn- setting-changed? [path]
-  (fn [_ data]
-    (contains? (:changed-paths (event-data data)) path)))
 
 (defn- button? [button-id]
   (event-value? :button-id button-id))
@@ -881,19 +829,15 @@
                 (transition {:cond              current-preparation?
                              :diagram/condition "current preparation"
                              :event             :media.ev/prepared
-                             :target            :card-request.st/installing}
+                             :target            :card-request.st/waiting-for-playback
+                             ::effects          [:player.fx/play-queue]}
                             (script {:expr accept-preparation})
-                            (effect :player.fx/install-queue
-                                    install-queue-effect-data))
+                            (effect :player.fx/play-queue
+                                    play-queue-effect-data))
                 (transition {:cond              current-preparation?
                              :diagram/condition "current preparation"
                              :event             :media.ev/preparation-failed
                              :target            :card-request.st/failed})
-                (transition {:cond              (setting-changed?
-                                                 [:tts :announce-tracks?])
-                             :diagram/condition "announcement policy changed"
-                             :event             :settings.ev/changed
-                             :target            :card-request.st/preparing})
                 (transition {:cond              current-pending-card-absence?
                              :diagram/condition "current card removed during preparation"
                              :event             :rfid.ev/presence-observed
@@ -901,27 +845,7 @@
                             (effect :media.fx/cancel-preparation
                                     cancel-preparation-effect-data)
                             (script {:expr clear-pending-request})))
-         (state {:id             :card-request.st/installing
-                 ::entry-effects [:player.fx/install-queue]}
-                (transition {:cond              current-installation?
-                             :diagram/condition "current installation"
-                             :event             :player.ev/queue-installed
-                             :target            :card-request.st/waiting-for-playback}
-                            (script {:expr accept-installation})
-                            (effect :player.fx/start
-                                    start-playback-effect-data))
-                (transition {:cond              current-installation?
-                             :diagram/condition "current installation"
-                             :event             :player.ev/queue-install-failed
-                             :target            :card-request.st/failed})
-                (transition {:cond              current-pending-card-absence?
-                             :diagram/condition "current card removed during installation"
-                             :event             :rfid.ev/presence-observed
-                             :target            :card-request.st/idle}
-                            (script {:expr abort-installation})
-                            (effect :player.fx/stop (constantly {}))))
-         (state {:id             :card-request.st/waiting-for-playback
-                 ::entry-effects [:player.fx/start]}
+         (state {:id :card-request.st/waiting-for-playback}
                 (transition {:cond              (current-player-state? :opening)
                              :diagram/condition "current playback"
                              :event             :player.ev/state-changed
