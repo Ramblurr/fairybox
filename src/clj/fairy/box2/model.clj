@@ -52,8 +52,8 @@
   "Initial non-secret orchestration data for the Box2 chart.
 
   The complete `db.edn` value and credentials never enter this data model. The
-  database adapter projects only operational settings and correlated lookup
-  results into events."
+  database adapter projects only operational settings into chart data. Card
+  ingress attaches the safe linked-media result to each placement event."
   {:audio       {:active-request        nil
                  :next-generation       0
                  :next-queue-generation 0
@@ -63,8 +63,6 @@
                  :playback-state        :stopped
                  :playback-time-ms      0
                  :removed-card          nil}
-   :database    {:available? true
-                 :lookup     nil}
    :interaction {:feedback       nil
                  :identification nil}
    :power       {:auto-shutdown-token nil
@@ -91,18 +89,12 @@
    :card-request.st/idle                 {:description "No card request is being resolved, prepared, or activated."}
    :card-request.st/installing           {:description "Prepared media is being installed into the long-lived player queue."}
    :card-request.st/preparing            {:description "Media expansion and optional track-announcement generation are running."}
-   :card-request.st/resolving            {:description "The database is resolving a presented RFID UID to its linked media path."}
    :card-request.st/suspended            {:description "Card-owned playback was paused after removal and may resume on return."}
    :card-request.st/unlinked             {:description "The presented RFID UID has no linked media path in `db.edn`."}
    :card-request.st/waiting-for-playback {:description "The queue is installed and the request awaits a correlated opening event."}
 
    :cooling.st/releasing            {:description "The shutdown sound has ended and application resources are being released."}
    :cooling.st/waiting-for-one-shot {:description "Main playback is stopped while the shutdown one-shot finishes."}
-
-   :database.st/available      {:description "The unchanged `db.edn` database is open and available to adapters."}
-   :database.st/lookup-idle    {:description "No RFID link lookup is in progress."}
-   :database.st/resolving-card {:description "A database adapter is resolving the newest RFID request."}
-   :database.st/unavailable    {:description "The database cannot currently answer lookups or persist settings."}
 
    :feedback.st/idle             {:description "No card-related LED or speech feedback owns the interaction surface."}
    :feedback.st/known-card       {:description "A linked card was recognized and acknowledgement feedback is visible."}
@@ -114,7 +106,6 @@
    :identification.st/failed           {:description "Metadata reading failed for the current card-identification request."}
    :identification.st/idle             {:description "Card-identification mode is waiting for a card."}
    :identification.st/reading-metadata {:description "The audio adapter is reading metadata for the resolved media path."}
-   :identification.st/resolving-card   {:description "Card-identification mode is waiting for the database link lookup."}
    :identification.st/speaking         {:description "One-shot speech is describing the identified card contents."}
 
    :interaction.st/card-identification {:description "Buttons and RFID input are being used to identify card contents, not play them."}
@@ -153,7 +144,6 @@
    :sleep.st/shutdown-wait {:description "The sleep fade finished and an optional shutdown delay is active."}
 
    :subsystem.st/audio       {:description "The application-level audio lifecycle and its owned parallel regions."}
-   :subsystem.st/database    {:description "Availability and request lifecycle for the unchanged `db.edn` store."}
    :subsystem.st/interaction {:description "The mutually exclusive normal and card-identification interaction modes."}
    :subsystem.st/power       {:description "Independent auto-shutdown and manual sleep policies."}
    :subsystem.st/rfid        {:description "The observed card-presence and reader-health lifecycle."}
@@ -172,27 +162,6 @@
                                  :payload     (payload [:map [:button-id ::button-id]])}
              :button.ev/pressed {:description "A supported physical or synthetic button was pressed once."
                                  :payload     (payload [:map [:button-id ::button-id]])}
-
-             :database.ev/available     {:description "The compatible database adapter became available."}
-             :database.ev/card-resolved {:description "The current RFID lookup found a linked media path."
-                                         :payload     (payload
-                                                       [:map
-                                                        [:item-path [:string {:min 1}]]
-                                                        [:request-id ::request-id]
-                                                        [:uid :string]])}
-             :database.ev/card-unlinked {:description "The current RFID lookup found no linked media path."
-                                         :payload     (payload
-                                                       [:map
-                                                        [:request-id ::request-id]
-                                                        [:uid :string]])}
-             :database.ev/lookup-failed {:description "The current RFID lookup could not read the database."
-                                         :payload     (payload
-                                                       [:map
-                                                        [:error ::error]
-                                                        [:request-id ::request-id]
-                                                        [:uid :string]])}
-             :database.ev/unavailable   {:description "The compatible database adapter became unavailable."
-                                         :payload     (payload [:map [:error ::error]])}
 
              :interaction.ev/problem-reported {:description "An eligible card request needs child-facing problem feedback."
                                                :payload     (payload
@@ -272,9 +241,10 @@
                                                              [:playback-context {:optional true} ::playback-context]
                                                              [:time-ms [:int {:min 0}]]])}
 
-             :rfid.ev/card-placed  {:description "The RFID adapter observed a newly presented UID."
+             :rfid.ev/card-placed  {:description "Card ingress observed a newly presented UID and attached its registered media path, when linked."
                                     :payload     (payload
                                                   [:map
+                                                   [:item-path {:optional true} [:string {:min 1}]]
                                                    [:request-id ::request-id]
                                                    [:uid [:string {:min 1}]]])}
              :rfid.ev/card-removed {:description "The RFID adapter observed removal of the current UID."
@@ -332,12 +302,7 @@
              :timer.ev/sleep-shutdown-fired {:description "The correlated post-fade shutdown delay elapsed."
                                              :payload     (payload [:map [:timer-token ::timer-token]])}})
 
-(def effects {:database.fx/resolve-card    {:description "Resolve an RFID UID against the unchanged `db.edn` linked-tags map."
-                                            :payload     (payload
-                                                          [:map
-                                                           [:request-id ::request-id]
-                                                           [:uid :string]])}
-              :database.fx/update-settings {:description "Persist a settings patch while preserving every unrelated database key."
+(def effects {:database.fx/update-settings {:description "Persist a settings patch while preserving every unrelated database key."
                                             :payload     (payload
                                                           [:map
                                                            [:patch :map]
@@ -503,12 +468,22 @@
   (fn [_ data]
     (= value (get (event-data data) key))))
 
+(defn- linked-card? [_ data]
+  (some? (:item-path (event-data data))))
+
+(defn- unlinked-card? [_ data]
+  (nil? (:item-path (event-data data))))
+
+(defn- normal-linked-card? [env data]
+  (and ((In :interaction.st/normal) env data)
+       (linked-card? env data)))
+
+(defn- normal-unlinked-card? [env data]
+  (and ((In :interaction.st/normal) env data)
+       (unlinked-card? env data)))
+
 (defn- one-shot-purpose? [purpose]
   (event-value? :purpose purpose))
-
-(defn- current-database-request? [_ data]
-  (= (get-in data [:database :lookup :request-id])
-     (:request-id (event-data data))))
 
 (defn- current-preparation? [_ data]
   (let [pending (get-in data [:audio :pending-request])
@@ -543,6 +518,10 @@
 (defn- setting? [path value]
   (fn [_ data]
     (= value (get-in data (into [:settings :values] path)))))
+
+(defn- restart-linked-card? [env data]
+  (and ((setting? [:audio :card-return-behavior] :restart) env data)
+       (linked-card? env data)))
 
 (defn- setting-changed? [path]
   (fn [_ data]
@@ -596,37 +575,6 @@
                                     :target   :system.st/stopped
                                     ::effects [:system.fx/execute-operation
                                                :led.fx/turn-off]})))))
-
-(defn- database-subsystem []
-  (state {:id      :subsystem.st/database
-          :initial :database.st/available}
-         (state {:id      :database.st/available
-                 :initial :database.st/lookup-idle}
-                (transition {:event  :database.ev/unavailable
-                             :target :database.st/unavailable})
-                (state {:id :database.st/lookup-idle}
-                       (transition {:event    :rfid.ev/card-placed
-                                    :target   :database.st/resolving-card
-                                    ::effects [:database.fx/resolve-card]}))
-                (state {:id :database.st/resolving-card}
-                       (transition {:cond              current-database-request?
-                                    :diagram/condition "current lookup"
-                                    :event             :database.ev/card-resolved
-                                    :target            :database.st/lookup-idle})
-                       (transition {:cond              current-database-request?
-                                    :diagram/condition "current lookup"
-                                    :event             :database.ev/card-unlinked
-                                    :target            :database.st/lookup-idle})
-                       (transition {:cond              current-database-request?
-                                    :diagram/condition "current lookup"
-                                    :event             :database.ev/lookup-failed
-                                    :target            :database.st/lookup-idle})
-                       (transition {:event    :rfid.ev/card-placed
-                                    :target   :database.st/resolving-card
-                                    ::effects [:database.fx/resolve-card]})))
-         (state {:id :database.st/unavailable}
-                (transition {:event  :database.ev/available
-                             :target :database.st/available}))))
 
 (defn- settings-subsystem []
   (state {:id      :subsystem.st/settings
@@ -708,10 +656,15 @@
 (defn- card-request-region []
   (state {:id      :audio.st/card-request
           :initial :card-request.st/idle}
-         (transition {:cond              (In :interaction.st/normal)
-                      :diagram/condition "normal interaction mode"
+         (transition {:cond              normal-linked-card?
+                      :diagram/condition "linked card in normal interaction mode"
                       :event             :rfid.ev/card-placed
-                      :target            :card-request.st/resolving
+                      :target            :card-request.st/preparing
+                      :type              :internal})
+         (transition {:cond              normal-unlinked-card?
+                      :diagram/condition "unlinked card in normal interaction mode"
+                      :event             :rfid.ev/card-placed
+                      :target            :card-request.st/unlinked
                       :type              :internal})
          (transition {:event    :player.ev/stop-requested
                       :target   :card-request.st/idle
@@ -719,19 +672,6 @@
                       ::effects [:media.fx/cancel-preparation
                                  :player.fx/stop]})
          (state {:id :card-request.st/idle})
-         (state {:id :card-request.st/resolving}
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current lookup"
-                             :event             :database.ev/card-resolved
-                             :target            :card-request.st/preparing})
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current lookup"
-                             :event             :database.ev/card-unlinked
-                             :target            :card-request.st/unlinked})
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current lookup"
-                             :event             :database.ev/lookup-failed
-                             :target            :card-request.st/failed}))
          (state {:id             :card-request.st/preparing
                  ::entry-effects [:media.fx/prepare]
                  ::exit-effects  [:media.fx/cancel-preparation]}
@@ -787,12 +727,10 @@
                              :event             :rfid.ev/card-placed
                              :target            :card-request.st/active
                              ::effects          [:player.fx/resume]})
-                (transition {:cond              (setting?
-                                                 [:audio :card-return-behavior]
-                                                 :restart)
-                             :diagram/condition "restart on return"
+                (transition {:cond              restart-linked-card?
+                             :diagram/condition "restart linked card on return"
                              :event             :rfid.ev/card-placed
-                             :target            :card-request.st/resolving}))
+                             :target            :card-request.st/preparing}))
          (state {:id             :card-request.st/unlinked
                  ::entry-effects [:led.fx/show-card-unknown
                                   :tts.fx/speak]})
@@ -872,14 +810,14 @@
                       :target            :interaction.st/card-identification
                       ::effects          [:player.fx/stop
                                           :led.fx/show-identification]})
-         (transition {:cond              current-database-request?
-                      :diagram/condition "current linked card"
-                      :event             :database.ev/card-resolved
+         (transition {:cond              linked-card?
+                      :diagram/condition "linked card"
+                      :event             :rfid.ev/card-placed
                       :target            :feedback.st/known-card
                       :type              :internal})
-         (transition {:cond              current-database-request?
-                      :diagram/condition "current unlinked card"
-                      :event             :database.ev/card-unlinked
+         (transition {:cond              unlinked-card?
+                      :diagram/condition "unlinked card"
+                      :event             :rfid.ev/card-placed
                       :target            :feedback.st/unknown-card
                       :type              :internal})
          (transition {:event  :interaction.ev/problem-reported
@@ -925,23 +863,16 @@
                       :target            :interaction.st/normal
                       ::effects          [:led.fx/show-ready]})
          (state {:id :identification.st/idle}
-                (transition {:event  :rfid.ev/card-placed
-                             :target :identification.st/resolving-card}))
-         (state {:id :identification.st/resolving-card}
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current linked card"
-                             :event             :database.ev/card-resolved
+                (transition {:cond              linked-card?
+                             :diagram/condition "linked card"
+                             :event             :rfid.ev/card-placed
                              :target            :identification.st/reading-metadata
                              ::effects          [:metadata.fx/read]})
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current unlinked card"
-                             :event             :database.ev/card-unlinked
+                (transition {:cond              unlinked-card?
+                             :diagram/condition "unlinked card"
+                             :event             :rfid.ev/card-placed
                              :target            :identification.st/speaking
-                             ::effects          [:tts.fx/speak]})
-                (transition {:cond              current-database-request?
-                             :diagram/condition "current lookup"
-                             :event             :database.ev/lookup-failed
-                             :target            :identification.st/failed}))
+                             ::effects          [:tts.fx/speak]}))
          (state {:id :identification.st/reading-metadata}
                 (transition {:event    :metadata.ev/read-finished
                              :target   :identification.st/speaking
@@ -1070,7 +1001,6 @@
                                                       :timer.fx/cancel-all
                                                       :led.fx/show-system-problem]})
                               (lifecycle-region)
-                              (database-subsystem)
                               (settings-subsystem)
                               (rfid-subsystem)
                               (audio-subsystem)
@@ -1143,7 +1073,8 @@
   (valid-payload?
    :events
    :rfid.ev/card-placed
-   {:request-id (random-uuid)
+   {:item-path  "/media/synthetic-card"
+    :request-id (random-uuid)
     :uid        "SYNTHETIC-CARD"})
 
   :rcf)
