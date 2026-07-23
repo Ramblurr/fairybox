@@ -11,8 +11,6 @@
    [fairy.box2.model :as model]))
 
 (def ^:private default-await-timeout-ms 5000)
-(def ^:private default-effect-buffer-size 64)
-(def ^:private default-effect-workers 2)
 (def ^:private default-shutdown-timeout-ms 5000)
 (def ^:private required-inbox-size 64)
 (def ^:private outbox-key ::outbox)
@@ -73,20 +71,6 @@
     (swap! history_ conj receipt)
     receipt))
 
-(defn- effect-worker! [{:keys [effect-in errors_ execute-effect!]}]
-  (async/thread
-    (try
-      (loop []
-        (when-let [effect (async/<!! effect-in)]
-          (try
-            (execute-effect! effect)
-            (catch Throwable error
-              (swap! errors_ conj {:effect effect :error error})))
-          (recur)))
-      (finally
-        nil))
-    :stopped))
-
 (defn- complete! [completion result]
   (when completion
     (async/offer! completion result)))
@@ -103,17 +87,46 @@
    :failure   @fatal_
    :reason    :runtime-failed})
 
-(defn- process-envelope!
-  [{:keys [effect-in errors_] :as runtime}
-   {:keys [completion event]}]
+(defn- accepted-routing? [result]
+  (or (true? result)
+      (true? (:accepted? result))))
+
+(defn- route-effects! [{:keys [dispatch-effect!] :as runtime} receipt]
+  (loop [[effect & remaining] (:effects receipt)]
+    (when effect
+      (let [result (try
+                     (dispatch-effect! effect)
+                     (catch Throwable error
+                       (fail-fast! runtime
+                                   {:error  error
+                                    :effect effect
+                                    :reason :effect-routing-threw})))]
+        (if (accepted-routing? result)
+          (recur remaining)
+          (let [failure (or (:failure result)
+                            {:effect effect
+                             :reason :effect-routing-rejected
+                             :result result})]
+            (fail-fast! runtime failure)
+            failure))))))
+
+(defn- process-envelope! [runtime {:keys [completion event]}]
   (try
     (let [receipt (process! runtime event)]
-      (doseq [effect (:effects receipt)]
-        (async/>!! effect-in effect))
-      (complete! completion receipt))
+      (if-let [failure (route-effects! runtime receipt)]
+        (do
+          (complete! completion
+                     {:error   (ex-info "Failed to route a committed Box2 effect"
+                                        failure)
+                      :receipt receipt})
+          false)
+        (do
+          (complete! completion receipt)
+          true)))
     (catch Exception error
-      (swap! errors_ conj {:error error :event event})
-      (complete! completion {:error error}))))
+      (swap! (:errors_ runtime) conj {:error error :event event})
+      (complete! completion {:error error})
+      true)))
 
 (defn- reject-buffered! [channels failure]
   (doseq [channel channels]
@@ -124,16 +137,14 @@
                                     failure)})
         (recur)))))
 
-(defn- owner! [{:keys [accepting?_ effect-in progress-in required-in]
-                :as   runtime}]
+(defn- owner! [{:keys [accepting?_ progress-in required-in] :as runtime}]
   (async/thread
     (try
       (loop [channels [required-in progress-in]]
         (when (and (seq channels) (nil? @(:fatal_ runtime)))
           (let [[envelope channel] (async/alts!! channels :priority true)]
             (if envelope
-              (do
-                (process-envelope! runtime envelope)
+              (when (process-envelope! runtime envelope)
                 (recur channels))
               (recur (into [] (remove #{channel}) channels))))))
       (catch Throwable error
@@ -143,46 +154,33 @@
       (finally
         (reset! accepting?_ false)
         (close-ingress! runtime)
-        (async/close! effect-in)
         (when-let [failure @(:fatal_ runtime)]
           (reject-buffered! [required-in progress-in] failure))))
     :stopped))
 
 (defn- validate-options!
-  [execute-effect! {:keys [await-timeout-ms
-                           effect-buffer-size
-                           effect-workers
-                           shutdown-timeout-ms]}]
-  (when-not (ifn? execute-effect!)
-    (throw (ex-info "Box2 runtime requires an effect executor" {})))
+  [dispatch-effect! {:keys [await-timeout-ms shutdown-timeout-ms]}]
+  (when-not (ifn? dispatch-effect!)
+    (throw (ex-info "Box2 runtime requires an effect dispatcher" {})))
   (doseq [[option value] [[:await-timeout-ms await-timeout-ms]
-                          [:effect-buffer-size effect-buffer-size]
-                          [:effect-workers effect-workers]
                           [:shutdown-timeout-ms shutdown-timeout-ms]]]
     (when-not (pos-int? value)
       (throw (ex-info "Box2 runtime option must be a positive integer"
                       {:option option :value value})))))
 
 (defn start!
-  "Starts a chart owner with separate required and replaceable progress ingress.
+  "Starts one serialized chart owner with bounded required and progress ingress.
 
-  Required events use a fixed-capacity lane and fail the runtime rather than
-  disappearing on overflow. Only player time progress uses latest-value
-  replacement."
-  ([execute-effect!]
-   (start! execute-effect! {}))
-  ([execute-effect! {:keys [await-timeout-ms
-                            effect-buffer-size
-                            effect-workers
-                            shutdown-timeout-ms]
-                     :or   {await-timeout-ms    default-await-timeout-ms
-                            effect-buffer-size  default-effect-buffer-size
-                            effect-workers      default-effect-workers
-                            shutdown-timeout-ms default-shutdown-timeout-ms}}]
-   (validate-options! execute-effect!
+  `dispatch-effect!` must route one committed effect without blocking and return
+  `true` or a map containing `:accepted? true`. Effects from each macrostep are
+  offered in chart order before the next event is processed."
+  ([dispatch-effect!]
+   (start! dispatch-effect! {}))
+  ([dispatch-effect! {:keys [await-timeout-ms shutdown-timeout-ms]
+                      :or   {await-timeout-ms    default-await-timeout-ms
+                             shutdown-timeout-ms default-shutdown-timeout-ms}}]
+   (validate-options! dispatch-effect!
                       {:await-timeout-ms    await-timeout-ms
-                       :effect-buffer-size  effect-buffer-size
-                       :effect-workers      effect-workers
                        :shutdown-timeout-ms shutdown-timeout-ms})
    (let [accepting?_ (atom true)
          effects_    (atom [])
@@ -191,7 +189,6 @@
          history_    (atom [])
          progress-in (async/chan (async/sliding-buffer 1))
          required-in (async/chan required-inbox-size)
-         effect-in   (async/chan effect-buffer-size)
          queue       (->EffectQueue)
          env         (simple/simple-env {::sc/event-queue queue})
          runtime-id  (str (random-uuid))
@@ -204,11 +201,10 @@
                                 {::sc/session-id session-id})
          runtime     {:accepting?_         accepting?_
                       :await-timeout-ms    await-timeout-ms
-                      :effect-in           effect-in
+                      :dispatch-effect!    dispatch-effect!
                       :effects_            effects_
                       :errors_             errors_
                       :env                 env
-                      :execute-effect!     execute-effect!
                       :fatal_              fatal_
                       :history_            history_
                       :memory_             (atom memory)
@@ -216,9 +212,6 @@
                       :required-in         required-in
                       :shutdown-timeout-ms shutdown-timeout-ms
                       :snapshot_           (atom (snapshot* memory))}
-         workers     (mapv (fn [_] (effect-worker! runtime))
-                           (range effect-workers))
-         runtime     (assoc runtime :effect-workers workers)
          owner       (owner! runtime)]
      (assoc runtime :owner owner))))
 
@@ -310,8 +303,7 @@
 (defn stop! [runtime]
   (when (compare-and-set! (:accepting?_ runtime) true false)
     (close-ingress! runtime))
-  (let [timeout-ms (:shutdown-timeout-ms runtime)]
-    (await-stop! (:owner runtime) :owner timeout-ms)
-    (doseq [[index worker] (map-indexed vector (:effect-workers runtime))]
-      (await-stop! worker [:effect-worker index] timeout-ms)))
+  (await-stop! (:owner runtime)
+               :owner
+               (:shutdown-timeout-ms runtime))
   :stopped)
