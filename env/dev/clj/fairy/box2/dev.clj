@@ -10,13 +10,15 @@
    [fairy.box2.rfid :as rfid]
    [fairy.box2.rfid.fake :as fake]
    [fairy.box2.runtime :as runtime]
-   [fairy.box2.system :as system]))
+   [fairy.box2.system :as system]
+   [taoensso.trove :as trove]))
 
 (defonce ^:private stack_ (atom nil))
 
 (defn- stack []
   (or @stack_
-      (throw (ex-info "Box2 development stack is not started" {:operation :start-required}))))
+      (throw (ex-info "Box2 development stack is not started"
+                      {:operation :start-required}))))
 
 (defn snapshot []
   (runtime/snapshot (:runtime (stack))))
@@ -45,62 +47,44 @@
      :request      (or (get-in data [:audio :active-request])
                        (get-in data [:audio :pending-request]))}))
 
-(defn- execute-effect! [stack {:keys [effect/data effect/type]}]
-  (let [run     (:runtime stack)
-        adapter @(:player_ stack)]
-    (case type
-      :media.fx/prepare
-      (try
-        (runtime/submit!
-         run
-         {:name :media.ev/prepared
-          :data (assoc (select-keys data [:generation :request-id :settings-revision])
-                       :paths (media/prepare! (:player adapter)
-                                              (:media-dir stack)
-                                              (:item-path data)))})
-        (catch Throwable error
-          (runtime/submit!
-           run
-           {:name :media.ev/preparation-failed
-            :data (assoc (select-keys data [:generation :request-id :settings-revision])
-                         :error {:category :media/preparation
-                                 :message  (ex-message error)})})))
+(defn- dispatch-effect! [media_ player_ {:effect/keys [type] :as effect}]
+  (case (namespace type)
+    "media.fx"
+    (if-let [adapter @media_]
+      (media/offer! adapter effect)
+      {:accepted? false :reason :media-adapter-not-started})
 
-      :player.fx/install-queue
-      (try
-        (player/install-queue! adapter data)
-        (runtime/submit! run {:name :player.ev/queue-installed
-                              :data {:playback-context (:playback-context data)}})
-        (catch Throwable error
-          (runtime/submit! run {:name :player.ev/queue-install-failed
-                                :data {:playback-context (:playback-context data)
-                                       :error            {:category :player/queue
-                                                          :message  (ex-message error)}}})))
+    "player.fx"
+    (if-let [adapter @player_]
+      (player/dispatch-effect! adapter effect)
+      {:accepted? false :reason :player-adapter-not-started})
 
-      :player.fx/pause
-      (player/pause-playback! adapter)
+    ;; The playable-card development stack intentionally has no LED, timer,
+    ;; database-write, TTS, one-shot, or host-operation adapters.
+    {:accepted? true :reason :not-configured-in-development}))
 
-      :player.fx/resume
-      (player/resume-playback! adapter)
-
-      :player.fx/start
-      (player/start-playback! adapter data)
-
-      :player.fx/stop
-      (player/stop-playback! adapter)
-
-      nil)))
+(defn- stop-component! [failures_ component stop-fn]
+  (try
+    (stop-fn)
+    (catch Throwable error
+      (let [failure {:component component :error error}]
+        (swap! failures_ conj failure)
+        (trove/log! {:level :error
+                     :id    ::component-stop-failed
+                     :msg   "Box2 development component failed to stop"
+                     :data  failure})))))
 
 (defn stop! []
-  (if-let [{:keys [player_ rfid-adapter runtime]} @stack_]
-    (do
+  (if-let [{:keys [media-adapter player-adapter rfid-adapter runtime]} @stack_]
+    (let [failures_ (atom [])]
       (reset! stack_ nil)
-      (try
-        (rfid/stop! rfid-adapter)
-        (runtime/stop! runtime)
-        (finally
-          (when-let [adapter @player_]
-            (player/stop! adapter))))
+      (stop-component! failures_ :rfid #(rfid/stop! rfid-adapter))
+      (stop-component! failures_ :media #(media/stop! media-adapter))
+      (stop-component! failures_ :player #(player/stop! player-adapter))
+      (stop-component! failures_ :runtime #(runtime/stop! runtime))
+      (when (seq @failures_)
+        (throw (ex-info "One or more Box2 development components failed to stop"
+                        {:failures @failures_})))
       :stopped)
     :already-stopped))
 
@@ -113,26 +97,32 @@
    (stop!)
    (let [database       (db/read-db db-path)
          database_      (atom database)
+         media_         (atom nil)
          player_        (atom nil)
-         run_           (atom nil)
-         partial-stack  {:database_ database_
-                         :db-path   db-path
-                         :media-dir media-dir
-                         :player_   player_}
-         run            (runtime/start! #(execute-effect!
-                                          (assoc partial-stack :runtime @run_)
-                                          %))
-         _              (reset! run_ run)
-         player-adapter (player/start! #(runtime/submit! run %))
-         rfid-reader    (fake/reader)
-         rfid-adapter   (rfid/start! {:reader            rfid-reader
-                                      :resolve-item-path #(db/linked-folder @database_ %)
-                                      :submit!           #(runtime/submit! run %)})
-         stack          (assoc partial-stack
-                               :rfid-adapter rfid-adapter
-                               :rfid-reader rfid-reader
-                               :runtime run)]
-     (reset! player_ player-adapter)
+         run             (runtime/start! #(dispatch-effect! media_ player_ %))
+         submit!         #(runtime/submit! run %)
+         player-adapter  (player/start!
+                          {:submit!        submit!
+                           :submit-latest! #(runtime/submit-latest! run %)})
+         _               (reset! player_ player-adapter)
+         media-adapter   (media/start! {:media-dir media-dir
+                                        :player    (:player player-adapter)
+                                        :submit!   submit!})
+         _               (reset! media_ media-adapter)
+         rfid-reader     (fake/reader)
+         rfid-adapter    (rfid/start! {:reader            rfid-reader
+                                       :resolve-item-path #(db/linked-folder
+                                                            @database_
+                                                            %)
+                                       :submit!           submit!})
+         stack           {:database_      database_
+                          :db-path        db-path
+                          :media-adapter  media-adapter
+                          :media-dir      media-dir
+                          :player-adapter player-adapter
+                          :rfid-adapter   rfid-adapter
+                          :rfid-reader    rfid-reader
+                          :runtime        run}]
      (reset! stack_ stack)
      (runtime/submit-and-await!
       run
@@ -141,19 +131,24 @@
               :settings-revision 0}})
      (status))))
 
+(defn- await-if-accepted [runtime ticket]
+  (if (:accepted? ticket)
+    (runtime/await! runtime ticket)
+    ticket))
+
 (defn place-card!
-  "Reports synthetic presence for `uid` and waits a bounded time for its commit."
+  "Reports synthetic presence for `uid` and awaits it when the level changed."
   [uid]
   (when-not (and (string? uid) (not-empty uid))
     (throw (ex-info "RFID UID must be a non-empty string" {:uid uid})))
   (let [{:keys [rfid-reader runtime]} (stack)]
-    (runtime/await! runtime (fake/place! rfid-reader uid))))
+    (await-if-accepted runtime (fake/place! rfid-reader uid))))
 
 (defn remove-card!
-  "Reports synthetic absence and waits a bounded time for its commit."
+  "Reports synthetic absence and awaits it when the level changed."
   []
   (let [{:keys [rfid-reader runtime]} (stack)]
-    (runtime/await! runtime (fake/remove! rfid-reader))))
+    (await-if-accepted runtime (fake/remove! rfid-reader))))
 
 (defmethod ds/named-system :donut.system/repl
   [_]
@@ -170,7 +165,7 @@
   ;; Access the system's state
   dsrs/system
 
-;; Start (or fully reset) the real DB, filesystem, Vinyl/VLC, and chart stack.
+  ;; Start (or fully reset) the real DB, filesystem, Vinyl/VLC, and chart stack.
   (start!)
   (status)
 
@@ -179,12 +174,12 @@
   (place-card! "dev-card-001")
   (status)
 
-  ;; Observe the same UID again without an absence. This advances only the
-  ;; observation sequence; it does not create a request or restart playback.
+  ;; Observe the same UID again without an absence. Shared RFID ingress
+  ;; suppresses the unchanged level, so no chart event or new request appears.
   (place-card! "dev-card-001")
   (status)
   (select-keys (get-in (snapshot) [:data :rfid])
-               [:observation-seq :presence-epoch :present-uid])
+               [:presence-epoch :present-uid])
 
   ;; Remove the active card and place it again. With the development settings,
   ;; removal pauses playback and the newer presence epoch resumes it.
