@@ -11,8 +11,8 @@
    [fairy.box2.model :as model]
    [taoensso.trove :as trove]))
 
-(def ^:private default-await-timeout-ms 5000)
-(def ^:private default-shutdown-timeout-ms 5000)
+(def ^:private await-timeout-ms 5000)
+(def ^:private shutdown-timeout-ms 5000)
 (def ^:private effects-limit 128)
 (def ^:private errors-limit 64)
 (def ^:private history-limit 256)
@@ -192,63 +192,46 @@
         (log-fatal! runtime)))
     :stopped))
 
-(defn- validate-options!
-  [dispatch-effect! {:keys [await-timeout-ms shutdown-timeout-ms]}]
-  (when-not (ifn? dispatch-effect!)
-    (throw (ex-info "Box2 runtime requires an effect dispatcher" {})))
-  (doseq [[option value] [[:await-timeout-ms await-timeout-ms]
-                          [:shutdown-timeout-ms shutdown-timeout-ms]]]
-    (when-not (pos-int? value)
-      (throw (ex-info "Box2 runtime option must be a positive integer"
-                      {:option option :value value})))))
-
 (defn start!
   "Starts one serialized chart owner with bounded required and progress ingress.
 
   `dispatch-effect!` must route one committed effect without blocking and return
   `true` or a map containing `:accepted? true`. Effects from each macrostep are
   offered in chart order before the next event is processed."
-  ([dispatch-effect!]
-   (start! dispatch-effect! {}))
-  ([dispatch-effect! {:keys [await-timeout-ms shutdown-timeout-ms]
-                      :or   {await-timeout-ms    default-await-timeout-ms
-                             shutdown-timeout-ms default-shutdown-timeout-ms}}]
-   (validate-options! dispatch-effect!
-                      {:await-timeout-ms    await-timeout-ms
-                       :shutdown-timeout-ms shutdown-timeout-ms})
-   (let [accepting?_ (atom true)
-         effects_    (atom [])
-         errors_     (atom [])
-         fatal_      (atom nil)
-         history_    (atom [])
-         progress-in (async/chan (async/sliding-buffer 1))
-         required-in (async/chan required-inbox-size)
-         queue       (->EffectQueue)
-         env         (simple/simple-env {::sc/event-queue queue})
-         runtime-id  (str (random-uuid))
-         chart-key   (keyword "fairy.box2.chart" runtime-id)
-         session-id  (keyword "fairy.box2.session" runtime-id)
-         _           (simple/register! env chart-key model/application-chart)
-         memory      (sp/start! (::sc/processor env)
-                                env
-                                chart-key
-                                {::sc/session-id session-id})
-         runtime     {:accepting?_         accepting?_
-                      :await-timeout-ms    await-timeout-ms
-                      :dispatch-effect!    dispatch-effect!
-                      :effects_            effects_
-                      :errors_             errors_
-                      :env                 env
-                      :fatal_              fatal_
-                      :fatal-logged?_       (atom false)
-                      :history_            history_
-                      :memory_             (atom memory)
-                      :progress-in         progress-in
-                      :required-in         required-in
-                      :shutdown-timeout-ms shutdown-timeout-ms
-                      :snapshot_           (atom (snapshot* memory))}
-         owner       (owner! runtime)]
-     (assoc runtime :owner owner))))
+  [dispatch-effect!]
+  (when-not (ifn? dispatch-effect!)
+    (throw (ex-info "Box2 runtime requires an effect dispatcher" {})))
+  (let [accepting?_ (atom true)
+        effects_    (atom [])
+        errors_     (atom [])
+        fatal_      (atom nil)
+        history_    (atom [])
+        progress-in (async/chan (async/sliding-buffer 1))
+        required-in (async/chan required-inbox-size)
+        queue       (->EffectQueue)
+        env         (simple/simple-env {::sc/event-queue queue})
+        runtime-id  (str (random-uuid))
+        chart-key   (keyword "fairy.box2.chart" runtime-id)
+        session-id  (keyword "fairy.box2.session" runtime-id)
+        _           (simple/register! env chart-key model/application-chart)
+        memory      (sp/start! (::sc/processor env)
+                               env
+                               chart-key
+                               {::sc/session-id session-id})
+        runtime     {:accepting?_     accepting?_
+                     :dispatch-effect! dispatch-effect!
+                     :effects_         effects_
+                     :errors_          errors_
+                     :env              env
+                     :fatal_           fatal_
+                     :fatal-logged?_   (atom false)
+                     :history_         history_
+                     :memory_          (atom memory)
+                     :progress-in      progress-in
+                     :required-in      required-in
+                     :snapshot_        (atom (snapshot* memory))}
+        owner       (owner! runtime)]
+    (assoc runtime :owner owner)))
 
 (defn- stopped-ticket [runtime]
   (if-let [failure @(:fatal_ runtime)]
@@ -303,7 +286,7 @@
 
   This bounded helper is intended for development and tests, not adapters."
   ([runtime ticket]
-   (await! runtime ticket (:await-timeout-ms runtime)))
+   (await! runtime ticket await-timeout-ms))
   ([_runtime {:keys [accepted? completion] :as ticket} timeout-ms]
    (when-not (and accepted? completion)
      (throw (ex-info "Box2 event has no awaitable submission"
@@ -340,5 +323,5 @@
     (close-ingress! runtime))
   (await-stop! (:owner runtime)
                :owner
-               (:shutdown-timeout-ms runtime))
+               shutdown-timeout-ms)
   :stopped)
