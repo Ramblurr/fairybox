@@ -1,16 +1,18 @@
 (ns fairy.box2.model
   "Fairybox 2 application statechart and its documented vocabulary.
 
-  This namespace specifies the broad application topology before production
-  actions and adapters exist. Qualified effect annotations describe intended
-  external work but do not execute it. The chart remains the authority for
-  state hierarchy and legal transitions; [[vocabulary]] documents identifier
-  meaning and payload shape."
+  This namespace specifies the broad application topology and the executable
+  card-request walking skeleton. Qualified effect annotations document intended
+  external work across the full chart; executable sends currently cover card
+  preparation and player activation. The chart remains the authority for state
+  hierarchy and legal transitions; [[vocabulary]] documents identifier meaning
+  and payload shape."
   (:require
    [clojure.set :as set]
    [com.fulcrologic.statecharts :as sc]
    [com.fulcrologic.statecharts.chart :as chart]
-   [com.fulcrologic.statecharts.elements :refer [In data-model final parallel state transition]]
+   [com.fulcrologic.statecharts.data-model.operations :as ops]
+   [com.fulcrologic.statecharts.elements :refer [In Send data-model final parallel script state transition]]
    [malli.core :as m]))
 
 (def payload-schema-registry
@@ -45,8 +47,17 @@
    ::settings         :map
    ::timer-token      [:or :keyword :string :uuid]})
 
+(def effect-send-type
+  "Statecharts send type used for immutable Box2 effect commands."
+  ::effect)
+
 (defn- payload [schema]
   schema)
+
+(defn- effect [effect-type content]
+  (Send {:content content
+         :event   effect-type
+         :type    effect-send-type}))
 
 (def initial-data
   "Initial non-secret orchestration data for the Box2 chart.
@@ -464,6 +475,76 @@
 (defn- event-data [data]
   (get-in data [:_event :data]))
 
+(defn- initialize-settings [_ data]
+  (let [{:keys [settings settings-revision]} (event-data data)]
+    [(ops/assign [:settings]
+                 {:revision settings-revision
+                  :values   settings})]))
+
+(defn- begin-card-request [_ data]
+  (let [{:keys [item-path request-id uid]} (event-data data)
+        generation (inc (get-in data [:audio :next-generation] 0))
+        request {:announce-tracks?
+                 (true? (get-in data
+                                [:settings :values :tts :announce-tracks?]))
+                 :generation        generation
+                 :item-path         item-path
+                 :request-id        request-id
+                 :settings-revision (get-in data [:settings :revision])
+                 :uid               uid}]
+    [(ops/assign [:audio :active-request] nil)
+     (ops/assign [:audio :next-generation] generation)
+     (ops/assign [:audio :pending-request] request)]))
+
+(defn- clear-card-request [_ _]
+  [(ops/assign [:audio :active-request] nil)
+   (ops/assign [:audio :pending-request] nil)])
+
+(defn- preparation-effect-data [_ data]
+  (select-keys (get-in data [:audio :pending-request])
+               [:announce-tracks?
+                :generation
+                :item-path
+                :request-id
+                :settings-revision
+                :uid]))
+
+(defn- accept-preparation [_ data]
+  (let [{:keys [paths]} (event-data data)
+        pending         (get-in data [:audio :pending-request])
+        queue-generation
+        (inc (get-in data [:audio :next-queue-generation] 0))
+        playback-context
+        {:queue-generation queue-generation
+         :request-id       (:request-id pending)
+         :uid              (:uid pending)}]
+    [(ops/assign [:audio :next-queue-generation] queue-generation)
+     (ops/assign [:audio :pending-request] (assoc pending :paths paths))
+     (ops/assign [:audio :playback-context] playback-context)]))
+
+(defn- install-queue-effect-data [_ data]
+  {:paths            (get-in data [:audio :pending-request :paths])
+   :playback-context (get-in data [:audio :playback-context])})
+
+(defn- start-playback-effect-data [_ data]
+  {:playback-context (get-in data [:audio :playback-context])})
+
+(defn- activate-card-request [_ data]
+  (let [request (select-keys (get-in data [:audio :pending-request])
+                             [:generation
+                              :item-path
+                              :request-id
+                              :settings-revision
+                              :uid])]
+    [(ops/assign [:audio :active-request] request)
+     (ops/assign [:audio :pending-request] nil)]))
+
+(defn- remember-present-card [_ data]
+  [(ops/assign [:rfid :present-uid] (:uid (event-data data)))])
+
+(defn- forget-present-card [_ _]
+  [(ops/assign [:rfid :present-uid] nil)])
+
 (defn- event-value? [key value]
   (fn [_ data]
     (= value (get (event-data data) key))))
@@ -602,15 +683,19 @@
           :initial :rfid.st/absent}
          (transition {:event  :rfid.ev/faulted
                       :target :rfid.st/faulted
-                      :type   :internal})
+                      :type   :internal}
+                     (script {:expr forget-present-card}))
          (state {:id :rfid.st/absent}
                 (transition {:event  :rfid.ev/card-placed
-                             :target :rfid.st/present}))
+                             :target :rfid.st/present}
+                            (script {:expr remember-present-card})))
          (state {:id :rfid.st/present}
                 (transition {:event  :rfid.ev/card-placed
-                             :target :rfid.st/present})
+                             :target :rfid.st/present}
+                            (script {:expr remember-present-card}))
                 (transition {:event  :rfid.ev/card-removed
-                             :target :rfid.st/absent}))
+                             :target :rfid.st/absent}
+                            (script {:expr forget-present-card})))
          (state {:id :rfid.st/faulted}
                 (transition {:event  :rfid.ev/recovered
                              :target :rfid.st/absent}))))
@@ -660,17 +745,21 @@
                       :diagram/condition "linked card in normal interaction mode"
                       :event             :rfid.ev/card-placed
                       :target            :card-request.st/preparing
-                      :type              :internal})
+                      :type              :internal}
+                     (script {:expr begin-card-request})
+                     (effect :media.fx/prepare preparation-effect-data))
          (transition {:cond              normal-unlinked-card?
                       :diagram/condition "unlinked card in normal interaction mode"
                       :event             :rfid.ev/card-placed
                       :target            :card-request.st/unlinked
-                      :type              :internal})
+                      :type              :internal}
+                     (script {:expr clear-card-request}))
          (transition {:event    :player.ev/stop-requested
                       :target   :card-request.st/idle
                       :type     :internal
                       ::effects [:media.fx/cancel-preparation
-                                 :player.fx/stop]})
+                                 :player.fx/stop]}
+                     (script {:expr clear-card-request}))
          (state {:id :card-request.st/idle})
          (state {:id             :card-request.st/preparing
                  ::entry-effects [:media.fx/prepare]
@@ -678,7 +767,10 @@
                 (transition {:cond              current-preparation?
                              :diagram/condition "current preparation"
                              :event             :media.ev/prepared
-                             :target            :card-request.st/installing})
+                             :target            :card-request.st/installing}
+                            (script {:expr accept-preparation})
+                            (effect :player.fx/install-queue
+                                    install-queue-effect-data))
                 (transition {:cond              current-preparation?
                              :diagram/condition "current preparation"
                              :event             :media.ev/preparation-failed
@@ -693,7 +785,9 @@
                 (transition {:cond              current-playback?
                              :diagram/condition "current installation"
                              :event             :player.ev/queue-installed
-                             :target            :card-request.st/waiting-for-playback})
+                             :target            :card-request.st/waiting-for-playback}
+                            (effect :player.fx/start
+                                    start-playback-effect-data))
                 (transition {:cond              current-playback?
                              :diagram/condition "current installation"
                              :event             :player.ev/queue-install-failed
@@ -703,7 +797,8 @@
                 (transition {:cond              (current-player-state? :opening)
                              :diagram/condition "current playback"
                              :event             :player.ev/state-changed
-                             :target            :card-request.st/active}))
+                             :target            :card-request.st/active}
+                            (script {:expr activate-card-request})))
          (state {:id :card-request.st/active}
                 (transition {:cond              (setting?
                                                  [:audio :card-removal-behavior]
@@ -730,10 +825,14 @@
                 (transition {:cond              restart-linked-card?
                              :diagram/condition "restart linked card on return"
                              :event             :rfid.ev/card-placed
-                             :target            :card-request.st/preparing}))
+                             :target            :card-request.st/preparing}
+                            (script {:expr begin-card-request})
+                            (effect :media.fx/prepare
+                                    preparation-effect-data)))
          (state {:id             :card-request.st/unlinked
                  ::entry-effects [:led.fx/show-card-unknown
                                   :tts.fx/speak]})
+
          (state {:id             :card-request.st/failed
                  ::entry-effects [:led.fx/show-card-problem
                                   :tts.fx/speak]})))
@@ -979,16 +1078,18 @@
 (def application-chart
   "Breadth-first Box2 application topology.
 
-  Effects in `::effects`, `::entry-effects`, and `::exit-effects` are modeling
-  annotations. They define intended external work and vocabulary coverage while
-  this initial chart remains free of I/O and incomplete payload construction."
+  Effects in `::effects`, `::entry-effects`, and `::exit-effects` document
+  intended external work and vocabulary coverage. The card-request walking
+  skeleton emits executable preparation and player commands; remaining effect
+  annotations await their production actions and payload construction."
   (chart/statechart {:initial :system.st/starting :name :fairy-box-2}
                     (data-model {:expr initial-data})
                     (state {:id :system.st/starting}
                            (transition {:event    :system.ev/initialized
                                         :target   :system.st/active
                                         ::effects [:one-shot.fx/play
-                                                   :led.fx/show-warming]})
+                                                   :led.fx/show-warming]}
+                                       (script {:expr initialize-settings}))
                            (transition {:event    :system.ev/start-failed
                                         :target   :system.st/failed
                                         ::effects [:led.fx/show-system-problem]}))
