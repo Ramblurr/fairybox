@@ -7,6 +7,7 @@
    [taoensso.trove :as trove]))
 
 (def ^:private job-buffer-size 16)
+(def ^:private stop-timeout-ms 5000)
 
 (defn canonical-path
   "Returns `item-path` below `media-dir`, rejecting paths outside that directory."
@@ -47,15 +48,19 @@
      :reason    :adapter-failed}
     {:accepted? false :reason :stopped}))
 
-(defn- fail-fast! [{:keys [accepting?_ fatal_ jobs] :as adapter} failure]
+(defn- fail-fast! [{:keys [accepting?_ cancel fatal_ jobs] :as adapter}
+                   failure]
   (when (compare-and-set! fatal_ nil failure)
     (reset! accepting?_ false)
+    (async/close! cancel)
     (async/close! jobs))
   (stopped-ticket adapter))
 
-(defn- submit-completion! [{:keys [accepting?_ submit!]} event]
-  (when @accepting?_
-    (submit! event)))
+(defn- submit-completion!
+  [{:keys [accepting?_ completion-lock submit!]} event]
+  (locking completion-lock
+    (when @accepting?_
+      (submit! event))))
 
 (defn- process-job!
   [{:keys [cancelled_ media-dir player] :as adapter}
@@ -89,23 +94,27 @@
       (finally
         (swap! cancelled_ disj key)))))
 
-(defn- worker! [{:keys [accepting?_ fatal_ jobs] :as adapter}]
+(defn- worker! [{:keys [accepting?_ cancel done fatal_ jobs] :as adapter}]
   (async/thread
     (try
       (loop []
-        (when-let [job (async/<!! jobs)]
-          (process-job! adapter job)
-          (recur)))
+        (let [[job channel] (async/alts!! [cancel jobs] :priority true)]
+          (when (and job (= channel jobs))
+            (process-job! adapter job)
+            (recur))))
       (catch Throwable error
         (let [failure {:error  error
                        :reason :worker-infrastructure-failed}]
           (compare-and-set! fatal_ nil failure)
           (reset! accepting?_ false)
+          (async/close! cancel)
           (async/close! jobs)
           (trove/log! {:level :error
                        :id    ::worker-failed
                        :msg   "Box2 media worker failed"
-                       :data  failure}))))
+                       :data  failure})))
+      (finally
+        (async/offer! done :stopped)))
     :stopped))
 
 (defn start!
@@ -119,17 +128,24 @@
   | `:player`    | Active Vinyl player used for metadata parsing
   | `:submit!`   | Required non-blocking Box2 event submission function"
   [{:keys [media-dir player submit!]}]
-  (let [adapter {:accepting?_ (atom true)
-                 :cancelled_  (atom #{})
-                 :fatal_      (atom nil)
-                 :jobs        (async/chan job-buffer-size)
-                 :media-dir   media-dir
-                 :player      player
-                 :submit!     submit!}]
+  (let [adapter {:accepting?_     (atom true)
+                 :cancel          (async/chan)
+                 :cancelled_      (atom #{})
+                 :completion-lock (Object.)
+                 :done            (async/promise-chan)
+                 :fatal_          (atom nil)
+                 :jobs            (async/chan job-buffer-size)
+                 :media-dir       media-dir
+                 :player          player
+                 :submit!         submit!}]
     (assoc adapter :worker (worker! adapter))))
 
 (defn offer!
-  "Offers one media effect without blocking."
+  "Offers one media effect without blocking.
+
+  Preparation-lane overflow marks the adapter unhealthy. Cancellation records
+  provenance immediately so a running uninterruptible parse cannot publish a
+  stale completion."
   [{:keys [accepting?_ cancelled_ jobs] :as adapter}
    {:effect/keys [type] :as effect}]
   (if-not @accepting?_
@@ -157,9 +173,19 @@
   @(:fatal_ adapter))
 
 (defn stop!
-  "Stops intake and waits for the current media library call to return."
+  "Cancels intake and waits a bounded time for the media worker.
+
+  Vinyl or filesystem calls already in progress may be uninterruptible. In that
+  case this function reports timeout; it does not claim the call was terminated."
   [adapter]
-  (reset! (:accepting?_ adapter) false)
-  (async/close! (:jobs adapter))
-  (async/<!! (:worker adapter))
+  (locking (:completion-lock adapter)
+    (reset! (:accepting?_ adapter) false)
+    (async/close! (:cancel adapter))
+    (async/close! (:jobs adapter)))
+  (let [timeout        (async/timeout stop-timeout-ms)
+        [_result port] (async/alts!! [(:done adapter) timeout]
+                                     :priority true)]
+    (when (= port timeout)
+      (throw (ex-info "Timed out stopping Box2 media adapter; a library call may still be running"
+                      {:timeout-ms stop-timeout-ms}))))
   :stopped)

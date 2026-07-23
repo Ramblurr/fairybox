@@ -310,18 +310,15 @@
   ([runtime event timeout-ms]
    (await! runtime (submit! runtime event) timeout-ms)))
 
-(defn- await-stop! [channel component timeout-ms]
-  (let [timeout        (async/timeout timeout-ms)
-        [_result port] (async/alts!! [channel timeout] :priority true)]
-    (when (= port timeout)
-      (throw (ex-info "Timed out stopping Box2 runtime component"
-                      {:component component :timeout-ms timeout-ms}))))
-  :stopped)
-
-(defn stop! [runtime]
+(defn stop!
+  "Closes runtime ingress and waits a bounded time for the pure owner loop."
+  [runtime]
   (when (compare-and-set! (:accepting?_ runtime) true false)
     (close-ingress! runtime))
-  (await-stop! (:owner runtime)
-               :owner
-               shutdown-timeout-ms)
+  (let [timeout        (async/timeout shutdown-timeout-ms)
+        [_result port] (async/alts!! [(:owner runtime) timeout]
+                                     :priority true)]
+    (when (= port timeout)
+      (throw (ex-info "Timed out stopping Box2 runtime owner"
+                      {:timeout-ms shutdown-timeout-ms}))))
   :stopped)
