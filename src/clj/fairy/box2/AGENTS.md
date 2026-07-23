@@ -6,6 +6,7 @@ implementations separate while Box2 is under development.
 ## Hard boundaries
 
 - Code under `fairy.box2` must not require a `fairy.box` namespace.
+    - Unless the human gives specific direction. Just because another ns does it doesnt mean you have permission to.
 - Copy and reshape required behavior instead of introducing compatibility
   abstractions between Box1 and Box2.
 - Box2 must read and write the existing `db.edn` structure without changing its
