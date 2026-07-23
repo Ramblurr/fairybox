@@ -28,7 +28,7 @@ implementations separate while Box2 is under development.
   but may not dereference the database or perform I/O.
 - External work is immutable effect or invocation data and runs off the chart
   processing thread.
-- Asynchronous completions return through `submit!` and carry request, generation,
+- Asynchronous completions return through `submit!` and carry request,
   playback-context, invocation, revision, or timer provenance.
 - Physical cancellation does not replace stale-event guards.
 - Parallel regions model genuinely independent lifecycles. Compound states
@@ -39,6 +39,19 @@ implementations separate while Box2 is under development.
 - Give each chart-data subtree one writer. Cross-region coordination occurs
   through events or an explicitly documented handoff.
 - One workflow has one refresh owner. Never call Hyperlith refresh concurrently.
+
+## Provenance identities
+
+| Identity | Owner | Changes when | Purpose |
+| --- | --- | --- | --- |
+| `presence-epoch` | RFID ingress | A new continuous card presence begins | Authorize work for one physical presence interval |
+| `request-id` | Chart ingress | A changed present level creates a card request | Correlate one logical request across media and player boundaries |
+
+Each request has one preparation and one play-queue dispatch, so neither boundary
+has a generation counter. Playback context combines `request-id` and
+`presence-epoch`; UID remains descriptive metadata. Vinyl snapshots that context
+when it processes the correlated play command and attaches it to raw player
+observations before subscriber callbacks run.
 
 ## Vocabulary convention
 
@@ -91,6 +104,10 @@ between a constructor and its map.
 
 ## Current source map
 
+- `fairy.box2.media` — bounded blocking media-preparation adapter.
 - `fairy.box2.model` — application topology, initial chart data, and vocabulary.
+- `fairy.box2.player` — ordered Vinyl command and observation adapter.
+- `fairy.box2.rfid` — serial RFID ingress, deduplication, and presence epochs.
+- `fairy.box2.runtime` — serialized chart owner and bounded ingress lanes.
 
 Add new namespaces to this list when their responsibility becomes stable.
