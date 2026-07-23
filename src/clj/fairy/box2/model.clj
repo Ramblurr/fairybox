@@ -682,19 +682,17 @@
   (fn [_ data]
     (= value (get-in data (into [:settings :values] path)))))
 
-(defn- current-active-card-absence? [env data]
-  (and (absent-observation? env data)
-       (= (get-in data [:audio :active-request :presence-epoch])
-          (:presence-epoch (event-data data)))
-       (= (get-in data [:audio :active-request :uid])
-          (get-in data [:rfid :present-uid]))))
+(defn- current-request-absence? [request-path]
+  (fn [env data]
+    (and (absent-observation? env data)
+         (= (get-in data (conj request-path :presence-epoch))
+            (:presence-epoch (event-data data))))))
 
-(defn- current-pending-card-absence? [env data]
-  (and (absent-observation? env data)
-       (= (get-in data [:audio :pending-request :presence-epoch])
-          (:presence-epoch (event-data data)))
-       (= (get-in data [:audio :pending-request :uid])
-          (get-in data [:rfid :present-uid]))))
+(def ^:private current-active-card-absence?
+  (current-request-absence? [:audio :active-request]))
+
+(def ^:private current-pending-card-absence?
+  (current-request-absence? [:audio :pending-request]))
 
 (defn- current-card-removal? [removal-behavior]
   (fn [env data]
