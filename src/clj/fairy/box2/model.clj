@@ -33,6 +33,7 @@
                        :system/reboot
                        :system/restart-fairybox]
    ::playback-context [:map
+                       [:presence-epoch [:int {:min 1}]]
                        [:queue-generation [:int {:min 0}]]
                        [:request-id {:optional true} :uuid]
                        [:uid {:optional true} :string]]
@@ -63,21 +64,25 @@
   "Initial non-secret orchestration data for the Box2 chart.
 
   The complete `db.edn` value and credentials never enter this data model. The
-  database adapter projects only operational settings into chart data. Card
-  ingress attaches the safe linked-media result to each placement event."
-  {:audio       {:active-request        nil
-                 :next-generation       0
-                 :next-queue-generation 0
-                 :one-shot              nil
-                 :pending-request       nil
-                 :playback-context      nil
-                 :playback-state        :stopped
-                 :playback-time-ms      0}
+  database adapter projects only operational settings into chart data. Present
+  observations attach only the safe linked-media projection needed by the chart."
+  {:audio       {:active-request           nil
+                 :next-generation          0
+                 :next-queue-generation    0
+                 :one-shot                 nil
+                 :pending-playback-context nil
+                 :pending-request          nil
+                 :playback-authorized?     false
+                 :playback-context         nil
+                 :playback-state           :stopped
+                 :playback-time-ms         0}
    :interaction {:feedback       nil
                  :identification nil}
    :power       {:auto-shutdown-token nil
                  :sleep-token         nil}
-   :rfid        {:present-uid nil}
+   :rfid        {:observation-seq 0
+                 :presence-epoch  0
+                 :present-uid     nil}
    :settings    {:revision 0
                  :values   {}}
    :system      {:operation nil}})
@@ -251,17 +256,25 @@
                                                              [:playback-context {:optional true} ::playback-context]
                                                              [:time-ms [:int {:min 0}]]])}
 
-             :rfid.ev/card-placed  {:description "Card ingress observed a newly presented UID and attached its registered media path, when linked."
-                                    :payload     (payload
-                                                  [:map
-                                                   [:item-path {:optional true} [:string {:min 1}]]
-                                                   [:request-id ::request-id]
-                                                   [:uid [:string {:min 1}]]])}
-             :rfid.ev/card-removed {:description "The RFID adapter observed removal of the current UID."
-                                    :payload     (payload [:map [:uid [:string {:min 1}]]])}
-             :rfid.ev/faulted      {:description "The RFID adapter reported a hardware or polling failure."
-                                    :payload     (payload [:map [:error ::error]])}
-             :rfid.ev/recovered    {:description "The RFID adapter recovered after a fault."}
+             :rfid.ev/presence-observed {:description "The RFID adapter reported its latest ordered card-presence observation."
+                                         :payload     (payload
+                                                       [:multi {:dispatch :status}
+                                                        [:absent
+                                                         [:map
+                                                          [:observation-seq [:int {:min 1}]]
+                                                          [:presence-epoch [:int {:min 0}]]
+                                                          [:status [:enum :absent]]]]
+                                                        [:present
+                                                         [:map
+                                                          [:item-path {:optional true} [:string {:min 1}]]
+                                                          [:observation-seq [:int {:min 1}]]
+                                                          [:presence-epoch [:int {:min 1}]]
+                                                          [:request-id ::request-id]
+                                                          [:status [:enum :present]]
+                                                          [:uid [:string {:min 1}]]]]])}
+             :rfid.ev/faulted           {:description "The RFID adapter reported a hardware or polling failure."
+                                         :payload     (payload [:map [:error ::error]])}
+             :rfid.ev/recovered         {:description "The RFID adapter recovered after a fault."}
 
              :settings.ev/changed          {:description "The database watch emitted a newer non-secret settings projection."
                                             :payload     (payload
@@ -341,6 +354,7 @@
                                                            [:announce-tracks? :boolean]
                                                            [:generation [:int {:min 1}]]
                                                            [:item-path [:string {:min 1}]]
+                                                           [:presence-epoch [:int {:min 1}]]
                                                            [:request-id ::request-id]
                                                            [:settings-revision [:int {:min 0}]]
                                                            [:uid :string]])}
@@ -488,22 +502,30 @@
                                 [:settings :values :tts :announce-tracks?]))
                  :generation        generation
                  :item-path         item-path
+                 :presence-epoch    (:presence-epoch (event-data data))
                  :request-id        request-id
                  :settings-revision (get-in data [:settings :revision])
                  :uid               uid}]
-    [(ops/assign [:audio :active-request] nil)
-     (ops/assign [:audio :next-generation] generation)
+    [(ops/assign [:audio :next-generation] generation)
+     (ops/assign [:audio :pending-playback-context] nil)
      (ops/assign [:audio :pending-request] request)]))
+
+(defn- clear-pending-request [_ _]
+  [(ops/assign [:audio :pending-playback-context] nil)
+   (ops/assign [:audio :pending-request] nil)])
 
 (defn- clear-card-request [_ _]
   [(ops/assign [:audio :active-request] nil)
-   (ops/assign [:audio :pending-request] nil)])
+   (ops/assign [:audio :pending-playback-context] nil)
+   (ops/assign [:audio :pending-request] nil)
+   (ops/assign [:audio :playback-authorized?] false)])
 
 (defn- preparation-effect-data [_ data]
   (select-keys (get-in data [:audio :pending-request])
                [:announce-tracks?
                 :generation
                 :item-path
+                :presence-epoch
                 :request-id
                 :settings-revision
                 :uid]))
@@ -514,16 +536,35 @@
         queue-generation
         (inc (get-in data [:audio :next-queue-generation] 0))
         playback-context
-        {:queue-generation queue-generation
+        {:presence-epoch   (:presence-epoch pending)
+         :queue-generation queue-generation
          :request-id       (:request-id pending)
          :uid              (:uid pending)}]
     [(ops/assign [:audio :next-queue-generation] queue-generation)
-     (ops/assign [:audio :pending-request] (assoc pending :paths paths))
-     (ops/assign [:audio :playback-context] playback-context)]))
+     (ops/assign [:audio :pending-playback-context] playback-context)
+     (ops/assign [:audio :pending-request] (assoc pending :paths paths))]))
+
+(defn- cancel-preparation-effect-data [_ data]
+  (select-keys (get-in data [:audio :pending-request])
+               [:generation :request-id]))
 
 (defn- install-queue-effect-data [_ data]
   {:paths            (get-in data [:audio :pending-request :paths])
-   :playback-context (get-in data [:audio :playback-context])})
+   :playback-context (get-in data [:audio :pending-playback-context])})
+
+(defn- accept-installation [_ data]
+  [(ops/assign [:audio :playback-authorized?] true)
+   (ops/assign [:audio :playback-context]
+               (get-in data [:audio :pending-playback-context]))
+   (ops/assign [:audio :pending-playback-context] nil)])
+
+(defn- abort-installation [_ data]
+  [(ops/assign [:audio :active-request] nil)
+   (ops/assign [:audio :playback-authorized?] false)
+   (ops/assign [:audio :playback-context]
+               (get-in data [:audio :pending-playback-context]))
+   (ops/assign [:audio :pending-playback-context] nil)
+   (ops/assign [:audio :pending-request] nil)])
 
 (defn- start-playback-effect-data [_ data]
   {:playback-context (get-in data [:audio :playback-context])})
@@ -532,27 +573,56 @@
   (let [request (select-keys (get-in data [:audio :pending-request])
                              [:generation
                               :item-path
+                              :presence-epoch
                               :request-id
                               :settings-revision
                               :uid])]
     [(ops/assign [:audio :active-request] request)
      (ops/assign [:audio :pending-request] nil)]))
 
-(defn- remember-present-card [_ data]
-  [(ops/assign [:rfid :present-uid] (:uid (event-data data)))])
+(defn- newer-rfid-observation? [_ data]
+  (< (get-in data [:rfid :observation-seq] 0)
+     (:observation-seq (event-data data))))
 
-(defn- forget-present-card [_ _]
+(defn- observed-status? [status]
+  (fn [env data]
+    (and (newer-rfid-observation? env data)
+         (= status (:status (event-data data))))))
+
+(defn- present-observation? [env data]
+  ((observed-status? :present) env data))
+
+(defn- absent-observation? [env data]
+  ((observed-status? :absent) env data))
+
+(defn- new-presence? [env data]
+  (let [event (event-data data)]
+    (and (present-observation? env data)
+         (or (not= (get-in data [:rfid :present-uid]) (:uid event))
+             (< (get-in data [:rfid :presence-epoch] 0)
+                (:presence-epoch event))))))
+
+(defn- store-rfid-observation [_ data]
+  (let [{:keys [observation-seq presence-epoch status uid]} (event-data data)]
+    [(ops/assign [:rfid]
+                 {:observation-seq observation-seq
+                  :presence-epoch  presence-epoch
+                  :present-uid     (when (= :present status) uid)})]))
+
+(defn- clear-present-card [_ _]
   [(ops/assign [:rfid :present-uid] nil)])
 
 (defn- event-value? [key value]
   (fn [_ data]
     (= value (get (event-data data) key))))
 
-(defn- linked-card? [_ data]
-  (some? (:item-path (event-data data))))
+(defn- linked-card? [env data]
+  (and (new-presence? env data)
+       (some? (:item-path (event-data data)))))
 
-(defn- unlinked-card? [_ data]
-  (nil? (:item-path (event-data data))))
+(defn- unlinked-card? [env data]
+  (and (new-presence? env data)
+       (nil? (:item-path (event-data data)))))
 
 (defn- normal-linked-card? [env data]
   (and ((In :interaction.st/normal) env data)
@@ -572,13 +642,26 @@
          (= (:request-id pending) (:request-id event))
          (= (:settings-revision pending) (:settings-revision event)))))
 
-(defn- current-playback? [_ data]
+(defn- current-installation? [_ data]
+  (= (get-in data [:audio :pending-playback-context])
+     (:playback-context (event-data data))))
+
+(defn- current-playback-context? [_ data]
   (= (get-in data [:audio :playback-context])
      (:playback-context (event-data data))))
+
+(defn- current-playback? [env data]
+  (and (true? (get-in data [:audio :playback-authorized?]))
+       (current-playback-context? env data)))
 
 (defn- current-player-state? [player-state]
   (fn [env data]
     (and (current-playback? env data)
+         (= player-state (:state (event-data data))))))
+
+(defn- current-terminal-player-state? [player-state]
+  (fn [env data]
+    (and (current-playback-context? env data)
          (= player-state (:state (event-data data))))))
 
 (defn- current-feedback-timer? [_ data]
@@ -599,20 +682,35 @@
   (fn [_ data]
     (= value (get-in data (into [:settings :values] path)))))
 
-(defn- current-active-card? [_ data]
-  (= (get-in data [:audio :active-request :uid])
-     (:uid (event-data data))))
+(defn- current-active-card-absence? [env data]
+  (and (absent-observation? env data)
+       (= (get-in data [:audio :active-request :presence-epoch])
+          (:presence-epoch (event-data data)))
+       (= (get-in data [:audio :active-request :uid])
+          (get-in data [:rfid :present-uid]))))
+
+(defn- current-pending-card-absence? [env data]
+  (and (absent-observation? env data)
+       (= (get-in data [:audio :pending-request :presence-epoch])
+          (:presence-epoch (event-data data)))
+       (= (get-in data [:audio :pending-request :uid])
+          (get-in data [:rfid :present-uid]))))
 
 (defn- current-card-removal? [removal-behavior]
   (fn [env data]
-    (and (current-active-card? env data)
+    (and (current-active-card-absence? env data)
          ((setting? [:audio :card-removal-behavior] removal-behavior)
           env
           data))))
 
 (defn- returning-active-card? [env data]
-  (and ((In :rfid.st/absent) env data)
-       (current-active-card? env data)))
+  (and (new-presence? env data)
+       (= (get-in data [:audio :active-request :uid])
+          (:uid (event-data data)))))
+
+(defn- rebind-active-card [_ data]
+  [(ops/assign [:audio :active-request :presence-epoch]
+               (:presence-epoch (event-data data)))])
 
 (defn- resume-returning-card? [env data]
   (and (returning-active-card? env data)
@@ -702,18 +800,29 @@
          (transition {:event  :rfid.ev/faulted
                       :target :rfid.st/faulted
                       :type   :internal}
-                     (script {:expr forget-present-card}))
+                     (script {:expr clear-present-card}))
          (state {:id :rfid.st/absent}
-                (transition {:event  :rfid.ev/card-placed
-                             :target :rfid.st/present}
-                            (script {:expr remember-present-card})))
+                (transition {:cond              present-observation?
+                             :diagram/condition "newer present observation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :rfid.st/present}
+                            (script {:expr store-rfid-observation}))
+                (transition {:cond              absent-observation?
+                             :diagram/condition "newer absent observation"
+                             :event             :rfid.ev/presence-observed}
+                            (script {:expr store-rfid-observation})))
          (state {:id :rfid.st/present}
-                (transition {:event  :rfid.ev/card-placed
-                             :target :rfid.st/present}
-                            (script {:expr remember-present-card}))
-                (transition {:event  :rfid.ev/card-removed
-                             :target :rfid.st/absent}
-                            (script {:expr forget-present-card})))
+                (transition {:cond              present-observation?
+                             :diagram/condition "newer present observation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :rfid.st/present
+                             :type              :internal}
+                            (script {:expr store-rfid-observation}))
+                (transition {:cond              absent-observation?
+                             :diagram/condition "newer absent observation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :rfid.st/absent}
+                            (script {:expr store-rfid-observation})))
          (state {:id :rfid.st/faulted}
                 (transition {:event  :rfid.ev/recovered
                              :target :rfid.st/absent}))))
@@ -736,13 +845,13 @@
                       :event             :player.ev/state-changed
                       :target            :player.st/paused
                       :type              :internal})
-         (transition {:cond              (current-player-state? :stopped)
-                      :diagram/condition "current playback"
+         (transition {:cond              (current-terminal-player-state? :stopped)
+                      :diagram/condition "current or stopping playback"
                       :event             :player.ev/state-changed
                       :target            :player.st/stopped
                       :type              :internal})
-         (transition {:cond              (current-player-state? :error)
-                      :diagram/condition "current playback"
+         (transition {:cond              (current-terminal-player-state? :error)
+                      :diagram/condition "current or stopping playback"
                       :event             :player.ev/state-changed
                       :target            :player.st/error
                       :type              :internal})
@@ -761,17 +870,17 @@
           :initial :card-request.st/idle}
          (transition {:cond              normal-linked-card?
                       :diagram/condition "linked card in normal interaction mode"
-                      :event             :rfid.ev/card-placed
+                      :event             :rfid.ev/presence-observed
                       :target            :card-request.st/preparing
                       :type              :internal}
                      (script {:expr begin-card-request})
                      (effect :media.fx/prepare preparation-effect-data))
          (transition {:cond              normal-unlinked-card?
                       :diagram/condition "unlinked card in normal interaction mode"
-                      :event             :rfid.ev/card-placed
+                      :event             :rfid.ev/presence-observed
                       :target            :card-request.st/unlinked
                       :type              :internal}
-                     (script {:expr clear-card-request}))
+                     (script {:expr clear-pending-request}))
          (transition {:event    :player.ev/stop-requested
                       :target   :card-request.st/idle
                       :type     :internal
@@ -797,63 +906,95 @@
                                                  [:tts :announce-tracks?])
                              :diagram/condition "announcement policy changed"
                              :event             :settings.ev/changed
-                             :target            :card-request.st/preparing}))
+                             :target            :card-request.st/preparing})
+                (transition {:cond              current-pending-card-absence?
+                             :diagram/condition "current card removed during preparation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :card-request.st/idle}
+                            (effect :media.fx/cancel-preparation
+                                    cancel-preparation-effect-data)
+                            (script {:expr clear-pending-request})))
          (state {:id             :card-request.st/installing
                  ::entry-effects [:player.fx/install-queue]}
-                (transition {:cond              current-playback?
+                (transition {:cond              current-installation?
                              :diagram/condition "current installation"
                              :event             :player.ev/queue-installed
                              :target            :card-request.st/waiting-for-playback}
+                            (script {:expr accept-installation})
                             (effect :player.fx/start
                                     start-playback-effect-data))
-                (transition {:cond              current-playback?
+                (transition {:cond              current-installation?
                              :diagram/condition "current installation"
                              :event             :player.ev/queue-install-failed
-                             :target            :card-request.st/failed}))
+                             :target            :card-request.st/failed})
+                (transition {:cond              current-pending-card-absence?
+                             :diagram/condition "current card removed during installation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :card-request.st/idle}
+                            (script {:expr abort-installation})
+                            (effect :player.fx/stop (constantly {}))))
          (state {:id             :card-request.st/waiting-for-playback
                  ::entry-effects [:player.fx/start]}
                 (transition {:cond              (current-player-state? :opening)
                              :diagram/condition "current playback"
                              :event             :player.ev/state-changed
                              :target            :card-request.st/active}
-                            (script {:expr activate-card-request})))
+                            (script {:expr activate-card-request}))
+                (transition {:cond              current-pending-card-absence?
+                             :diagram/condition "current card removed before playback"
+                             :event             :rfid.ev/presence-observed
+                             :target            :card-request.st/idle}
+                            (effect :player.fx/stop (constantly {}))
+                            (script {:expr clear-card-request})))
          (state {:id :card-request.st/active}
                 (transition {:cond              (current-card-removal? :pause)
                              :diagram/condition "active card pauses on removal"
-                             :event             :rfid.ev/card-removed
+                             :event             :rfid.ev/presence-observed
                              :target            :card-request.st/suspended
                              ::effects          [:player.fx/pause]}
                             (effect :player.fx/pause (constantly {})))
                 (transition {:cond              (current-card-removal? :keep-playing)
                              :diagram/condition "active card keeps playing on removal"
-                             :event             :rfid.ev/card-removed
+                             :event             :rfid.ev/presence-observed
                              :target            :card-request.st/active
                              :type              :internal})
                 (transition {:cond              returning-active-card?
-                             :diagram/condition "same active card returns after observed absence"
-                             :event             :rfid.ev/card-placed
-                             :type              :internal}))
+                             :diagram/condition "same active card returns in a new presence epoch"
+                             :event             :rfid.ev/presence-observed
+                             :type              :internal}
+                            (script {:expr rebind-active-card})))
          (state {:id :card-request.st/suspended}
                 (transition {:cond              resume-returning-card?
                              :diagram/condition "same paused card resumes"
-                             :event             :rfid.ev/card-placed
+                             :event             :rfid.ev/presence-observed
                              :target            :card-request.st/active
                              ::effects          [:player.fx/resume]}
+                            (script {:expr rebind-active-card})
                             (effect :player.fx/resume (constantly {})))
                 (transition {:cond              new-linked-card-request?
                              :diagram/condition "linked card starts a new request"
-                             :event             :rfid.ev/card-placed
+                             :event             :rfid.ev/presence-observed
                              :target            :card-request.st/preparing}
                             (script {:expr begin-card-request})
                             (effect :media.fx/prepare
                                     preparation-effect-data)))
          (state {:id             :card-request.st/unlinked
                  ::entry-effects [:led.fx/show-card-unknown
-                                  :tts.fx/speak]})
+                                  :tts.fx/speak]}
+                (transition {:cond              absent-observation?
+                             :diagram/condition "current unlinked card removed"
+                             :event             :rfid.ev/presence-observed
+                             :target            :card-request.st/idle}
+                            (script {:expr clear-pending-request})))
 
          (state {:id             :card-request.st/failed
                  ::entry-effects [:led.fx/show-card-problem
-                                  :tts.fx/speak]})))
+                                  :tts.fx/speak]}
+                (transition {:cond              absent-observation?
+                             :diagram/condition "current failed card removed"
+                             :event             :rfid.ev/presence-observed
+                             :target            :card-request.st/idle}
+                            (script {:expr clear-pending-request})))))
 
 (defn- one-shot-region []
   (state {:id      :audio.st/one-shot
@@ -928,13 +1069,13 @@
                       ::effects          [:player.fx/stop
                                           :led.fx/show-identification]})
          (transition {:cond              linked-card?
-                      :diagram/condition "linked card"
-                      :event             :rfid.ev/card-placed
+                      :diagram/condition "new linked card presence"
+                      :event             :rfid.ev/presence-observed
                       :target            :feedback.st/known-card
                       :type              :internal})
          (transition {:cond              unlinked-card?
-                      :diagram/condition "unlinked card"
-                      :event             :rfid.ev/card-placed
+                      :diagram/condition "new unlinked card presence"
+                      :event             :rfid.ev/presence-observed
                       :target            :feedback.st/unknown-card
                       :type              :internal})
          (transition {:event  :interaction.ev/problem-reported
@@ -945,9 +1086,11 @@
                       :event             :player.ev/state-changed
                       :target            :feedback.st/playback-started
                       :type              :internal})
-         (transition {:event  :rfid.ev/card-removed
-                      :target :feedback.st/idle
-                      :type   :internal})
+         (transition {:cond              absent-observation?
+                      :diagram/condition "newer absent observation"
+                      :event             :rfid.ev/presence-observed
+                      :target            :feedback.st/idle
+                      :type              :internal})
          (transition {:event  :player.ev/stop-requested
                       :target :feedback.st/idle
                       :type   :internal})
@@ -981,13 +1124,13 @@
                       ::effects          [:led.fx/show-ready]})
          (state {:id :identification.st/idle}
                 (transition {:cond              linked-card?
-                             :diagram/condition "linked card"
-                             :event             :rfid.ev/card-placed
+                             :diagram/condition "new linked card presence"
+                             :event             :rfid.ev/presence-observed
                              :target            :identification.st/reading-metadata
                              ::effects          [:metadata.fx/read]})
                 (transition {:cond              unlinked-card?
-                             :diagram/condition "unlinked card"
-                             :event             :rfid.ev/card-placed
+                             :diagram/condition "new unlinked card presence"
+                             :event             :rfid.ev/presence-observed
                              :target            :identification.st/speaking
                              ::effects          [:tts.fx/speak]}))
          (state {:id :identification.st/reading-metadata}
@@ -1009,8 +1152,10 @@
                              :target            :identification.st/failed}))
          (state {:id             :identification.st/failed
                  ::entry-effects [:led.fx/show-card-problem]}
-                (transition {:event  :rfid.ev/card-removed
-                             :target :identification.st/idle}))))
+                (transition {:cond              absent-observation?
+                             :diagram/condition "newer absent observation"
+                             :event             :rfid.ev/presence-observed
+                             :target            :identification.st/idle}))))
 
 (defn- interaction-subsystem []
   (state {:id      :subsystem.st/interaction
@@ -1044,8 +1189,10 @@
                  ::exit-effects  [:timer.fx/cancel-auto-shutdown]}
                 (transition {:event  :button.ev/pressed
                              :target :auto-shutdown.st/waiting-for-idle})
-                (transition {:event  :rfid.ev/card-placed
-                             :target :auto-shutdown.st/waiting-for-idle})
+                (transition {:cond              new-presence?
+                             :diagram/condition "new card presence"
+                             :event             :rfid.ev/presence-observed
+                             :target            :auto-shutdown.st/waiting-for-idle})
                 (transition {:event  :one-shot.ev/started
                              :target :auto-shutdown.st/waiting-for-idle})
                 (transition {:cond              current-auto-shutdown-timer?
@@ -1191,9 +1338,12 @@
 
   (valid-payload?
    :events
-   :rfid.ev/card-placed
-   {:item-path  "/media/synthetic-card"
-    :request-id (random-uuid)
-    :uid        "SYNTHETIC-CARD"})
+   :rfid.ev/presence-observed
+   {:item-path       "/media/synthetic-card"
+    :observation-seq 1
+    :presence-epoch  1
+    :request-id      (random-uuid)
+    :status          :present
+    :uid             "SYNTHETIC-CARD"})
 
   :rcf)

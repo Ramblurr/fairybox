@@ -1,1 +1,10 @@
-#kaocha/v1 {}
+#kaocha/v1 {:tests   [{:id           :unit
+                       :ns-patterns  ["-test$" "-spec$"]
+                       :test-paths   ["test/clj"]
+                       :skip-meta    [:integration]
+                       :source-paths ["src/clj"]}]
+            :color?  false
+            :plugins [:kaocha.plugin/randomize
+                      :kaocha.plugin/profiling
+                      :kaocha.plugin/filter
+                      :kaocha.plugin/capture-output]}

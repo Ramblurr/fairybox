@@ -7,6 +7,8 @@
    [fairy.box2.db :as db]
    [fairy.box2.media :as media]
    [fairy.box2.player :as player]
+   [fairy.box2.rfid :as rfid]
+   [fairy.box2.rfid.fake :as fake]
    [fairy.box2.runtime :as runtime]
    [fairy.box2.system :as system]))
 
@@ -25,6 +27,9 @@
 (defn effects []
   (runtime/effects (:runtime (stack))))
 
+(defn errors []
+  (runtime/errors (:runtime (stack))))
+
 (defn- active-value [configuration state-namespace]
   (some->> configuration
            (filter #(= state-namespace (namespace %)))
@@ -40,13 +45,13 @@
      :request      (or (get-in data [:audio :active-request])
                        (get-in data [:audio :pending-request]))}))
 
-(defn- dispatch-effect! [stack {:keys [effect/data effect/type]}]
+(defn- execute-effect! [stack {:keys [effect/data effect/type]}]
   (let [run     (:runtime stack)
         adapter @(:player_ stack)]
     (case type
       :media.fx/prepare
       (try
-        (runtime/dispatch!
+        (runtime/submit!
          run
          {:name :media.ev/prepared
           :data (assoc (select-keys data [:generation :request-id :settings-revision])
@@ -54,7 +59,7 @@
                                               (:media-dir stack)
                                               (:item-path data)))})
         (catch Throwable error
-          (runtime/dispatch!
+          (runtime/submit!
            run
            {:name :media.ev/preparation-failed
             :data (assoc (select-keys data [:generation :request-id :settings-revision])
@@ -64,13 +69,13 @@
       :player.fx/install-queue
       (try
         (player/install-queue! adapter data)
-        (runtime/dispatch! run {:name :player.ev/queue-installed
-                                :data {:playback-context (:playback-context data)}})
+        (runtime/submit! run {:name :player.ev/queue-installed
+                              :data {:playback-context (:playback-context data)}})
         (catch Throwable error
-          (runtime/dispatch! run {:name :player.ev/queue-install-failed
-                                  :data {:playback-context (:playback-context data)
-                                         :error            {:category :player/queue
-                                                            :message  (ex-message error)}}})))
+          (runtime/submit! run {:name :player.ev/queue-install-failed
+                                :data {:playback-context (:playback-context data)
+                                       :error            {:category :player/queue
+                                                          :message  (ex-message error)}}})))
 
       :player.fx/pause
       (player/pause-playback! adapter)
@@ -81,65 +86,75 @@
       :player.fx/start
       (player/start-playback! adapter data)
 
+      :player.fx/stop
+      (player/stop-playback! adapter)
+
       nil)))
 
 (defn stop! []
-  (if-let [{:keys [player_ runtime]} @stack_]
+  (if-let [{:keys [player_ rfid-adapter runtime]} @stack_]
     (do
       (reset! stack_ nil)
-      (runtime/stop! runtime)
-      (when-let [adapter @player_]
-        (player/stop! adapter))
+      (try
+        (rfid/stop! rfid-adapter)
+        (runtime/stop! runtime)
+        (finally
+          (when-let [adapter @player_]
+            (player/stop! adapter))))
       :stopped)
     :already-stopped))
 
 (defn start!
-  "Starts the read-only DB, filesystem media, Vinyl/VLC, and chart stack."
+  "Starts the read-only DB, filesystem media, fake RFID, Vinyl/VLC, and chart stack."
   ([] (start! {}))
   ([{:keys [db-path media-dir]
      :or   {db-path   "data/db.edn"
             media-dir "../../sparklestories/media"}}]
    (stop!)
    (let [database       (db/read-db db-path)
+         database_      (atom database)
          player_        (atom nil)
          run_           (atom nil)
-         partial-stack  {:database_ (atom database)
+         partial-stack  {:database_ database_
                          :db-path   db-path
                          :media-dir media-dir
                          :player_   player_}
-         run            (runtime/start! #(dispatch-effect! (assoc partial-stack :runtime @run_) %))
+         run            (runtime/start! #(execute-effect!
+                                          (assoc partial-stack :runtime @run_)
+                                          %))
          _              (reset! run_ run)
-         player-adapter (player/start! #(runtime/dispatch! run %))
-         stack          (assoc partial-stack :runtime run)]
+         player-adapter (player/start! #(runtime/submit! run %))
+         rfid-reader    (fake/reader)
+         rfid-adapter   (rfid/start! {:reader            rfid-reader
+                                      :resolve-item-path #(db/linked-folder @database_ %)
+                                      :submit!           #(runtime/submit! run %)})
+         stack          (assoc partial-stack
+                               :rfid-adapter rfid-adapter
+                               :rfid-reader rfid-reader
+                               :runtime run)]
      (reset! player_ player-adapter)
      (reset! stack_ stack)
-     (runtime/dispatch! run {:name :system.ev/initialized
-                             :data {:settings          (db/settings database)
-                                    :settings-revision 0}})
+     (runtime/submit-and-await!
+      run
+      {:name :system.ev/initialized
+       :data {:settings          (db/settings database)
+              :settings-revision 0}})
      (status))))
 
 (defn place-card!
-  "Resolves synthetic UID ingress outside the chart, then dispatches safe data."
+  "Reports synthetic presence for `uid` and waits a bounded time for its commit."
   [uid]
   (when-not (and (string? uid) (not-empty uid))
     (throw (ex-info "RFID UID must be a non-empty string" {:uid uid})))
-  (let [stack     (stack)
-        item-path (db/linked-folder @(:database_ stack) uid)]
-    (runtime/dispatch! (:runtime stack)
-                       {:name :rfid.ev/card-placed
-                        :data (cond-> {:request-id (random-uuid)
-                                       :uid        uid}
-                                item-path (assoc :item-path item-path))})))
+  (let [{:keys [rfid-reader runtime]} (stack)]
+    (runtime/await! runtime (fake/place! rfid-reader uid))))
 
 (defn remove-card!
-  "Dispatches removal for the currently presented synthetic card."
+  "Reports synthetic absence and waits a bounded time for its commit."
   []
-  (let [uid (get-in (snapshot) [:data :rfid :present-uid])]
-    (when-not uid
-      (throw (ex-info "No RFID card is currently present" {:operation :remove-card})))
-    (runtime/dispatch! (:runtime (stack))
-                       {:name :rfid.ev/card-removed
-                        :data {:uid uid}})))
+  (let [{:keys [rfid-reader runtime]} (stack)]
+    (runtime/await! runtime (fake/remove! rfid-reader))))
+
 (defmethod ds/named-system :donut.system/repl
   [_]
   (ds/system system/base-system
@@ -154,12 +169,41 @@
 
   ;; Access the system's state
   dsrs/system
+
+;; Start (or fully reset) the real DB, filesystem, Vinyl/VLC, and chart stack.
   (start!)
+  (status)
+
+  ;; Play the registered development card. Evaluate `status` as asynchronous
+  ;; preparation and VLC callbacks advance it to :active/:playing.
   (place-card! "dev-card-001")
   (status)
-  (snapshot)
-  (history)
-  (place-card! "unknown-card")
+
+  ;; Observe the same UID again without an absence. This advances only the
+  ;; observation sequence; it does not create a request or restart playback.
+  (place-card! "dev-card-001")
+  (status)
+  (select-keys (get-in (snapshot) [:data :rfid])
+               [:observation-seq :presence-epoch :present-uid])
+
+  ;; Remove the active card and place it again. With the development settings,
+  ;; removal pauses playback and the newer presence epoch resumes it.
   (remove-card!)
+  (status)
+  (place-card! "dev-card-001")
+  (status)
+
+  ;; Exercise direct card supersession without an intermediate absence. After
+  ;; the development card is playing, this changes present -> present with a
+  ;; different UID. Substitute another registered UID to prepare linked media.
+  (place-card! "unknown-card")
+  (status)
+  (get-in (snapshot) [:data :rfid])
+
+  ;; Inspect autonomous chart processing and dispatched effects.
+  (snapshot)
+  (take-last 10 (history))
+  (take-last 10 (effects))
+
   (stop!)
   :rcf)

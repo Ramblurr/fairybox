@@ -19,15 +19,17 @@ implementations separate while Box2 is under development.
 ## Statechart invariants
 
 - One application chart session owns orchestration state.
-- All external producers submit immutable events through `dispatch!`.
+- All external producers offer immutable events through non-blocking `submit!`.
 - Only the serialized runtime advances the chart; callbacks never call the
   Statecharts processor directly.
+- Bounded commit waiting is reserved for development and tests; production
+  adapters never await chart receipts.
 - Guards and state actions are pure. They may inspect the event and chart data,
   but may not dereference the database or perform I/O.
 - External work is immutable effect or invocation data and runs off the chart
   processing thread.
-- Asynchronous completions return through `dispatch!` and carry request,
-  generation, playback-context, invocation, revision, or timer provenance.
+- Asynchronous completions return through `submit!` and carry request, generation,
+  playback-context, invocation, revision, or timer provenance.
 - Physical cancellation does not replace stale-event guards.
 - Parallel regions model genuinely independent lifecycles. Compound states
   model mutually exclusive modes.

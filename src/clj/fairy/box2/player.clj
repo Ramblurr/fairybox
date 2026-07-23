@@ -8,8 +8,8 @@
    :vlc/paused :paused :vlc/playing  :playing  :vlc/stopped :stopped})
 
 (defn start!
-  "Creates a Vinyl player. Its callbacks only call the supplied `dispatch!`."
-  [dispatch!]
+  "Creates a Vinyl player whose callbacks call only the supplied `submit!`."
+  [submit!]
   (let [player   (vinyl/create-player)
         context_ (atom nil)
         subscription-id
@@ -19,11 +19,11 @@
            (when-let [context @context_]
              (cond
                (state-events event)
-               (dispatch! {:name :player.ev/state-changed
-                           :data {:playback-context context :state (state-events event)}})
+               (submit! {:name :player.ev/state-changed
+                         :data {:playback-context context :state (state-events event)}})
                (= :vlc/time-changed event)
-               (dispatch! {:name :player.ev/time-changed
-                           :data {:playback-context context :time-ms (long new-time)}})))))]
+               (submit! {:name :player.ev/time-changed
+                         :data {:playback-context context :time-ms (long new-time)}})))))]
     {:context_ context_ :player player :subscription-id subscription-id}))
 
 (defn install-queue! [{:keys [context_ player]} {:keys [paths playback-context]}]
@@ -39,6 +39,9 @@
 
 (defn resume-playback! [{:keys [player]}]
   (vinyl/dispatch player :playback/play))
+
+(defn stop-playback! [{:keys [player]}]
+  (vinyl/dispatch player :playback/stop))
 
 (defn stop! [{:keys [player subscription-id]}]
   (vinyl/unsubscribe! player subscription-id)
