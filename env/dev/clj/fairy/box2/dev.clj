@@ -68,6 +68,12 @@
                                          :error            {:category :player/queue
                                                             :message  (ex-message error)}}})))
 
+      :player.fx/pause
+      (player/pause-playback! adapter)
+
+      :player.fx/resume
+      (player/resume-playback! adapter)
+
       :player.fx/start
       (player/start-playback! adapter data)
 

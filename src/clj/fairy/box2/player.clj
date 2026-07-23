@@ -34,6 +34,12 @@
 (defn start-playback! [{:keys [player]} _]
   (vinyl/dispatch player :playback/play))
 
+(defn pause-playback! [{:keys [player]}]
+  (vinyl/dispatch player :playback/set-pause :paused? true))
+
+(defn resume-playback! [{:keys [player]}]
+  (vinyl/dispatch player :playback/play))
+
 (defn stop! [{:keys [player subscription-id]}]
   (vinyl/unsubscribe! player subscription-id)
   (vinyl/release-player! player))

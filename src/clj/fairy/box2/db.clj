@@ -24,5 +24,4 @@
 (defn linked-folder
   "Returns the linked folder for `tag-uid`, as in the existing DB schema."
   [db tag-uid]
-  (box1-db/linked-folder db tag-uid)
-)
+  (box1-db/linked-folder db tag-uid))

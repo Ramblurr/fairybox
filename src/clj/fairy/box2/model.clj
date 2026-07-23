@@ -72,8 +72,7 @@
                  :pending-request       nil
                  :playback-context      nil
                  :playback-state        :stopped
-                 :playback-time-ms      0
-                 :removed-card          nil}
+                 :playback-time-ms      0}
    :interaction {:feedback       nil
                  :identification nil}
    :power       {:auto-shutdown-token nil
@@ -600,9 +599,28 @@
   (fn [_ data]
     (= value (get-in data (into [:settings :values] path)))))
 
-(defn- restart-linked-card? [env data]
-  (and ((setting? [:audio :card-return-behavior] :restart) env data)
-       (linked-card? env data)))
+(defn- current-active-card? [_ data]
+  (= (get-in data [:audio :active-request :uid])
+     (:uid (event-data data))))
+
+(defn- current-card-removal? [removal-behavior]
+  (fn [env data]
+    (and (current-active-card? env data)
+         ((setting? [:audio :card-removal-behavior] removal-behavior)
+          env
+          data))))
+
+(defn- returning-active-card? [env data]
+  (and ((In :rfid.st/absent) env data)
+       (current-active-card? env data)))
+
+(defn- resume-returning-card? [env data]
+  (and (returning-active-card? env data)
+       ((setting? [:audio :card-return-behavior] :resume) env data)))
+
+(defn- new-linked-card-request? [env data]
+  (and (linked-card? env data)
+       (not (resume-returning-card? env data))))
 
 (defn- setting-changed? [path]
   (fn [_ data]
@@ -800,30 +818,30 @@
                              :target            :card-request.st/active}
                             (script {:expr activate-card-request})))
          (state {:id :card-request.st/active}
-                (transition {:cond              (setting?
-                                                 [:audio :card-removal-behavior]
-                                                 :pause)
-                             :diagram/condition "pause on removal"
+                (transition {:cond              (current-card-removal? :pause)
+                             :diagram/condition "active card pauses on removal"
                              :event             :rfid.ev/card-removed
                              :target            :card-request.st/suspended
-                             ::effects          [:player.fx/pause]})
-                (transition {:cond              (setting?
-                                                 [:audio :card-removal-behavior]
-                                                 :keep-playing)
-                             :diagram/condition "keep playing on removal"
+                             ::effects          [:player.fx/pause]}
+                            (effect :player.fx/pause (constantly {})))
+                (transition {:cond              (current-card-removal? :keep-playing)
+                             :diagram/condition "active card keeps playing on removal"
                              :event             :rfid.ev/card-removed
                              :target            :card-request.st/active
+                             :type              :internal})
+                (transition {:cond              returning-active-card?
+                             :diagram/condition "same active card returns after observed absence"
+                             :event             :rfid.ev/card-placed
                              :type              :internal}))
          (state {:id :card-request.st/suspended}
-                (transition {:cond              (setting?
-                                                 [:audio :card-return-behavior]
-                                                 :resume)
-                             :diagram/condition "resume on return"
+                (transition {:cond              resume-returning-card?
+                             :diagram/condition "same paused card resumes"
                              :event             :rfid.ev/card-placed
                              :target            :card-request.st/active
-                             ::effects          [:player.fx/resume]})
-                (transition {:cond              restart-linked-card?
-                             :diagram/condition "restart linked card on return"
+                             ::effects          [:player.fx/resume]}
+                            (effect :player.fx/resume (constantly {})))
+                (transition {:cond              new-linked-card-request?
+                             :diagram/condition "linked card starts a new request"
                              :event             :rfid.ev/card-placed
                              :target            :card-request.st/preparing}
                             (script {:expr begin-card-request})
