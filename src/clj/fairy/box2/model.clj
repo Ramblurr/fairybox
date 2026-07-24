@@ -582,8 +582,9 @@
      (event-playback-context data)))
 
 (defn- current-active-playback? [data]
-  (= (request-playback-context (get-in data [:audio :active-request]))
-     (event-playback-context data)))
+  (and (some? (get-in data [:audio :active-request]))
+       (= (get-in data [:audio :playback-context])
+          (event-playback-context data))))
 
 (defn- current-playback? [_ data]
   (current-active-playback? data))

@@ -67,30 +67,38 @@
         (throw error)))))
 
 (deftest paused-card-resumes-from-new-presence-epoch-test
-  (let [{:keys [request-id run]} (start-active! base-settings "CARD-A")]
+  (let [{:keys [context request-id run]} (start-active! base-settings "CARD-A")]
     (try
       (let [removed  (observe-absent! run 1)
-            returned (observe-present! run 2 "CARD-A")]
-        (is (= {:removed  {:effects [:player.fx/pause]
-                           :state   :suspended}
-                :returned {:active-epoch 2
-                           :effects      [:player.fx/resume]
-                           :request-id   request-id
-                           :state        :active}}
-               {:removed  {:effects (effect-types removed)
-                           :state   (when (active? (:snapshot removed)
-                                                   :card-request.st/suspended)
-                                      :suspended)}
-                :returned {:active-epoch (get-in returned
-                                                 [:snapshot :data :audio
-                                                  :active-request :presence-epoch])
-                           :effects      (effect-types returned)
-                           :request-id   (get-in returned
-                                                 [:snapshot :data :audio
-                                                  :active-request :request-id])
-                           :state        (when (active? (:snapshot returned)
-                                                        :card-request.st/active)
-                                           :active)}})))
+            returned (observe-present! run 2 "CARD-A")
+            playing  (runtime/submit-and-await!
+                      run
+                      {:name :player.ev/state-changed
+                       :data {:playback-context context
+                              :state            :playing}})]
+        (is (= {:player-playing? true
+                :removed         {:effects [:player.fx/pause]
+                                  :state   :suspended}
+                :returned        {:active-epoch 2
+                                  :effects      [:player.fx/resume]
+                                  :request-id   request-id
+                                  :state        :active}}
+               {:player-playing? (active? (:snapshot playing)
+                                          :player.st/playing)
+                :removed         {:effects (effect-types removed)
+                                  :state   (when (active? (:snapshot removed)
+                                                          :card-request.st/suspended)
+                                             :suspended)}
+                :returned        {:active-epoch (get-in returned
+                                                        [:snapshot :data :audio
+                                                         :active-request :presence-epoch])
+                                  :effects      (effect-types returned)
+                                  :request-id   (get-in returned
+                                                        [:snapshot :data :audio
+                                                         :active-request :request-id])
+                                  :state        (when (active? (:snapshot returned)
+                                                               :card-request.st/active)
+                                                  :active)}})))
       (finally
         (runtime/stop! run)))))
 
