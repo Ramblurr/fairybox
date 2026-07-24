@@ -94,7 +94,7 @@
       (finally
         (swap! cancelled_ disj key)))))
 
-(defn- worker! [{:keys [accepting?_ cancel done fatal_ jobs] :as adapter}]
+(defn- worker! [{:keys [cancel jobs] :as adapter}]
   (async/thread
     (try
       (loop []
@@ -105,16 +105,11 @@
       (catch Throwable error
         (let [failure {:error  error
                        :reason :worker-infrastructure-failed}]
-          (compare-and-set! fatal_ nil failure)
-          (reset! accepting?_ false)
-          (async/close! cancel)
-          (async/close! jobs)
+          (fail-fast! adapter failure)
           (trove/log! {:level :error
                        :id    ::worker-failed
                        :msg   "Box2 media worker failed"
-                       :data  failure})))
-      (finally
-        (async/offer! done :stopped)))
+                       :data  failure}))))
     :stopped))
 
 (defn start!
@@ -132,13 +127,12 @@
                  :cancel          (async/chan)
                  :cancelled_      (atom #{})
                  :completion-lock (Object.)
-                 :done            (async/promise-chan)
                  :fatal_          (atom nil)
                  :jobs            (async/chan job-buffer-size)
                  :media-dir       media-dir
                  :player          player
                  :submit!         submit!}]
-    (assoc adapter :worker (worker! adapter))))
+    (assoc adapter :done (worker! adapter))))
 
 (defn offer!
   "Offers one media effect without blocking.

@@ -104,18 +104,13 @@
    :failure   @fatal_
    :reason    :runtime-failed})
 
-(defn- log-fatal! [{:keys [fatal-logged?_ fatal_] :as runtime}]
+(defn- log-fatal! [{:keys [fatal_] :as runtime}]
   (when-let [failure @fatal_]
-    (when (compare-and-set! fatal-logged?_ false true)
-      (record-error! runtime failure)
-      (trove/log! {:level :error
-                   :id    ::runtime-failed
-                   :msg   "Box2 runtime failed"
-                   :data  failure}))))
-
-(defn- accepted-routing? [result]
-  (or (true? result)
-      (true? (:accepted? result))))
+    (record-error! runtime failure)
+    (trove/log! {:level :error
+                 :id    ::runtime-failed
+                 :msg   "Box2 runtime failed"
+                 :data  failure})))
 
 (defn- route-effects! [{:keys [dispatch-effect!] :as runtime} receipt]
   (loop [[effect & remaining] (:effects receipt)]
@@ -127,7 +122,7 @@
                                    {:error  error
                                     :effect effect
                                     :reason :effect-routing-threw})))]
-        (if (accepted-routing? result)
+        (if (:accepted? result)
           (recur remaining)
           (let [failure (or (:failure result)
                             {:effect effect
@@ -196,8 +191,8 @@
   "Starts one serialized chart owner with bounded required and progress ingress.
 
   `dispatch-effect!` must route one committed effect without blocking and return
-  `true` or a map containing `:accepted? true`. Effects from each macrostep are
-  offered in chart order before the next event is processed."
+  a map containing `:accepted? true`. Effects from each macrostep are offered in
+  chart order before the next event is processed."
   [dispatch-effect!]
   (when-not (ifn? dispatch-effect!)
     (throw (ex-info "Box2 runtime requires an effect dispatcher" {})))
@@ -224,7 +219,6 @@
                      :errors_          errors_
                      :env              env
                      :fatal_           fatal_
-                     :fatal-logged?_   (atom false)
                      :history_         history_
                      :memory_          (atom memory)
                      :progress-in      progress-in
@@ -240,10 +234,6 @@
      :reason    :runtime-failed}
     {:accepted? false :reason :stopped}))
 
-(defn- submission-envelope [event completion?]
-  (cond-> {:event event}
-    completion? (assoc :completion (async/promise-chan))))
-
 (defn submit!
   "Offers required `event` to the chart owner without blocking.
 
@@ -252,7 +242,8 @@
   [runtime event]
   (if-not @(:accepting?_ runtime)
     (stopped-ticket runtime)
-    (let [envelope (submission-envelope event true)]
+    (let [envelope {:completion (async/promise-chan)
+                    :event      event}]
       (if (async/offer! (:required-in runtime) envelope)
         {:accepted?  true
          :completion (:completion envelope)}
@@ -276,8 +267,7 @@
     (stopped-ticket runtime)
 
     :else
-    (if (async/offer! (:progress-in runtime)
-                      (submission-envelope event false))
+    (if (async/offer! (:progress-in runtime) {:event event})
       {:accepted? true}
       (stopped-ticket runtime))))
 

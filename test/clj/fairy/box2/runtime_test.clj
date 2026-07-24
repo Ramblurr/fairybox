@@ -46,7 +46,7 @@
                  (fn [_effect]
                    (.countDown entered)
                    (.await release)
-                   true))]
+                   {:accepted? true}))]
         (try
           (runtime/submit-and-await! run initialized-event)
           (let [placement (runtime/submit! run (present-event 1))]
@@ -79,7 +79,7 @@
                  (fn [_effect]
                    (.countDown entered)
                    (.await release)
-                   true))]
+                   {:accepted? true}))]
     (try
       (runtime/submit-and-await! run initialized-event)
       (let [placement (runtime/submit! run (present-event 1))]
@@ -115,7 +115,7 @@
 (deftest diagnostics-are-bounded-and-event-errors-recover-test
   (let [logs_ (atom [])]
     (binding [trove/*log-fn* (recording-log-fn logs_)]
-      (let [run (runtime/start! (constantly true))]
+      (let [run (runtime/start! (constantly {:accepted? true}))]
         (try
           (dotimes [index 70]
             (try

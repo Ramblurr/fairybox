@@ -7,9 +7,6 @@
   {:vlc/error  :error  :vlc/finished :finished :vlc/opening :opening
    :vlc/paused :paused :vlc/playing  :playing  :vlc/stopped :stopped})
 
-(defn- playback-context [event]
-  (:ol.vinyl/playback-context event))
-
 (defn start!
   "Creates a Vinyl player whose callbacks only offer immutable Box2 events.
 
@@ -25,7 +22,7 @@
         (vinyl/subscribe!
          player
          (fn [{:keys [new-time ol.vinyl/event] :as observation}]
-           (let [context (playback-context observation)]
+           (let [context (:ol.vinyl/playback-context observation)]
              (cond
                (state-events event)
                (submit! {:name :player.ev/state-changed

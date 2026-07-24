@@ -525,15 +525,11 @@
                  (request-playback-context request))
      (ops/assign [:audio :pending-request] nil)]))
 
-(defn- observed-status? [status]
-  (fn [_ data]
-    (= status (:status (event-data data)))))
+(defn- present-observation? [_ data]
+  (= :present (:status (event-data data))))
 
-(defn- present-observation? [env data]
-  ((observed-status? :present) env data))
-
-(defn- absent-observation? [env data]
-  ((observed-status? :absent) env data))
+(defn- absent-observation? [_ data]
+  (= :absent (:status (event-data data))))
 
 (defn- new-presence? [env data]
   (and (present-observation? env data)
