@@ -23,6 +23,14 @@ platform, that aims to place the audio and imagination at center stage.
 Unlike modern devices, _Fairybox_ operates without a screen and is powered by RFID
 cards or tokens, making it an ideal, interactive audio experience for kids.
 
+<div align="center">
+
+![the first fairybox](./docs/p2.jpg)
+
+![the first fairybox](./docs/p1.jpg)
+
+</div>
+
 ## Background
 
 In today's digital age, screen time is a significant concern for parents
@@ -59,10 +67,6 @@ by swapping cards to discover new tales and tunes.
   - Programmed in Clojure for a robust, all-in-one backend
   - Deployable via Nix, ensuring a consistent, self-contained environment
 - **Web Interface**: Available for managing playback and settings, enhancing parental control over the content and device usage.
-
-## Photo Gallery
-
-_Photos coming soon._
 
 ## Build Instructions
 
@@ -129,7 +133,7 @@ bb watch
 
 Or you can sync one-time with 
 
-``bash
+```bash
 bb sync
 ```
 
